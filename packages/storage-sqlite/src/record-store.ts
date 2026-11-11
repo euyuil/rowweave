@@ -1,8 +1,8 @@
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { tableId, type Field, type RecordPage, type RowRecord, type Table } from '../../contracts/src/index.js';
-import type { RecordStore } from '../../core/src/record-service.js';
+import { tableId, type BatchResult, type Field, type RecordPage, type RecordUpdate, type RowRecord, type Table } from '../../contracts/src/index.js';
+import { ServiceError, type RecordStore } from '../../core/src/record-service.js';
 
 export interface SeedOptions {
   rows: number;
@@ -87,6 +87,31 @@ export class SqliteRecordStore implements RecordStore {
 
   private decode(row: StoredRecord): RowRecord {
     return { id: row.id, version: row.version, values: JSON.parse(row.values_json) as RowRecord['values'] };
+  }
+
+  updateBatch(updates: RecordUpdate[]): BatchResult {
+    const read = this.db.prepare('SELECT id, version, values_json FROM records WHERE id = ?');
+    const write = this.db.prepare('UPDATE records SET values_json = ?, version = version + 1 WHERE id = ? AND version = ?');
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      const records = updates.map(update => {
+        const stored = read.get(update.id) as unknown as StoredRecord | undefined;
+        if (!stored) throw new ServiceError('RECORD_NOT_FOUND', `Record ${update.id} does not exist.`, 404);
+        if (stored.version !== update.expectedVersion) {
+          throw new ServiceError('VERSION_CONFLICT', `Record ${update.id} changed. Reload before saving again.`, 409);
+        }
+        const record = this.decode(stored);
+        record.values = { ...record.values, ...update.values };
+        record.version++;
+        write.run(JSON.stringify(record.values), record.id, update.expectedVersion);
+        return record;
+      });
+      this.db.exec('COMMIT');
+      return { records };
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
   }
 
   close(): void {

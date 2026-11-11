@@ -60,6 +60,8 @@ export async function startServer({ service, token, port = 0 }: ServerOptions) {
       const offset = Number(url.searchParams.get('offset') ?? '0');
       const limit = Number(url.searchParams.get('limit') ?? '100');
       send(response, 200, service.readPage(offset, limit));
+    } else if (request.method === 'PATCH' && url.pathname === `${root}/records`) {
+      send(response, 200, service.updateBatch(await readJson(request)));
     } else {
       throw new ServiceError('NOT_FOUND', 'This endpoint does not exist.', 404);
     }
@@ -79,4 +81,28 @@ export async function startServer({ service, token, port = 0 }: ServerOptions) {
       await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
     },
   };
+}
+
+async function readJson(request: IncomingMessage): Promise<unknown> {
+  if (request.headers['content-type']?.split(';')[0]?.trim().toLowerCase() !== 'application/json') {
+    throw new ServiceError('INVALID_CONTENT_TYPE', 'Send JSON with Content-Type: application/json.', 415);
+  }
+  const maxBytes = 8 * 1024 * 1024;
+  const body = await new Promise<Buffer>((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    request.on('data', (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > maxBytes) {
+        chunks.length = 0;
+        reject(new ServiceError('PAYLOAD_TOO_LARGE', 'The request body exceeds 8 MiB.', 413));
+      } else {
+        chunks.push(chunk);
+      }
+    });
+    request.once('end', () => resolve(Buffer.concat(chunks)));
+    request.once('error', () => reject(new ServiceError('INVALID_BODY', 'Could not read the request body.')));
+  });
+  try { return JSON.parse(body.toString('utf8')) as unknown; }
+  catch { throw new ServiceError('INVALID_JSON', 'The request body must be valid JSON.'); }
 }
