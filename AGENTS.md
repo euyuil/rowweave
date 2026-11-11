@@ -5,7 +5,7 @@ These guidelines define the contribution workflow and implementation boundaries 
 ## Project Structure and Boundaries
 
 - Use **RowWeave** for the brand, documentation, and UI. Use `rowweave` for repository, package, and command names.
-- The repository currently contains design documentation. The layout in `docs/design.md` is proposed; create directories only when they are needed by the implementation.
+- The prototype is being implemented incrementally. Follow `docs/development.md` for working commands; create directories only when they are needed by the implementation.
 - `apps/desktop/` is the planned Electron entry point. `apps/server/` is the planned standalone TypeScript/Node.js service.
 - `packages/ui/`, `packages/client/`, and `packages/contracts/` hold shared React UI, client models and caching, and API schemas and types. Shared code must not import Electron or Harness runtime APIs; inject host-specific capabilities through narrow interfaces or callbacks.
 - `packages/core/` owns business rules. `packages/storage-sqlite/` owns database access and migrations. Keep both independent of desktop and plugin hosts, and keep database work out of Electron's main and renderer threads.

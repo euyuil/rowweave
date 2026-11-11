@@ -2,7 +2,7 @@
 
 [Product overview](../README.md) · [简体中文产品介绍](../README.zh-CN.md)
 
-This document records the architecture, scope, and validation plan for RowWeave. The project is in the design and prototype planning stage; the capabilities described here have not been implemented.
+This document records the target architecture, scope, and validation plan for RowWeave. The prototype is being implemented incrementally; see [development instructions](development.md) for the components and commands currently available. This document includes future work as well as prototype scope.
 
 ## Product direction
 
