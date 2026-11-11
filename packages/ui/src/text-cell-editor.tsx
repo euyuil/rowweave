@@ -12,10 +12,12 @@ export const TextCellEditor: ProvideEditorComponent<GridCell> = ({ value, onChan
   const input = useRef<HTMLTextAreaElement>(null);
   const composing = useRef(false);
   const bridge = useContext(EditorContext);
-  const initial = useRef(value.kind === GridCellKind.Text ? value.data : '');
+  // The grid replaces data with the first typed key, while copyData retains the original text.
+  const initial = useRef(value.kind === GridCellKind.Text ? value.copyData ?? value.data : '');
   const latest = useRef({ value, onFinishedEditing });
   latest.current = { value, onFinishedEditing };
   useLayoutEffect(() => {
+    bridge.setDirty(latest.current.value.kind === GridCellKind.Text && latest.current.value.data !== initial.current);
     bridge.register(commit => {
       if (commit && composing.current) return false;
       const current = latest.current;
@@ -28,6 +30,7 @@ export const TextCellEditor: ProvideEditorComponent<GridCell> = ({ value, onChan
   useLayoutEffect(() => {
     input.current?.focus();
     if (isHighlighted) input.current?.select();
+    else if (input.current) input.current.setSelectionRange(input.current.value.length, input.current.value.length);
   }, [isHighlighted]);
   if (value.kind !== GridCellKind.Text) return null;
   return <textarea ref={input} aria-label="Cell value" value={value.data} rows={Math.min(6, value.data.split('\n').length)}

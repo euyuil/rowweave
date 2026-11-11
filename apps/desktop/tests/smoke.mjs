@@ -1,11 +1,15 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, readFile } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname, basename } from 'node:path';
 import { _electron as electron } from 'playwright';
 import electronPath from 'electron';
+import extract from '@electron-internal/extract-zip';
 
 const dataDirectory = await mkdtemp(join(tmpdir(), 'rowweave-desktop-'));
+let packaged;
 await mkdir('.artifacts', { recursive: true });
 let application;
 let page;
@@ -13,7 +17,7 @@ const errors = [];
 let lastCellClick = 0;
 async function launch() {
   application = await electron.launch({
-    executablePath: electronPath, args: ['.'], cwd: process.cwd(),
+    executablePath: packaged ?? electronPath, args: packaged ? [] : ['.'], cwd: packaged ? dataDirectory : process.cwd(),
     env: { ...process.env, ROWWEAVE_DATA_DIR: dataDirectory }, timeout: 40_000,
   });
   page = await application.firstWindow();
@@ -61,6 +65,16 @@ async function records(offset, limit) {
   }, { offset, limit });
 }
 try {
+  if (process.argv.includes('--packaged')) {
+    const manifest = JSON.parse(await readFile('release/latest.json', 'utf8'));
+    const hash = createHash('sha256');
+    for await (const chunk of createReadStream(manifest.zip)) hash.update(chunk);
+    assert.equal(hash.digest('hex'), manifest.sha256);
+    const directory = join(dataDirectory, 'application');
+    await mkdir(directory);
+    await extract(manifest.zip, { dir: directory });
+    packaged = join(directory, 'RowWeave-win32-x64', 'RowWeave.exe');
+  }
   await launch();
   await page.screenshot({ path: '.artifacts/desktop-initial.png' });
   console.log('Initial screenshot captured.');
@@ -122,6 +136,27 @@ try {
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   await page.getByText('All changes saved', { exact: true }).waitFor();
   assert.equal((await records(0, 1))[0].values.field_1, 'Save from the editor');
+
+  await selectCell();
+  await page.keyboard.press('x');
+  await page.getByText('Editing cell…', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('textbox', { name: 'Cell value' }).inputValue(), 'x');
+  await page.keyboard.press('y');
+  assert.equal(await page.getByRole('textbox', { name: 'Cell value' }).inputValue(), 'xy');
+  assert.equal(await page.getByRole('button', { name: 'Save changes', exact: true }).isEnabled(), true);
+  await page.keyboard.press('Escape');
+  await page.getByText('All changes saved', { exact: true }).waitFor();
+
+  await page.waitForFunction(() => document.querySelector('canvas')?.contains(document.activeElement));
+  await clearClipboard();
+  const beforeNonTextPaste = await copyCell();
+  await page.evaluate(() => {
+    const clipboardData = new DataTransfer();
+    clipboardData.setData('text/html', '<b>No plain-text representation</b>');
+    document.activeElement.dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true }));
+  });
+  await clearClipboard();
+  assert.equal(await copyCell(), beforeNonTextPaste);
 
   const pasted = Array.from({ length: 1_000 }, (_, row) =>
     Array.from({ length: 10 }, (_, col) => `Paste ${row}/${col} 🌱`).join('\t')).join('\n');
@@ -187,5 +222,5 @@ try {
   }
   assert.equal(dirname(resolve(dataDirectory)), resolve(tmpdir()));
   assert.ok(basename(dataDirectory).startsWith('rowweave-desktop-'));
-  await rm(dataDirectory, { recursive: true, force: true });
+  await rm(dataDirectory, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }

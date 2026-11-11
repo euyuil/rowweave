@@ -1,13 +1,14 @@
 import { build } from 'esbuild';
-import { copyFile } from 'node:fs/promises';
+import { copyFile, writeFile } from 'node:fs/promises';
 
-await build({
+const renderer = await build({
   entryPoints: ['apps/desktop/src/renderer.tsx'],
   outfile: 'dist/apps/desktop/renderer.js',
   bundle: true, format: 'esm', platform: 'browser', target: 'es2022',
   define: { 'process.env.NODE_ENV': '"production"' },
-  minify: true, sourcemap: true,
+  minify: true, sourcemap: true, metafile: true,
 });
+await writeFile('dist/apps/desktop/renderer.meta.json', JSON.stringify(renderer.metafile));
 await build({
   entryPoints: ['apps/desktop/src/preload.ts'],
   outfile: 'dist/apps/desktop/preload.cjs',
