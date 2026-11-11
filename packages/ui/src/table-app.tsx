@@ -172,6 +172,7 @@ export function TableApp({ model, host }: { model: TableModel; host: TableHost }
         if (!gridHost.current?.querySelector('canvas')?.contains(document.activeElement) || !selection.current) return;
         event.preventDefault();
         event.stopPropagation();
+        if (!event.clipboardData.types.includes('text/plain')) return;
         if (locked) return;
         try {
           const { x, y } = selection.current.range;
@@ -189,6 +190,7 @@ export function TableApp({ model, host }: { model: TableModel; host: TableHost }
           gridSelection={selection} onGridSelectionChange={setSelection}
           rowMarkers="number" rowHeight={36} headerHeight={40} rangeSelect="rect"
           cellActivationBehavior="double-click"
+          keybindings={{ paste: false }}
           smoothScrollX smoothScrollY
           onCellsEdited={edits => {
             if (locked) return true;

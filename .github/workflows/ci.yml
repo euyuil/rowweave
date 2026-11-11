@@ -22,9 +22,22 @@ jobs:
       - run: npm test
       - run: npm run test:desktop
         if: runner.os == 'Windows'
+      - run: npm run package:win
+        if: runner.os == 'Windows'
+      - run: npm run test:packaged
+        if: runner.os == 'Windows'
       - uses: actions/upload-artifact@v4
         if: always() && runner.os == 'Windows'
         with:
           name: desktop-screenshots
           path: .artifacts/desktop-*.png
           if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        if: success() && runner.os == 'Windows'
+        with:
+          name: rowweave-windows-prototype
+          path: |
+            release/**/*.zip
+            release/**/*.sha256
+            release/latest.json
+          retention-days: 14

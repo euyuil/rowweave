@@ -143,7 +143,7 @@ Prepare deterministic test data. Start with small tables, then expand to:
 - 10,000 rows × 20 columns.
 - 100,000 rows × 100 columns.
 
-These sizes are pressure-test targets, not performance promises. Include Chinese text, emoji, null values, and a moderate amount of long text. Generate and write the data in batches.
+These sizes are pressure-test targets, not performance promises. Include Chinese text, emoji, null values, and a moderate amount of long text. Generate incrementally and write without retaining the full dataset in memory. The prototype uses prepared inserts in one transaction to keep initialization atomic.
 
 Verify that:
 

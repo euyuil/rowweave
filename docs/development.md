@@ -51,8 +51,39 @@ The Electron host starts the HTTP/SQLite service in a separate utility process. 
 
 Double-click a cell or press Enter to edit. Enter commits a draft, Escape cancels it, arrow keys move the selection, and Shift+arrows extend it. Copy and paste use plain-text TSV, preserving Unicode, quoted multiline cells, and trailing empty values. Save explicitly with Ctrl+S or **Save changes**. Closing with drafts requires confirmation. On conflict, drafts stay visible for copying before a deliberate discard/reload.
 
-The grid's default TSV parser confuses Unicode code points with UTF-16 offsets; the UI intercepts spreadsheet paste with a bounded parser and tests this behavior. Linaria's transitive minimatch dependency is overridden to a patched version; dependency upgrades must preserve the audit check and clipboard regression tests.
+The grid's default TSV parser confuses Unicode code points with UTF-16 offsets; the UI intercepts spreadsheet paste with a bounded parser and tests this behavior. Transitive minimatch and glob dependencies are overridden to patched versions for the grid and packaging tools; dependency upgrades must preserve the audit check, clipboard tests, and packaged-app smoke test.
 
 The automated smoke test covers editing, cancellation, unsaved-close protection (including text still in the editor), keyboard selection, the Windows clipboard, 1,000 × 10 paste/save, a synthetic composition guard, conflict feedback, restart persistence, and service failure. Synthetic composition events do not establish native Chinese IME compatibility.
 
 Native Chinese input was separately exercised on Windows on 2026-11-12 with the installed Pinyin input method: its candidate window appeared, Space selected a Chinese candidate, Escape canceled composition without closing the editor, and Enter confirmed composition without prematurely submitting the cell. Ctrl+S saved the mixed Chinese/Latin value, and a separate read-only SQLite connection verified persistence. This is one-machine verification, not coverage of every IME or platform.
+
+## Windows package
+
+```sh
+npm run package:win
+npm run test:packaged
+```
+
+Build on Windows x64. Each build creates a timestamped directory under `release/`, containing the application folder, a portable ZIP, and its SHA-256 checksum. `release/latest.json` identifies the latest executable and archive, the source revision, and whether the build used uncommitted changes. Extract the entire ZIP, then open `RowWeave.exe`; Node.js is not required on the target machine. This prototype is unsigned and portable; it does not install shortcuts or provide automatic updates.
+
+Packaging stages only compiled runtime files and third-party notices, with no test databases or development dependencies. A verified Electron ZIP in `.artifacts/` can be reused; otherwise the packager downloads the pinned runtime. The packaged smoke test verifies the archive checksum, extracts it to a temporary directory outside the repository, and runs the same edit/save/restart checks from that location with an isolated workspace.
+
+Windows CI packages and tests the app, then publishes the `rowweave-windows-prototype` artifact for 14 days. Download it from the successful [workflow run](https://github.com/euyuil/rowweave/actions), extract the inner application ZIP, and launch the executable. Performance benchmarks are local measurements, not CI timing thresholds.
+
+## Reproducible pressure datasets
+
+Build once before generating data. These commands require new destination files and refuse to overwrite existing workspaces:
+
+```sh
+npm run build
+npm run dataset -- .artifacts/data-10k/prototype.sqlite 10000 20
+npm run dataset -- .artifacts/data-100k/prototype.sqlite 100000 100
+```
+
+Set `ROWWEAVE_DATA_DIR` to the containing directory before launching the desktop app to inspect a dataset. Values deterministically include Chinese, emoji, nulls, and long text. Generation constructs one row at a time and uses prepared inserts in a single transaction so an interrupted initialization cannot expose a partially seeded table.
+
+After packaging, run `npm run benchmark`. It creates fresh databases under a timestamped `.artifacts/benchmarks/` directory, performs three instrumented launches per size, and records startup, input-to-frame, 1,000 × 10 paste/save, five scrolling circuits, per-process memory/CPU, display settings, and runtime versions in `results.json`. A separate forced-GC diagnostic follows the timed scrolling workload. It opens test windows and uses the clipboard. Avoid other workloads and clipboard changes during measurement. Generated datasets and raw reports stay out of Git; summarized measurements and their limits belong in [validation.md](validation.md).
+
+For memory attribution, run `npm run benchmark:memory -- <results.json>` using that report's path. It reuses only those generated workspaces and performs five scrolling circuits through the main-process Node inspector, without attaching a renderer debugger or recording HTTP response bodies. It writes `memory-without-renderer-debugger.json` beside the original report. Keep these measurements separate from the Playwright run; summed process working sets include shared pages and are not unique physical RAM usage.
+
+Use `npm run benchmark -- --timings-only` to repeat startup, input, paste, and save measurements without the scrolling workload. A failed memory run can resume completed dataset checkpoints with `--resume`, provided the packaged archive checksum is unchanged.

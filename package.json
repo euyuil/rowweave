@@ -15,21 +15,29 @@
     "start:server": "node dist/apps/server/src/cli.js",
     "setup:desktop": "install-electron",
     "start": "npm run build && npm run setup:desktop && electron .",
-    "test:desktop": "npm run build && npm run setup:desktop && node apps/desktop/tests/smoke.mjs"
+    "test:desktop": "npm run build && npm run setup:desktop && node apps/desktop/tests/smoke.mjs",
+    "package:win": "npm run build && node scripts/package-windows.mjs",
+    "test:packaged": "node apps/desktop/tests/smoke.mjs --packaged",
+    "dataset": "node scripts/generate-dataset.mjs",
+    "benchmark": "node apps/desktop/tests/benchmark.mjs",
+    "benchmark:memory": "node apps/desktop/tests/memory-benchmark.mjs"
   },
   "main": "dist/apps/desktop/src/main.js",
   "overrides": {
-    "@linaria/react": { "minimatch": "11.0.1" },
-    "@linaria/utils": { "minimatch": "11.0.1" }
+    "minimatch": "11.0.1",
+    "glob": "14.0.2"
   },
   "devDependencies": {
+    "@electron-internal/extract-zip": "1.0.8",
+    "@electron/packager": "20.3.0",
     "@types/node": "24.10.0",
     "@types/react": "18.3.27",
     "@types/react-dom": "18.3.7",
     "electron": "45.3.0",
     "esbuild": "0.28.2",
     "playwright": "1.65.0",
-    "typescript": "7.0.2"
+    "typescript": "7.0.2",
+    "yazl": "3.3.1"
   },
   "dependencies": {
     "@glideapps/glide-data-grid": "6.0.3",
