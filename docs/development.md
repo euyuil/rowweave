@@ -19,6 +19,9 @@ Requests use `Authorization: Bearer <token>`:
 
 - `GET /tables/prototype`: field definitions and record count.
 - `GET /tables/prototype/records?offset=0&limit=100`: records in a stable order, with at most 500 per page.
+- `PATCH /tables/prototype/records`: a JSON array of `{ id, expectedVersion, values }` updates, where `values` maps stable field IDs to strings or null. The entire batch commits or rolls back together. Successful records return their incremented versions. A stale version returns HTTP 409; reload before explicitly resolving the conflict.
+
+Write limits are 2,000 distinct records, 20,000 changed cells, 10,000 UTF-16 code units per text value, and an 8 MiB JSON request body. Duplicate IDs and unknown fields are rejected. Empty strings and nulls remain distinct in storage.
 
 A new database is seeded deterministically with 10,000 rows and 20 text fields. Existing databases retain their schema and data. Node's built-in SQLite driver runs only in the service; the JSON row representation is a prototype choice, not a decision about the future dynamic schema engine.
 
