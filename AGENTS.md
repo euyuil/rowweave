@@ -6,7 +6,7 @@ These guidelines define the contribution workflow and implementation boundaries 
 
 - Use **RowWeave** for the brand, documentation, and UI. Use `rowweave` for repository, package, and command names.
 - The prototype is being implemented incrementally. Follow `docs/development.md` for working commands; create directories only when they are needed by the implementation.
-- `apps/desktop/` is the planned Electron entry point. `apps/server/` is the planned standalone TypeScript/Node.js service.
+- `apps/desktop/` is the Electron entry point. `apps/server/` provides the standalone TypeScript/Node.js service and shared HTTP server.
 - `packages/ui/`, `packages/client/`, and `packages/contracts/` hold shared React UI, client models and caching, and API schemas and types. Shared code must not import Electron or Harness runtime APIs; inject host-specific capabilities through narrow interfaces or callbacks.
 - `packages/core/` owns business rules. `packages/storage-sqlite/` owns database access and migrations. Keep both independent of desktop and plugin hosts, and keep database work out of Electron's main and renderer threads.
 - `integrations/harness/` and `skills/` are future integrations. Implement the independent desktop prototype first; do not add these integrations or an internal AI runtime unless the task calls for them.
@@ -43,6 +43,7 @@ These guidelines define the contribution workflow and implementation boundaries 
 - Follow Conventional Commits for commit messages and PR titles, for example `feat: add batch record updates`. Write commit messages, PR titles, and PR descriptions in English. Use Chinese proper nouns where English cannot convey them accurately.
 - Keep PRs focused on one coherent change that can be reviewed, validated, and merged on its own. Include related tests and documentation. Separate unrelated cleanup and broad refactoring. Use diff size as a review signal, not a hard limit; explain why unusually large changes cannot reasonably be split.
 - Merge every change into `main` through a PR using squash merge. Direct pushes and force pushes to `main` are prohibited.
+- Unless the user explicitly asks to keep a PR open, merge it as soon as its CI and relevant validation pass and any blocking review findings are resolved. Do not wait for another confirmation or accumulate completed PRs. Start the next dependent PR from the updated `main`.
 - Use descriptive feature branch names such as `feat/record-editing` or `docs/add-repository-guidelines`. Agent-branded prefixes such as `codex/`, `claude/`, `copilot/`, and `cursor/` are prohibited. Never include agent credits anywhere in a branch name.
 - In PRs, describe the concrete problem, resulting behavior, affected components, and how the change was verified. Link relevant issues and include screenshots for desktop UI changes when available; state when visual verification was not possible.
 - Preserve the repository's configured human Git identity. Verify author and committer identities before committing, and PR author identity before creating a PR.

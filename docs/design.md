@@ -169,7 +169,7 @@ The initial release excludes in-product AI, complex automation, a formula engine
 
 ## Proposed repository layout
 
-This is the target structure. Application and package directories do not exist yet; add only the modules needed during prototyping.
+This is the target structure. The independent prototype implements the desktop, service, and shared packages; integrations and other future modules should be added only when needed.
 
 ```text
 rowweave/

@@ -41,4 +41,18 @@ Saving is explicit. A failed request retains the pending values; version conflic
 4. An Electron host and shared React grid with keyboard editing and clipboard support.
 5. Packaging, deterministic pressure datasets, and recorded validation.
 
-Each change is based on the preceding PR so it can be reviewed separately. The desktop target for this prototype is Windows; the service tests also run on Linux.
+Merge each PR after its checks pass, then start the next dependent change from the updated `main`. The desktop target for this prototype is Windows; the service tests also run on Linux.
+
+## Desktop
+
+Run `npm start` to build the production renderer, install the pinned Electron binary if needed, and open the app. Electron's binary download requires network access on the first run. Use `npm run test:desktop` for the interactive desktop smoke test; it uses a temporary workspace and the native clipboard. Avoid interacting with the app or changing the clipboard during this test.
+
+The Electron host starts the HTTP/SQLite service in a separate utility process. Its narrow preload bridge supplies the connection and host dialogs to the shared React UI; the renderer has no Node.js integration. SQLite never runs in the main or renderer process. The default database is `prototype.sqlite` under Electron's RowWeave user-data directory. `ROWWEAVE_DATA_DIR` selects an isolated workspace and browser profile.
+
+Double-click a cell or press Enter to edit. Enter commits a draft, Escape cancels it, arrow keys move the selection, and Shift+arrows extend it. Copy and paste use plain-text TSV, preserving Unicode, quoted multiline cells, and trailing empty values. Save explicitly with Ctrl+S or **Save changes**. Closing with drafts requires confirmation. On conflict, drafts stay visible for copying before a deliberate discard/reload.
+
+The grid's default TSV parser confuses Unicode code points with UTF-16 offsets; the UI intercepts spreadsheet paste with a bounded parser and tests this behavior. Linaria's transitive minimatch dependency is overridden to a patched version; dependency upgrades must preserve the audit check and clipboard regression tests.
+
+The automated smoke test covers editing, cancellation, unsaved-close protection (including text still in the editor), keyboard selection, the Windows clipboard, 1,000 × 10 paste/save, a synthetic composition guard, conflict feedback, restart persistence, and service failure. Synthetic composition events do not establish native Chinese IME compatibility.
+
+Native Chinese input was separately exercised on Windows on 2026-11-12 with the installed Pinyin input method: its candidate window appeared, Space selected a Chinese candidate, Escape canceled composition without closing the editor, and Enter confirmed composition without prematurely submitting the cell. Ctrl+S saved the mixed Chinese/Latin value, and a separate read-only SQLite connection verified persistence. This is one-machine verification, not coverage of every IME or platform.
