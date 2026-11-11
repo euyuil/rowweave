@@ -1,0 +1,25 @@
+.rowweave-app, .rowweave-app * { box-sizing: border-box; }
+.rowweave-app { height: 100vh; display: flex; flex-direction: column; background: #f7f9fc; color: #17243b; font: 14px 'Segoe UI', 'Microsoft YaHei', sans-serif; }
+.rowweave-app .app-header { min-height: 64px; padding: 0 30px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e5eaf1; background: #fff; }
+.rowweave-app .brand { display: flex; align-items: center; gap: 10px; font-size: 21px; font-weight: 650; letter-spacing: -.5px; }
+.rowweave-app .brand-mark { display: inline-grid; place-items: center; width: 32px; height: 32px; background: #315cbe; border-radius: 8px; color: #fff; font-size: 25px; }
+.rowweave-app .workspace-label { color: #69768b; display: flex; align-items: center; gap: 14px; }
+.rowweave-app .prototype-tag { padding: 4px 9px; border-radius: 5px; font-size: 11px; color: #315cbe; background: #eef3ff; }
+.rowweave-app .table-heading { padding: 28px 30px 24px; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.rowweave-app .eyebrow { margin: 0 0 8px; letter-spacing: 1.5px; font-size: 10px; color: #738098; font-weight: 600; }
+.rowweave-app h1 { margin: 0; font-size: 25px; font-weight: 620; letter-spacing: -.5px; }
+.rowweave-app .subtitle { margin: 8px 0 0; font-size: 13px; color: #69768b; }
+.rowweave-app .actions { display: flex; gap: 9px; flex-shrink: 0; }
+.rowweave-app button { padding: 9px 15px; border: 1px solid #d7dfec; border-radius: 6px; background: #fff; color: #243654; font: inherit; cursor: pointer; }
+.rowweave-app button.primary { background: #315cbe; border-color: #315cbe; color: white; }
+.rowweave-app button:disabled { opacity: .5; cursor: default; }
+.rowweave-app button:focus-visible { outline: 2px solid #315cbe; outline-offset: 3px; }
+.rowweave-app .table-panel { margin: 0 30px; flex: 1; min-height: 0; display: flex; flex-direction: column; border: 1px solid #dde4ef; border-radius: 8px; overflow: hidden; background: #fff; }
+.rowweave-app .table-toolbar { display: flex; align-items: center; justify-content: space-between; min-height: 45px; padding: 0 16px; border-bottom: 1px solid #dde4ef; font-size: 12px; }
+.rowweave-app .table-toolbar strong { color: #315cbe; font-weight: 600; }
+.rowweave-app .table-toolbar span { color: #738098; }
+.rowweave-app .grid-host { flex: 1; min-height: 0; overflow: hidden; }
+.rowweave-app footer { display: flex; justify-content: space-between; align-items: center; min-height: 43px; padding: 0 30px; font-size: 11px; color: #748199; gap: 16px; }
+.rowweave-app .pending-status { color: #99650d; }
+.rowweave-app .error-banner { margin: 0 30px 15px; padding: 12px 16px; background: #fff0ed; color: #9a382a; border-radius: 6px; font-size: 13px; }
+.rowweave-app .loading-state { display: grid; place-items: center; height: 100%; color: #738098; }
