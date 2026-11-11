@@ -1,11 +1,11 @@
 # Repository Guidelines
 
-These guidelines define the contribution workflow and implementation boundaries for RowWeave. The project design is documented in `README.md`.
+These guidelines define the contribution workflow and implementation boundaries for RowWeave. The project design is documented in `docs/design.md`.
 
 ## Project Structure and Boundaries
 
 - Use **RowWeave** for the brand, documentation, and UI. Use `rowweave` for repository, package, and command names.
-- The repository currently contains design documentation. The layout in `README.md` is proposed; create directories only when they are needed by the implementation.
+- The repository currently contains design documentation. The layout in `docs/design.md` is proposed; create directories only when they are needed by the implementation.
 - `apps/desktop/` is the planned Electron entry point. `apps/server/` is the planned standalone TypeScript/Node.js service.
 - `packages/ui/`, `packages/client/`, and `packages/contracts/` hold shared React UI, client models and caching, and API schemas and types. Shared code must not import Electron or Harness runtime APIs; inject host-specific capabilities through narrow interfaces or callbacks.
 - `packages/core/` owns business rules. `packages/storage-sqlite/` owns database access and migrations. Keep both independent of desktop and plugin hosts, and keep database work out of Electron's main and renderer threads.
@@ -14,7 +14,6 @@ These guidelines define the contribution workflow and implementation boundaries 
 
 ## Build, Test, and Run
 
-- No package manifest, lockfile, build scripts, or test runner exists yet. Do not claim that project commands or checks are available before they are implemented.
 - Once tooling is introduced, use the runtime versions, package manager, lockfile, and scripts declared by this repository. Keep lockfiles in version control and use reproducible installs for verification and CI.
 - Run commands from the repository root unless a package documents a different working directory. Use commands appropriate to the current shell; do not assume PowerShell or Windows.
 - Document working install, type-check, build, test, and run commands when adding the corresponding tooling.
@@ -22,10 +21,10 @@ These guidelines define the contribution workflow and implementation boundaries 
 
 ## Coding Style
 
-- Use strict TypeScript and ESM. Use two-space indentation, single quotes, semicolons, camelCase for functions and variables, PascalCase for types and classes, and lowercase hyphen-separated filenames such as `record-store.ts`.
+- Use strict TypeScript and ESM. Use two-space indentation, single quotes, semicolons, camelCase for functions and variables, and PascalCase for types and classes.
 - In TypeScript modules emitted as Node.js ESM, use `.js` extensions in relative imports. For bundled React code, follow the package's configured module resolution and lint rules.
 - Keep user-facing wording and test descriptions consistent with their target language and existing conventions.
-- Write documentation and code comments in English by default. Use Chinese proper nouns where English cannot convey them accurately. Write localized documentation in its target language; preserve the existing Chinese `README.md` unless translation is requested.
+- Write documentation and code comments in English by default. Use Chinese proper nouns where English cannot convey them accurately. Write localized documentation in its target language. Keep `README.md` in English and `README.zh-CN.md` in Simplified Chinese, with their user-facing content aligned.
 - Keep table, field, and record identities separate from display names and row or column positions. Perform authoritative validation and data mutations in the service layer.
 
 ## Testing
@@ -41,7 +40,8 @@ These guidelines define the contribution workflow and implementation boundaries 
 
 ## Commits and Pull Requests
 
-- Follow Conventional Commits for commit messages and PR titles, for example `feat: add batch record updates`. Write commit messages, PR titles, and PR descriptions in English.
+- Follow Conventional Commits for commit messages and PR titles, for example `feat: add batch record updates`. Write commit messages, PR titles, and PR descriptions in English. Use Chinese proper nouns where English cannot convey them accurately.
+- Keep PRs focused on one coherent change that can be reviewed, validated, and merged on its own. Include related tests and documentation. Separate unrelated cleanup and broad refactoring. Use diff size as a review signal, not a hard limit; explain why unusually large changes cannot reasonably be split.
 - Merge every change into `main` through a PR using squash merge. Direct pushes and force pushes to `main` are prohibited.
 - Use descriptive feature branch names such as `feat/record-editing` or `docs/add-repository-guidelines`. Agent-branded prefixes such as `codex/`, `claude/`, `copilot/`, and `cursor/` are prohibited. Never include agent credits anywhere in a branch name.
 - In PRs, describe the concrete problem, resulting behavior, affected components, and how the change was verified. Link relevant issues and include screenshots for desktop UI changes when available; state when visual verification was not possible.
