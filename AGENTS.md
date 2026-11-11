@@ -1,0 +1,61 @@
+# Repository Guidelines
+
+These guidelines define the contribution workflow and implementation boundaries for RowWeave. The project design is documented in `README.md`.
+
+## Project Structure and Boundaries
+
+- Use **RowWeave** for the brand, documentation, and UI. Use `rowweave` for repository, package, and command names.
+- The repository currently contains design documentation. The layout in `README.md` is proposed; create directories only when they are needed by the implementation.
+- `apps/desktop/` is the planned Electron entry point. `apps/server/` is the planned standalone TypeScript/Node.js service.
+- `packages/ui/`, `packages/client/`, and `packages/contracts/` hold shared React UI, client models and caching, and API schemas and types. Shared code must not import Electron or Harness runtime APIs; inject host-specific capabilities through narrow interfaces or callbacks.
+- `packages/core/` owns business rules. `packages/storage-sqlite/` owns database access and migrations. Keep both independent of desktop and plugin hosts, and keep database work out of Electron's main and renderer threads.
+- `integrations/harness/` and `skills/` are future integrations. Implement the independent desktop prototype first; do not add these integrations or an internal AI runtime unless the task calls for them.
+- Treat build output, test databases, and generated pressure-test datasets as generated artifacts, not source files.
+
+## Build, Test, and Run
+
+- No package manifest, lockfile, build scripts, or test runner exists yet. Do not claim that project commands or checks are available before they are implemented.
+- Once tooling is introduced, use the runtime versions, package manager, lockfile, and scripts declared by this repository. Keep lockfiles in version control and use reproducible installs for verification and CI.
+- Run commands from the repository root unless a package documents a different working directory. Use commands appropriate to the current shell; do not assume PowerShell or Windows.
+- Document working install, type-check, build, test, and run commands when adding the corresponding tooling.
+- Run the checks relevant to a change. State which checks passed and identify any checks that could not run. Distinguish compilation, automated testing, GUI verification, and performance measurements.
+
+## Coding Style
+
+- Use strict TypeScript and ESM. Use two-space indentation, single quotes, semicolons, camelCase for functions and variables, PascalCase for types and classes, and lowercase hyphen-separated filenames such as `record-store.ts`.
+- In TypeScript modules emitted as Node.js ESM, use `.js` extensions in relative imports. For bundled React code, follow the package's configured module resolution and lint rules.
+- Keep user-facing wording and test descriptions consistent with their target language and existing conventions.
+- Write documentation and code comments in English by default. Use Chinese proper nouns where English cannot convey them accurately. Write localized documentation in its target language; preserve the existing Chinese `README.md` unless translation is requested.
+- Keep table, field, and record identities separate from display names and row or column positions. Perform authoritative validation and data mutations in the service layer.
+
+## Testing
+
+- Add regression tests for meaningful behavior changes and bug fixes. Test observable behavior rather than duplicating implementation details.
+- Keep regression tests and reusable helpers in the relevant package's `tests/` directory, or the root `tests/` directory for cross-package tests, once the test layout is established.
+- For Node.js tests, prefer `node:test` and `node:assert/strict` unless the repository adopts another runner. Use appropriate component or desktop integration tools for UI behavior.
+- Reuse helpers for temporary SQLite databases and deterministic fixtures. Isolate test data, clean it up, and never run tests against a user's working database.
+- Stub external services and host integrations in unit tests. Use targeted integration tests to verify real SQLite transactions, persistence, HTTP behavior, and host adapters.
+- For grid changes, verify the affected keyboard navigation, selection, clipboard, and Chinese IME behavior. Do not treat headless tests as proof that native input-method interactions work.
+- Measure performance with production builds and reproducible datasets. Record hardware, OS, display settings, dependency versions, data scale, and test steps. Report measured results separately from estimates and unverified claims.
+- Do not assume a Windows-only CI environment or an existing coverage threshold. Follow the CI configuration actually present in the repository.
+
+## Commits and Pull Requests
+
+- Follow Conventional Commits for commit messages and PR titles, for example `feat: add batch record updates`. Write commit messages, PR titles, and PR descriptions in English.
+- Merge every change into `main` through a PR using squash merge. Direct pushes and force pushes to `main` are prohibited.
+- Use descriptive feature branch names such as `feat/record-editing` or `docs/add-repository-guidelines`. Agent-branded prefixes such as `codex/`, `claude/`, `copilot/`, and `cursor/` are prohibited. Never include agent credits anywhere in a branch name.
+- In PRs, describe the concrete problem, resulting behavior, affected components, and how the change was verified. Link relevant issues and include screenshots for desktop UI changes when available; state when visual verification was not possible.
+- Preserve the repository's configured human Git identity. Verify author and committer identities before committing, and PR author identity before creating a PR.
+
+## Secrets and Local Data
+
+- Keep real credentials, private configuration, SQLite data and journal files, generated datasets, and build output out of Git. Add appropriate ignore rules when introducing these files, and use placeholders in example configuration.
+- Install Gitleaks and scan staged changes before committing. Never bypass a detected secret or claim a scan ran when the tool was unavailable.
+- When version-controlled hooks are added under `.githooks/`, enable the staged secret scan with `git config --local core.hooksPath .githooks`. The directory and hook must exist before enabling this setting; until then, run the staged scan explicitly.
+
+### Coding Agent Attribution
+
+- Never credit coding agents or models in commit messages, including merge and squash messages, or in PR titles or descriptions. Never use coding-agent identities as Git authors, committers, or PR authors, including bot accounts and email aliases.
+- The ban applies regardless of capitalization or formatting. It covers `Co-Authored-By: Claude <noreply@anthropic.com>`, Claude model-name variants, and any agent credit in `Co-authored-by:`, `Assisted-by:`, `Generated-by:`, `Committed-By-Agent:`, `Signed-off-by:`, `Reviewed-by:`, or other trailers.
+- Omit agent attribution in footers such as `🤖 Generated with Claude Code` and `Made with Cursor`, badges, hidden HTML comments, and session links or IDs such as `Claude-Session:`.
+- Disable automatic attribution where supported. Verify branch names, Git identities, commit messages, and raw PR text before publishing or merging. Use a different workflow if a tool cannot comply.
