@@ -27,6 +27,12 @@ A new database is seeded deterministically with 10,000 rows and 20 text fields. 
 
 Tests create and remove isolated temporary databases. No test opens a working database.
 
+## Shared client
+
+`packages/client` exposes an HTTP adapter and a host-independent table model. Its default page size is 100 records, its LRU cache holds at most 12 pages, and it permits at most four page requests in flight. Pending edits are retained separately within the service's batch limits, so scrolling cannot silently discard them.
+
+Saving is explicit. A failed request retains the pending values; version conflicts require deliberate resolution. Discard-and-reload replaces local drafts with the latest stored values. The UI must confirm before invoking that operation when edits are pending. Responses from an older cache generation cannot overwrite a completed save.
+
 ## Prototype PR sequence
 
 1. SQLite persistence, paginated HTTP reads, and reproducible tooling.
