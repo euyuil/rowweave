@@ -25,12 +25,12 @@ test('online backups include committed WAL data and restore independent schemas,
   const backup = join(dirname(data.path), 'snapshot.sqlite');
   const result = await backupWorkspace(data.path, backup);
   assert.equal(result.path, backup);
-  assert.equal(result.version, 6);
+  assert.equal(result.version, 7);
   assert.equal(result.bytes, (await stat(backup)).size);
   assert.deepEqual(service.listTables(), expectedTables);
   service.updateBatch([{ id: project.id, expectedVersion: project.version, values: { [projects.primaryFieldId]: 'After backup' } }], projects.id);
   const restoredPath = join(dirname(data.path), 'restored.sqlite');
-  assert.equal((await restoreWorkspace(backup, restoredPath)).version, 6);
+  assert.equal((await restoreWorkspace(backup, restoredPath)).version, 7);
   const restoredStore = new SqliteRecordStore(restoredPath);
   try {
     const restored = new RecordService(restoredStore);
@@ -67,7 +67,7 @@ test('restoring an old snapshot migrates only the copy and preserves the origina
   assert.equal((await backupWorkspace(data.path, backup)).version, 1);
   const snapshotBytes = await readFile(backup);
   const restored = join(dirname(data.path), 'upgraded.sqlite');
-  assert.equal((await restoreWorkspace(backup, restored)).version, 6);
+  assert.equal((await restoreWorkspace(backup, restored)).version, 7);
   const store = new SqliteRecordStore(restored);
   try {
     assert.deepEqual(store.getTable().fields, fields);

@@ -74,6 +74,25 @@ try {
     executablePath = join(extracted, 'RowWeave-win32-x64', 'RowWeave.exe');
   }
   await launch('Make room for your ideas');
+  const slowService = join(directory, 'slow-service.cjs');
+  await writeFile(slowService, `
+    setTimeout(() => process.parentPort.postMessage({ type: 'ready', url: 'http://127.0.0.1:1' }), 31_000);
+    process.parentPort.on('message', ({ data }) => { if (data === 'shutdown') process.exit(0); });
+  `);
+  const delayed = await application.evaluate(async ({ app }, entry) => {
+    const require = process.getBuiltinModule('node:module').createRequire(app.getAppPath() + '/package.json');
+    const { startLocalService } = require('./dist/apps/desktop/src/local-service.js');
+    let exits = 0;
+    const started = performance.now();
+    const service = await startLocalService(entry, ':memory:', () => { exits++; });
+    try { return { url: service.connection.url, elapsedMs: performance.now() - started }; }
+    finally {
+      await service.stop();
+      if (exits !== 1) throw new Error('The delayed service did not stop cleanly.');
+    }
+  }, slowService);
+  assert.equal(delayed.url, 'http://127.0.0.1:1');
+  assert.ok(delayed.elapsedMs >= 31_000);
   await page.getByRole('button', { name: '+ New table', exact: true }).click();
   await page.getByLabel('Table name', { exact: true }).fill('Local notes');
   await page.getByRole('button', { name: 'Create table', exact: true }).click();
