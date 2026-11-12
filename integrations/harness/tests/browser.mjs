@@ -13,6 +13,7 @@ import electronPath from 'electron';
 import { SqliteRecordStore } from '../../../dist/packages/storage-sqlite/src/record-store.js';
 import { RecordService } from '../../../dist/packages/core/src/record-service.js';
 import { startServer } from '../../../dist/apps/server/src/http-server.js';
+import { verifyCrossInterfaceWorkflow } from '../../../tests/cross-interface.mjs';
 
 const runFile = promisify(execFile);
 const directory = await mkdtemp(join(tmpdir(), 'rowweave-harness-'));
@@ -66,7 +67,7 @@ try {
   store = new SqliteRecordStore(join(directory, 'workspace.sqlite'));
   const service = new RecordService(store);
   const token = randomBytes(32).toString('hex');
-  serviceServer = await startServer({ service, token, allowedOrigins: [origin] });
+  serviceServer = await startServer({ service, token, allowedOrigins: [origin, 'null'] });
   await writeFile(join(fixtureDirectory, 'main.cjs'), `const { app, BrowserWindow } = require('electron');
 app.setPath('userData', process.env.ROWWEAVE_TEST_PROFILE);
 app.whenReady().then(() => { const window = new BrowserWindow({ width:1280,height:900,show:false,webPreferences:{sandbox:true,contextIsolation:true,offscreen:true} }); window.loadURL(process.env.ROWWEAVE_TEST_URL); });
@@ -167,6 +168,7 @@ app.on('window-all-closed', () => app.quit());`);
   await page.getByRole('button', { name: 'Reload', exact: true }).click();
   await page.getByText('2 records · 2 fields', { exact: true }).waitFor();
   await page.screenshot({ path: '.artifacts/desktop-harness-workspace.png' });
+  await verifyCrossInterfaceWorkflow({ url: serviceServer.url, token }, page, table.id, process.argv.includes('--packaged'));
   assert.equal(await page.evaluate(value => document.body.innerText.includes(value) || Object.values(localStorage).some(item => item.includes(value)), token), false);
   await page.evaluate(() => window.harnessTest.redeclare());
   assert.deepEqual(await page.evaluate(() => window.harnessTest.inspect()), { main: ['conversation', 'rowweave'], sidebar: ['rowweave'], active: null });

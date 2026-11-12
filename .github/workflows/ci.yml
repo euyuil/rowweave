@@ -36,6 +36,8 @@ jobs:
         if: runner.os == 'Windows'
       - run: npm run test:packaged
         if: runner.os == 'Windows'
+      - run: npm run test:interfaces
+        if: runner.os == 'Windows'
       - uses: actions/upload-artifact@v4
         if: success() && runner.os == 'Linux'
         with:
