@@ -3,7 +3,7 @@ import DataEditor, {
   CompactSelection, GridCellKind, type DataEditorRef, type GridCell, type GridSelection, type Rectangle,
 } from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
-import { maxBatchCells, maxBatchRecords, type CellValue, type Field, type GridView, type RecordLink, type RowRecord, type Table } from '../../contracts/src/index.js';
+import { maxBatchCells, maxBatchRecords, type CellValue, type Field, type GridView, type RecordLink, type RowRecord, type Table, type ViewUpdate } from '../../contracts/src/index.js';
 import type { TableModel } from '../../client/src/table-model.js';
 import { queryForView, type WorkspaceApi } from '../../client/src/http-client.js';
 import { cellDisplay, cellText } from '../../client/src/cell-values.js';
@@ -16,6 +16,8 @@ import { ViewDialog } from './view-dialog.js';
 import { CsvImportDialog } from './csv-import-dialog.js';
 import { CsvExportDialog } from './csv-export-dialog.js';
 import { SummaryDialog } from './summary-dialog.js';
+import { FieldForm } from './field-form.js';
+import { ColumnActions, type ColumnAction } from './column-actions.js';
 import './table-app.css';
 
 export interface TableHost {
@@ -46,13 +48,13 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   const [view, setView] = useState<GridView>();
   const [search, setSearch] = useState('');
   const [searchComposing, setSearchComposing] = useState(false);
-  const [viewAction, setViewAction] = useState<'create' | 'edit' | 'delete'>();
+  const [viewAction, setViewAction] = useState<'create' | 'edit' | 'delete' | 'query'>();
   const currentView = useRef<GridView>();
   const appliedSearch = useRef('');
   const viewRequest = useRef(0);
   const columns = useMemo(() => {
     const widths = new Map(view?.columns.map(column => [column.fieldId, column.width]));
-    return fields.map(field => ({ id: field.id, title: field.name, width: widths.get(field.id) ?? 180 }));
+    return fields.map(field => ({ id: field.id, title: field.name, width: widths.get(field.id) ?? 180, hasMenu: true }));
   }, [fields, view]);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string>();
@@ -62,6 +64,8 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   const [formDirty, setFormDirty] = useState(false);
   const [recordAction, setRecordAction] = useState<RecordAction>();
   const [managingFields, setManagingFields] = useState(false);
+  const [editingField, setEditingField] = useState<Field>();
+  const [columnAction, setColumnAction] = useState<{ field: Field; bounds: Rectangle }>();
   const [csvAction, setCsvAction] = useState<'import' | 'export'>();
   const [summarizing, setSummarizing] = useState(false);
   const [notice, setNotice] = useState<string>();
@@ -249,6 +253,39 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   const table = model.table;
   const selectedCount = selection.rows.length || selection.current?.range.height || 0;
   const recordActionsLocked = locked || !ready || model.stale || pending > 0 || editorDirty;
+  const openColumnActions = (column: number, bounds: Rectangle) => {
+    if (column < 0) return;
+    if (recordActionsLocked || busyRef.current || !view) {
+      if (pending > 0 || editorDirty) setNotice('Save or discard grid edits before changing columns.');
+      return;
+    }
+    setColumnAction({ field: fields[column]!, bounds });
+  };
+  const changeColumn = async (action: ColumnAction) => {
+    if (recordActionsLocked || busyRef.current) throw new Error('The table is not ready for column changes.');
+    const field = columnAction!.field;
+    if (action === 'configure') { setColumnAction(undefined); setEditingField(field); return; }
+    const update: ViewUpdate = { expectedVersion: view!.version };
+    if (action === 'asc' || action === 'desc' || action === 'clearSort') {
+      const others = (view!.query.sort ?? []).filter(rule => rule.fieldId !== field.id);
+      update.query = { ...view!.query, sort: action === 'clearSort' ? others : [{ fieldId: field.id, direction: action }, ...others] };
+    } else {
+      update.columns = view!.columns.map(column => ({ ...column }));
+      const index = update.columns.findIndex(column => column.fieldId === field.id);
+      if (action === 'hide') update.columns[index]!.hidden = true;
+      else {
+        const visible = update.columns.filter(column => !column.hidden);
+        const position = visible.findIndex(column => column.fieldId === field.id);
+        const neighbor = visible[position + (action === 'left' ? -1 : 1)]!;
+        const destination = update.columns.findIndex(column => column.fieldId === neighbor.fieldId);
+        [update.columns[index], update.columns[destination]] = [update.columns[destination]!, update.columns[index]!];
+      }
+    }
+    const saved = await api.updateView(tableId, view!.id, update);
+    setViews(current => current.map(item => item.id === saved.id ? saved : item));
+    await applyView(saved, appliedSearch.current);
+    setColumnAction(undefined);
+  };
   const openRecord = async (kind: RecordAction['kind']) => {
     if (recordActionsLocked || busyRef.current) return;
     if (kind === 'create') { setError(undefined); setRecordAction({ kind, records: [] }); return; }
@@ -378,6 +415,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
         </select>
         <button disabled={!view || locked} onClick={() => setViewAction('create')}>New view</button>
         <button disabled={!view || locked} onClick={() => setViewAction('edit')}>View settings</button>
+        <button disabled={!view || locked} onClick={() => setViewAction('query')}>Filter &amp; sort</button>
         <button disabled={!view || recordActionsLocked || searchComposing} onClick={() => setSummarizing(true)}>Summarize</button>
         <button disabled={!view || locked || views.length < 2} onClick={() => setViewAction('delete')}>Delete view</button>
         <input type="search" aria-label="Search records" placeholder="Search records…" value={search}
@@ -406,6 +444,15 @@ export function TableApp({ tableId, model, api, host, onManage }: {
           ref={grid} onCellClicked={() => grid.current?.focus()}
           width={size.width} height={size.height} rows={model.rowCount}
           columns={columns}
+          onHeaderMenuClick={openColumnActions}
+          onHeaderContextMenu={(column, event) => { event.preventDefault(); openColumnActions(column, event.bounds); }}
+          onKeyDown={event => {
+            if ((event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) && selection.current && event.bounds) {
+              event.cancel();
+              event.preventDefault();
+              openColumnActions(selection.current.cell[0], event.bounds);
+            }
+          }}
           getCellContent={getCellContent} getCellsForSelection={getCellsForSelection}
           provideEditor={cell => cell.kind === GridCellKind.Text ? CellEditor : undefined}
           isOutsideClick={event => {
@@ -455,6 +502,10 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       onClose={() => setCsvAction(undefined)} />}
     {managingFields && table && <FieldsDialog initial={table} api={api} setDirty={setFormDirty}
       onClose={() => setManagingFields(false)} onSaved={() => refreshAfterWrite('Schema')} />}
+    {columnAction && view && <ColumnActions field={columnAction.field} view={view} bounds={columnAction.bounds}
+      disabled={recordActionsLocked} onAction={changeColumn} onClose={() => { setColumnAction(undefined); grid.current?.focus(); }} />}
+    {editingField && table && <FieldForm table={table} field={editingField} api={api} setDirty={setFormDirty}
+      onClose={() => setEditingField(undefined)} onSaved={async () => { setEditingField(undefined); await refreshAfterWrite('Schema'); }} />}
     {viewAction && view && table && <ViewDialog kind={viewAction} view={view} search={search} table={table} api={api} setDirty={setFormDirty}
       onClose={() => setViewAction(undefined)} onSaved={saved => {
         setViewAction(undefined);
