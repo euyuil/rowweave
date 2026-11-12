@@ -44,16 +44,17 @@ export function FieldsDialog({ initial, api, setDirty, onClose, onSaved }: {
       <button className="danger" disabled={busy} onClick={() => void write(() => api.deleteField(table.id, removing.id, table.version))}>Delete permanently</button></div>
   </Dialog>;
   return <Dialog title="Manage fields" onClose={onClose} busy={busy} wide>
-    <p className="form-note">Fields define your records. The primary field labels records in linked tables. Each view can arrange columns independently.</p>
+    <p className="form-note">The primary display field labels records in linked tables. It is not a unique key; values may repeat or be empty unless the field requires a value.</p>
+    <p className="form-note">Each record has an immutable record ID (UUID), its primary key. Each column has a separate field ID that stays the same when you rename or move it.</p>
     <div className="schema-fields">{table.fields.map((field, index) => <div className="schema-field" role="group" aria-label={field.name} key={field.id}>
-      <div className="schema-field-name"><strong>{field.name}</strong><small>{fieldTypeNames[field.type]}{field.required ? ' · Required' : ''}{field.id === table.primaryFieldId ? ' · Primary' : ''}</small></div>
+      <div className="schema-field-name"><strong>{field.name}</strong><small>{fieldTypeNames[field.type]}{field.required ? ' · Required' : ''}{field.id === table.primaryFieldId ? ' · Primary display field' : ''}</small></div>
       <div className="schema-field-actions">
         <button disabled={busy || index === 0} aria-label={`Move ${field.name} up`} onClick={() => move(index, -1)}>↑</button>
         <button disabled={busy || index === table.fields.length - 1} aria-label={`Move ${field.name} down`} onClick={() => move(index, 1)}>↓</button>
         <button disabled={busy} onClick={() => setEditing(field)}>Configure</button>
         <button disabled={busy || field.id === table.primaryFieldId || ['relation', 'lookup'].includes(field.type)} onClick={() => void write(() => api.updateTable(table.id, {
           expectedVersion: table.version, primaryFieldId: field.id,
-        }))}>Make primary</button>
+        }))}>Use as primary display field</button>
         <button disabled={busy || field.id === table.primaryFieldId} onClick={() => { setError(undefined); setRemoving(field); }}>Delete</button>
       </div>
     </div>)}</div>

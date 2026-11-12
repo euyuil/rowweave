@@ -23,7 +23,9 @@ In the paths below, `:table` and `:field` are stable IDs. Names are trimmed, non
 | `POST /tables/:table/fields/:field/conversion/preview` | `{ expectedVersion, field: definition }` | `ConversionPreview` / `previewConversion(id, fieldId, input)` |
 | `POST /tables/:table/fields/:field/conversion/apply` | Same conversion request | `Table` / `applyConversion(id, fieldId, input)` |
 
-A new table contains an optional text field named `Name` and an `All records` view. `fieldOrder`, when supplied, contains every field ID exactly once. Choose another primary field before deleting it. Relation and lookup fields cannot be primary. Deleting a table deletes its records/views/fields; external relations and lookups must be removed first.
+A new table contains an optional text field named `Name` and an `All records` view. `fieldOrder`, when supplied, contains every field ID exactly once. Choose another primary display field before deleting it. Relation and lookup fields cannot be primary display fields. Deleting a table deletes its records/views/fields; external relations and lookups must be removed first.
+
+`primaryFieldId` selects the **primary display field**, not a database primary key. Its values label linked records and may repeat or be empty unless the field is required. Each record's immutable `id` UUID is its primary key; each column has a separate field UUID. Renaming a field, editing display values, or selecting another display field preserves record IDs and links.
 
 Tables support up to 200 fields. Field definitions use `{ name, type, required?, defaultValue? }` and these type-specific properties:
 

@@ -27,6 +27,7 @@ export async function verifySchemaWorkflow(page) {
   };
   const configure = name => group(name).getByRole('button', { name: 'Configure', exact: true }).click();
   await manage();
+  await page.getByText('Each record has an immutable record ID (UUID), its primary key.', { exact: false }).waitFor();
   await add('Budget', 'number');
   await page.getByLabel('Number format', { exact: true }).selectOption('currency');
   await page.getByLabel('Currency code', { exact: true }).fill('CNY');
@@ -46,12 +47,14 @@ export async function verifySchemaWorkflow(page) {
   await add('Notes', 'multiline');
   await save('Notes');
   await configure('Name');
+  await page.getByText('Field identity', { exact: true }).click();
+  await page.getByRole('dialog').getByText(original.primaryFieldId, { exact: true }).waitFor();
   await page.getByLabel('Field name', { exact: true }).fill('Title');
   await save('Title');
-  await group('Budget').getByRole('button', { name: 'Make primary', exact: true }).click();
-  await group('Budget').getByText('Number · Required · Primary', { exact: true }).waitFor();
-  await group('Title').getByRole('button', { name: 'Make primary', exact: true }).click();
-  await group('Title').getByText('Text · Primary', { exact: true }).waitFor();
+  await group('Budget').getByRole('button', { name: 'Use as primary display field', exact: true }).click();
+  await group('Budget').getByText('Number · Required · Primary display field', { exact: true }).waitFor();
+  await group('Title').getByRole('button', { name: 'Use as primary display field', exact: true }).click();
+  await group('Title').getByText('Text · Primary display field', { exact: true }).waitFor();
   assert.equal(await group('Title').getByRole('button', { name: 'Delete', exact: true }).isDisabled(), true);
   await page.getByRole('button', { name: 'Move Budget up', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('.schema-field-name strong')?.textContent === 'Budget');
@@ -126,7 +129,7 @@ export async function verifySchemaWorkflow(page) {
   assert.equal(rejected.records[1].values[original.primaryFieldId], '42');
   await change('41');
   await page.getByRole('button', { name: 'Apply conversion', exact: true }).click();
-  await group('Title').getByText('Number · Primary', { exact: true }).waitFor();
+  await group('Title').getByText('Number · Primary display field', { exact: true }).waitFor();
   const converted = await read();
   assert.deepEqual(converted.records.map(record => record.values[original.primaryFieldId]), [41, 42]);
   await configure('Budget');

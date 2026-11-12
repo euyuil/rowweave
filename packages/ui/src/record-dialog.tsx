@@ -25,6 +25,10 @@ export function RecordDialog({ action, table, api, setDirty, onClose, onSaved }:
     : deleting ? `Delete ${action.records.length === 1 ? 'record' : `${action.records.length} records`}` : 'Record details';
   useEffect(() => () => setDirty(false), [setDirty]);
   return <Dialog title={title} onClose={onClose} busy={busy}>
+    {action.kind === 'edit' && <details className="form-note"><summary>Record identity</summary>
+      <p>Record ID (primary key): <code>{original!.id}</code></p>
+      <p>This UUID stays the same when values or display names change. Linked records refer to this ID.</p>
+    </details>}
     <form onKeyDown={event => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's' && !event.nativeEvent.isComposing) {
         event.preventDefault();

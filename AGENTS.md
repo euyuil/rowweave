@@ -27,6 +27,7 @@ These guidelines define the contribution workflow and implementation boundaries 
 - Keep user-facing wording and test descriptions consistent with their target language and existing conventions.
 - Write documentation and code comments in English by default. Use Chinese proper nouns where English cannot convey them accurately. Write localized documentation in its target language. Keep `README.md` in English and `README.zh-CN.md` in Simplified Chinese, with their user-facing content aligned.
 - Keep table, field, and record identities separate from display names and row or column positions. Perform authoritative validation and data mutations in the service layer.
+- Call the record-label field the **primary display field** in product copy and documentation. A record's immutable UUID is its primary key; a column has a separate stable field UUID. Selecting a display field does not imply uniqueness or a required value.
 - Validate untrusted input at real system boundaries and rely on checked types and invariants internally. Avoid speculative abstractions, redundant checks, silent fallbacks, and retries of non-idempotent writes. Add compatibility paths only for concrete supported consumers.
 
 ## Testing

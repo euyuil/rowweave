@@ -48,7 +48,7 @@ Each item may need more than one focused PR. Do not batch completed PRs while wa
 - [x] Desktop workspace navigation and schema/record management.
   - [x] Empty first workspace, table navigation/create/rename/delete, and draft-safe switching (automated desktop lifecycle tests).
   - [x] Typed record forms, details, duplication, and versioned batch deletion (automated desktop validation/conflict/lifecycle tests).
-  - [x] Typed field configuration, options/defaults/constraints, primary field/order, deletion, and conversion preview/application (automated desktop schema and concurrent conversion tests).
+  - [x] Typed field configuration, options/defaults/constraints, primary display field/order, deletion, and conversion preview/application (automated desktop schema and concurrent conversion tests).
 - [x] Typed grid editors, draft undo/redo, views, and clipboard workflows (automated verification and the final native checks below).
   - [x] Desktop saved-view lifecycle, persisted column visibility/order/width, debounced composition-aware search, selected-view restoration, and version-aware paging (client and offscreen desktop tests).
   - [x] Desktop nested AND/OR filter builder with typed operands and ordered multi-field sorting (round-trip and offscreen combined-query tests).
