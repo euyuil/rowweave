@@ -1,0 +1,24 @@
+{
+  "name": "@rowweave/sdk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Typed HTTP client for RowWeave tables, schemas, records, views, and CSV exchange.",
+  "type": "module",
+  "engines": {
+    "node": ">=24.22.1 <25"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/types/client/src/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "types": "./dist/types/client/src/index.d.ts",
+  "files": ["dist"],
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/euyuil/rowweave.git",
+    "directory": "packages/client"
+  }
+}
