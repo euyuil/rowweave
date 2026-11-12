@@ -27,7 +27,7 @@ A new database starts empty. Create a table from the desktop sidebar or `POST /t
 
 ### Dynamic tables and schema
 
-The service supports multiple tables with stable table, field, and record IDs. The desktop supports creating, switching, renaming, and deleting tables, with unsaved-edit navigation guards and explicit deletion confirmation. Typed schema and record management workflows follow the [completion plan](completion-plan.md).
+The service supports multiple tables with stable table, field, and record IDs. The desktop supports creating, switching, renaming, and deleting tables, with unsaved-edit navigation guards and explicit deletion confirmation. Field management follows the [completion plan](completion-plan.md).
 
 - `GET /tables`: list table definitions and counts.
 - `POST /tables`: create an empty table with `{ "name": "Projects" }` and an initial **Name** field.
@@ -62,6 +62,8 @@ All fields accept `required` and `defaultValue`. Defaults apply only when a new 
 - `POST /tables/:tableId/records`: array of `{ values }` objects; returns `{ records }` with generated IDs and version 1. Creation is atomic and uses the same 2,000-record/20,000-cell limits (including defaulted cells).
 - `GET /tables/:tableId/records/:recordId`: fetch one record by stable ID.
 - `DELETE /tables/:tableId/records`: array of `{ id, expectedVersion }` objects; returns `{ deleted: [id, ...] }`. A missing/stale record rolls back the whole batch.
+
+The desktop's **New record**, **Open record**, and **Duplicate** actions use typed forms with defaults, select option labels, multiline text, and UTC date-time inputs. Optional values can be cleared to null; an empty text value remains a string. Details load the complete record, including fields outside the visible grid. A failed validation or version conflict retains the form. Save or discard grid drafts before managing records. Select cells or row checkboxes, then **Delete records** to preview and confirm a versioned batch deletion (up to 2,000 records); cancellation leaves data unchanged.
 
 The grid retains its text editor until the dedicated typed-editor workflow is introduced, but renders typed values and parses typed edits/paste. Select clipboard values use option names; multi-select uses a JSON array of names. Number input uses decimal notation, checkboxes use `true`/`false`, and blank non-text input means null. Invalid cells reject the complete pasted rectangle and preserve existing drafts. Service writes always validate again.
 

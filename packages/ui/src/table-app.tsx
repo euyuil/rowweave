@@ -5,10 +5,12 @@ import DataEditor, {
 import '@glideapps/glide-data-grid/dist/index.css';
 import { maxBatchCells, maxBatchRecords, type Field, type RowRecord, type Table } from '../../contracts/src/index.js';
 import type { TableModel } from '../../client/src/table-model.js';
+import type { WorkspaceApi } from '../../client/src/http-client.js';
 import { cellDisplay, cellText } from '../../client/src/cell-values.js';
 import { parseTextValue } from '../../core/src/field-values.js';
 import { EditorContext, TextCellEditor, type FinishEditor } from './text-cell-editor.js';
 import { parseClipboard } from './clipboard.js';
+import { RecordDialog, type RecordAction } from './record-dialog.js';
 import './table-app.css';
 
 export interface TableHost {
@@ -25,8 +27,8 @@ function textCell(record: RowRecord | undefined, field: Field | undefined, reado
     allowOverlay: !readonly, readonly };
 }
 
-export function TableApp({ model, host, onManage }: {
-  model: TableModel; host: TableHost; onManage(kind: 'rename' | 'delete', table: Table): void;
+export function TableApp({ model, api, host, onManage }: {
+  model: TableModel; api: WorkspaceApi; host: TableHost; onManage(kind: 'rename' | 'delete', table: Table): void;
 }) {
   const revision = useSyncExternalStore(model.subscribe, model.getSnapshot);
   const queryVersion = model.queryVersion;
@@ -37,6 +39,8 @@ export function TableApp({ model, host, onManage }: {
   const [busy, setBusy] = useState(false);
   const [offline, setOffline] = useState(false);
   const [editorDirty, setEditorDirty] = useState(false);
+  const [formDirty, setFormDirty] = useState(false);
+  const [recordAction, setRecordAction] = useState<RecordAction>();
   const activeEditor = useRef<FinishEditor>();
   const [size, setSize] = useState({ width: 900, height: 500 });
   const [visible, setVisible] = useState({ y: 0, height: 50 });
@@ -64,7 +68,7 @@ export function TableApp({ model, host, onManage }: {
     return () => { active = false; unsubscribe(); model.dispose(); };
   }, [model, host, report]);
 
-  useEffect(() => { void host.setDirty(pending > 0 || editorDirty).catch(report); }, [pending, editorDirty, host, report]);
+  useEffect(() => { void host.setDirty(pending > 0 || editorDirty || formDirty).catch(report); }, [pending, editorDirty, formDirty, host, report]);
 
   useEffect(() => {
     if (!ready || !gridHost.current) return;
@@ -139,12 +143,48 @@ export function TableApp({ model, host, onManage }: {
     try {
       await model.discardAndReload();
       await model.readRange(visible.y, Math.min(visible.height + 5, maxBatchRecords));
+      setSelection({ columns: CompactSelection.empty(), rows: CompactSelection.empty() });
       setReady(true);
     } catch (failure) { report(failure); }
     finally { busyRef.current = false; setBusy(false); }
   };
 
   const table = model.table;
+  const selectedCount = selection.rows.length || selection.current?.range.height || 0;
+  const recordActionsLocked = locked || !ready || model.stale || pending > 0 || editorDirty;
+  const openRecord = async (kind: RecordAction['kind']) => {
+    if (recordActionsLocked || busyRef.current) return;
+    if (kind === 'create') { setError(undefined); setRecordAction({ kind, records: [] }); return; }
+    if (selectedCount > maxBatchRecords) { setError('Select up to 2,000 records at a time.'); return; }
+    busyRef.current = true;
+    setBusy(true);
+    setError(undefined);
+    try {
+      const generation = model.queryVersion;
+      const indices = selection.rows.length ? selection.rows.toArray()
+        : Array.from({ length: selectedCount }, (_, index) => selection.current!.range.y + index);
+      const records: RowRecord[] = [];
+      for (let index = 0; index < indices.length;) {
+        const start = indices[index]!;
+        let count = 1;
+        while (indices[index + count] === start + count) count++;
+        records.push(...await model.readRange(start, count));
+        index += count;
+      }
+      if (generation !== model.queryVersion) throw new Error('The view changed. Select the records again.');
+      if (kind !== 'delete') records[0] = await api.getRecord(table!.id, records[0]!.id);
+      setRecordAction({ kind, records });
+    } catch (failure) { report(failure); }
+    finally { busyRef.current = false; setBusy(false); }
+  };
+  const recordsSaved = () => {
+    setRecordAction(undefined);
+    setSelection({ columns: CompactSelection.empty(), rows: CompactSelection.empty() });
+    setBusy(true);
+    busyRef.current = true;
+    void model.refresh().catch(failure => report(new Error(`Records saved, but refreshing failed: ${failure instanceof Error ? failure.message : 'connection unavailable'}`)))
+      .finally(() => { busyRef.current = false; setBusy(false); });
+  };
   const getCellContent = useCallback(([column, row]: readonly [number, number]): GridCell => {
     const field = fields[column];
     return textCell(model.getRecord(row), field, locked || model.stale);
@@ -182,6 +222,14 @@ export function TableApp({ model, host, onManage }: {
     {message && <div role="alert" className="error-banner">{message}
       {model.conflicted && <span> Your edits are still here. Copy them before discarding and reloading the current records.</span>}
     </div>}
+    <div className="record-toolbar">
+      <button className="primary" disabled={recordActionsLocked} onClick={() => void openRecord('create')}>+ New record</button>
+      <button disabled={recordActionsLocked || selectedCount !== 1} onClick={() => void openRecord('edit')}>Open record</button>
+      <button disabled={recordActionsLocked || selectedCount !== 1} onClick={() => void openRecord('duplicate')}>Duplicate</button>
+      <button disabled={recordActionsLocked || !selectedCount} onClick={() => void openRecord('delete')}>Delete records</button>
+      <span>{pending > 0 || editorDirty ? 'Save or discard grid edits to manage records.'
+        : selectedCount ? `${selectedCount.toLocaleString()} selected` : 'Select a row or cell to open a record.'}</span>
+    </div>
     <section className="table-panel" aria-label="Data table">
       <div className="table-toolbar"><strong>▦ &nbsp; All records</strong>
         <span>{table ? `${model.rowCount.toLocaleString()} ${model.rowCount === 1 ? 'record' : 'records'} · ${fields.length} ${fields.length === 1 ? 'field' : 'fields'}` : 'Loading records…'}</span></div>
@@ -205,7 +253,7 @@ export function TableApp({ model, host, onManage }: {
           onVisibleRegionChanged={region => setVisible(previous =>
             previous.y === region.y && previous.height === region.height ? previous : { y: region.y, height: region.height })}
           gridSelection={selection} onGridSelectionChange={setSelection}
-          rowMarkers="number" rowHeight={36} headerHeight={40} rangeSelect="rect"
+          rowMarkers="both" rowHeight={36} headerHeight={40} rangeSelect="rect" rowSelectionMode="multi"
           cellActivationBehavior="double-click"
           keybindings={{ paste: false }}
           smoothScrollX smoothScrollY
@@ -228,5 +276,7 @@ export function TableApp({ model, host, onManage }: {
     </section>
     <footer><span role="status" className={pending ? 'pending-status' : ''}>{status}</span>
       <span>Enter to edit · Esc to cancel · Ctrl+C / Ctrl+V · Ctrl+S to save</span></footer>
+    {recordAction && table && <RecordDialog action={recordAction} table={table} api={api} setDirty={setFormDirty}
+      onClose={() => setRecordAction(undefined)} onSaved={recordsSaved} />}
   </section>;
 }
