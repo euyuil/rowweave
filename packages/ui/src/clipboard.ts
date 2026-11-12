@@ -1,5 +1,10 @@
 import { maxBatchCells, maxBatchRecords, maxTextLength } from '../../contracts/src/index.js';
 
+export function serializeClipboard(rows: readonly (readonly string[])[]): string {
+  return rows.map(row => row.map(value => /[\t\r\n"]/.test(value) || (rows.length > 1 && row.length === 1 && value === '')
+    ? `"${value.replace(/"/g, '""')}"` : value).join('\t')).join('\n');
+}
+
 // Parse plain-text spreadsheet clipboard data without confusing code points and UTF-16 offsets.
 export function parseClipboard(text: string): string[][] {
   const rows: string[][] = [];

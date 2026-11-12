@@ -60,6 +60,8 @@ Spreadsheet applications may reinterpret dates, leading zeros, long numbers, and
 
 ## Export
 
+Grid copy uses quoted plain-text TSV, including for row and column selections. It preserves Unicode, literal markup, quoted delimiters, multiline text, and empty cells without an HTML representation that spreadsheet applications can reinterpret. Copy is bounded to 2,000 records / 20,000 cells, follows visible field order, and includes unsaved drafts. Windows may normalize clipboard line endings to CRLF; spreadsheet applications still apply their own cell-type inference. Copying text inside an open cell editor retains the editor's native behavior.
+
 Send `POST /tables/:tableId/export` with `{}` to export the whole table in schema/insertion order, or with `{ "viewId": "view-id", "expectedViewVersion": 2, "search": "launch" }` to export a saved view. The view supplies filters, sorting, visible fields, and column order; optional `search` overrides its saved search. `expectedViewVersion` rejects a changed view. All matching records are included, not just the current page. The response is `text/csv; charset=utf-8` with an attachment filename. Errors use the ordinary JSON error envelope and a non-success status.
 
 Export reads records and computed values in one consistent SQLite snapshot, hydrates bounded batches, and finishes validation before returning the file. An oversized export returns `CSV_LIMIT`, never a partial CSV. The TypeScript client's `previewCsv`, `importCsv`, and `exportCsv` methods use these endpoints; `exportCsv` returns the CSV string including its UTF-8 BOM marker.
