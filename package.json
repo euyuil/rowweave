@@ -10,7 +10,7 @@
   "packageManager": "npm@11.19.1",
   "scripts": {
     "check": "tsc --noEmit",
-    "build": "tsc && node scripts/build-renderer.mjs && npm run build:sdk && npm run build:cli && npm run build:mcp",
+    "build": "tsc && node scripts/build-renderer.mjs && npm run build:sdk && npm run build:cli && npm run build:mcp && npm run build:harness",
     "build:sdk": "node scripts/build-sdk.mjs",
     "package:sdk": "npm run build:sdk && node scripts/package-sdk.mjs",
     "build:cli": "node scripts/build-cli.mjs",
@@ -19,6 +19,9 @@
     "build:mcp": "node scripts/build-mcp.mjs",
     "package:mcp": "npm run build:mcp && node scripts/package-mcp.mjs",
     "start:mcp": "node apps/mcp/dist/rowweave-mcp.js",
+    "build:harness": "node scripts/build-harness.mjs",
+    "package:harness": "npm run build:harness && node scripts/package-harness.mjs",
+    "test:harness": "npm run build && npm run setup:desktop && node integrations/harness/tests/browser.mjs",
     "test": "npm run build && node --test \"dist/**/tests/*.test.js\"",
     "start:server": "node dist/apps/server/src/cli.js",
     "workspace:file": "node dist/apps/server/src/workspace-file.js",
@@ -37,6 +40,13 @@
     "glob": "14.0.2"
   },
   "devDependencies": {
+    "@deepseek-ai/cordis": "4.1.0",
+    "@deepseek-ai/dsh-client-modules": "0.2.2-rc.2",
+    "@deepseek-ai/dsh-client-store": "0.2.2-rc.2",
+    "@deepseek-ai/dsh-client-ui-layout": "0.2.2-rc.2",
+    "@deepseek-ai/dsh-client-ui-renderer": "0.2.2-rc.2",
+    "@deepseek-ai/dsh-client-ui-sidebar": "0.2.2-rc.2",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.2-rc.2",
     "@electron-internal/extract-zip": "1.0.8",
     "@electron/packager": "20.3.0",
     "@modelcontextprotocol/client": "2.4.0",
@@ -46,10 +56,12 @@
     "@types/react-dom": "18.3.7",
     "electron": "45.3.0",
     "esbuild": "0.28.2",
+    "immer": "10.1.1",
     "playwright": "1.65.0",
     "typescript": "7.0.2",
     "yazl": "3.3.1",
-    "zod": "4.6.7"
+    "zod": "4.6.7",
+    "zustand": "4.5.7"
   },
   "dependencies": {
     "@glideapps/glide-data-grid": "6.0.3",

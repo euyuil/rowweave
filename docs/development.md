@@ -13,6 +13,8 @@ On Windows, use `npm.cmd` if PowerShell execution policy prevents `npm` from run
 
 Build the stdio MCP adapter with `npm run build:mcp` and its independently installable archive with `npm run package:mcp`. Run the built entry directly from an MCP host as described in the [MCP guide](mcp.md); `npm run start:mcp` is available for development. Protocol and offline installation tests run in `npm test`.
 
+Build the thin Harness Web adapter with `npm run build:harness`, package it with `npm run package:harness`, and run its isolated browser integration check with `npm run test:harness`. The test uses the pinned official module loader, layout, slots, and renderer against a temporary RowWeave service; it does not start an AI session. The host packages, Zustand, and Immer are development-only dependencies for that fixture and type checking. See [Harness setup](harness.md) for installation, allowed origins, browser downloads, and credential lifetime.
+
 ## Standalone service
 
 Set `ROWWEAVE_TOKEN` to a random secret of at least 32 printable ASCII characters without spaces, then run `npm run start:server`. `ROWWEAVE_DB` selects the database (default: `.data/prototype.sqlite`), and `ROWWEAVE_PORT` selects the port (default: 4317). The default binding is 127.0.0.1. For independent/remote operation, configure `ROWWEAVE_HOST`, `ROWWEAVE_ALLOWED_HOSTS`, and `ROWWEAVE_ALLOWED_ORIGINS` as described in the [service operations guide](service.md). Do not commit credentials or put them in URLs.

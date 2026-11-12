@@ -21,7 +21,7 @@ export interface TableHost {
   confirmDiscard(): Promise<boolean>;
   setDirty(value: boolean): Promise<void>;
   onServiceExit(listener: () => void): () => void;
-  saveCsv(name: string, csv: string): Promise<boolean>;
+  saveCsv(name: string, csv: string): Promise<boolean | 'download-started'>;
 }
 
 function gridCell(record: RowRecord | undefined, field: Field | undefined, readonly: boolean, row: number): GridCell {

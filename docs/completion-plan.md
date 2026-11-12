@@ -68,7 +68,7 @@ Each item may need more than one focused PR. Do not batch completed PRs while wa
 - [x] MCP protocol server and agent usage Skills.
   - [x] Stdio MCP adapter with 24 discoverable tools, live schema/view resources, versioned writes, protocol-client workflows and an offline-installable bundle.
   - [x] Portable RowWeave usage Skill with concrete MCP/CLI recipes, bounded reads, conflict/uncertain-write recovery, installation guidance and validated metadata.
-- [ ] Harness adapter and host integration verification.
+- [x] Harness adapter and host integration verification (installable Web-profile bundle, official module/slot/layout/renderer integration, typed workspace editing, draft-safe navigation, browser CSV download, failed-connection retention, and disposal/reload tests).
 - [ ] Complete cross-interface regression, migration/backup verification, production performance, and packaging.
 - [ ] Final native-input checks and invitation for user end-to-end acceptance.
 

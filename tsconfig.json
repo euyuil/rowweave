@@ -21,7 +21,9 @@
     "apps/**/*.ts",
     "apps/**/*.tsx",
     "packages/**/*.ts",
-    "packages/**/*.tsx"
+    "packages/**/*.tsx",
+    "integrations/**/*.ts",
+    "integrations/**/*.tsx"
   ],
   "exclude": ["node_modules", "dist", "packages/client/dist"]
 }
