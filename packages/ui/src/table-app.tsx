@@ -15,6 +15,7 @@ import { FieldsDialog } from './fields-dialog.js';
 import { ViewDialog } from './view-dialog.js';
 import { CsvImportDialog } from './csv-import-dialog.js';
 import { CsvExportDialog } from './csv-export-dialog.js';
+import { SummaryDialog } from './summary-dialog.js';
 import './table-app.css';
 
 export interface TableHost {
@@ -62,6 +63,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   const [recordAction, setRecordAction] = useState<RecordAction>();
   const [managingFields, setManagingFields] = useState(false);
   const [csvAction, setCsvAction] = useState<'import' | 'export'>();
+  const [summarizing, setSummarizing] = useState(false);
   const [notice, setNotice] = useState<string>();
   const activeEditor = useRef<EditorHandle>();
   const [size, setSize] = useState({ width: 900, height: 500 });
@@ -376,6 +378,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
         </select>
         <button disabled={!view || locked} onClick={() => setViewAction('create')}>New view</button>
         <button disabled={!view || locked} onClick={() => setViewAction('edit')}>View settings</button>
+        <button disabled={!view || recordActionsLocked || searchComposing} onClick={() => setSummarizing(true)}>Summarize</button>
         <button disabled={!view || locked || views.length < 2} onClick={() => setViewAction('delete')}>Delete view</button>
         <input type="search" aria-label="Search records" placeholder="Search records…" value={search}
           disabled={!ready || model.saving || offline} onChange={event => setSearch(event.target.value)}
@@ -441,6 +444,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       <span>Enter to edit · Esc to cancel · Ctrl+C / Ctrl+V · Ctrl+S to save</span></footer>
     {recordAction && table && <RecordDialog action={recordAction} table={table} api={api} setDirty={setFormDirty}
       onClose={() => setRecordAction(undefined)} onSaved={() => { setRecordAction(undefined); void refreshAfterWrite('Records'); }} />}
+    {summarizing && table && view && <SummaryDialog table={table} view={view} search={search} api={api} onClose={() => setSummarizing(false)} />}
     {csvAction === 'import' && table && <CsvImportDialog initial={table} api={api} setDirty={setFormDirty}
       onClose={() => { setCsvAction(undefined); void reload(false); }} onImported={count => {
         setCsvAction(undefined);

@@ -1,5 +1,7 @@
 # First product release
 
+The first release below is implemented. The current bounded follow-up is [Everyday table workflows](refinement-plan.md), which explicitly extends its feature scope and records new acceptance work.
+
 This is the delivery contract for turning the prototype into a usable RowWeave product. It takes precedence over the prototype milestones in [design.md](design.md). A checked item requires implemented behavior and recorded verification; a stub, screenshot, or API with no usable desktop workflow is not completion.
 
 ## Scope

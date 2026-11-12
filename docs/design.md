@@ -2,7 +2,7 @@
 
 [Product overview](../README.md) · [简体中文产品介绍](../README.zh-CN.md)
 
-This document records the target architecture and original prototype plan for RowWeave. The prototype is complete. The [first product release plan](completion-plan.md) defines the current delivery scope, implementation sequence, and acceptance criteria; see [development instructions](development.md) for the components and commands currently available.
+This document records the target architecture and original prototype plan for RowWeave. The prototype and [first product release plan](completion-plan.md) are implemented; [Everyday table workflows](refinement-plan.md) defines the current bounded follow-up. See [development instructions](development.md) for the components and commands currently available.
 
 ## Product direction
 

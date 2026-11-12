@@ -70,6 +70,11 @@
 .rowweave-app .form-row > * { flex: 1; min-width: 0; }
 .rowweave-app .check-field { display: flex; align-items: center; gap: 9px; margin: 18px 0; }
 .rowweave-app .form-note { color: #69768b; font-size: 13px; }
+.rowweave-app .summary-results { border-collapse: collapse; width: 100%; font-size: 13px; }
+.rowweave-app .summary-results th, .rowweave-app .summary-results td { text-align: left; padding: 10px; border-bottom: 1px solid #e5eaf1; overflow-wrap: anywhere; }
+.rowweave-app .summary-results td { font-variant-numeric: tabular-nums; }
+.rowweave-app .summary-total { background: #f0f4fb; font-weight: 600; }
+.rowweave-app .summary-pages { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; font-size: 12px; }
 .rowweave-app .option-row { display: flex; gap: 8px; margin-bottom: 9px; }
 .rowweave-app .option-row > input:first-child { flex: 1; min-width: 0; }
 .rowweave-app .option-row input[type="color"] { width: 42px; height: 40px; padding: 3px; }

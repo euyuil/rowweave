@@ -1,5 +1,5 @@
 import type { WorkspaceApi, TableCreate, TableUpdate, FieldCreate, FieldUpdate, FieldConversion, RecordCreate,
-  RecordUpdate, RecordDelete, RecordQuery, ViewCreate, ViewUpdate, ViewPageRequest } from '../../../packages/client/src/index.js';
+  RecordUpdate, RecordDelete, RecordQuery, ViewCreate, ViewUpdate, ViewPageRequest, SummaryRequest } from '../../../packages/client/src/index.js';
 
 export class UsageError extends Error {}
 
@@ -27,6 +27,7 @@ export const commands: Record<string, Command> = {
   'fields apply-conversion': { ids: 2, input: 'required', run: (api, [id, field], input) => api.applyConversion(id!, field!, input as FieldConversion) },
   'records get': { ids: 2, input: 'none', run: (api, [id, record]) => api.getRecord(id!, record!) },
   'records query': { ids: 1, input: 'optional', run: (api, [id], input) => api.queryRecords(id!, input as RecordQuery) },
+  'records summarize': { ids: 1, input: 'optional', run: (api, [id], input) => api.summarizeRecords(id!, input as SummaryRequest) },
   'records create': { ids: 1, input: 'required', run: (api, [id], input) => api.createRecords(id!, input as RecordCreate[]) },
   'records update': { ids: 1, input: 'required', run: (api, [id], input) => api.updateRecords(id!, input as RecordUpdate[]) },
   'records delete': { ids: 1, input: 'required', run: (api, [id], input) => api.deleteRecords(id!, input as RecordDelete[]) },
@@ -44,7 +45,7 @@ Usage: rowweave <resource> <action> [table-id] [field/record/view-id] [options]
 
   tables   list | get | create | update | delete
   fields   create | update | delete | preview-conversion | apply-conversion
-  records  get | query | create | update | delete
+  records  get | query | summarize | create | update | delete
   views    list | get | create | update | delete | query
   csv      preview | import | export
 

@@ -43,6 +43,12 @@ const page = {
   fields: z.array(id).exactOptional(), expectedRevision: version.describe('Reuse the first page revision for consistent continuation pages.').exactOptional(),
 };
 export const recordQuery = z.strictObject({ ...page, ...query, recordIds: z.array(id).exactOptional() });
+export const recordSummary = z.strictObject({
+  viewId: id.exactOptional(), expectedViewVersion: version.exactOptional(),
+  filter: filter.exactOptional(), search: z.string().exactOptional(), groupBy: id.exactOptional(),
+  measures: z.array(z.strictObject({ fieldId: id, operation: z.enum(['sum', 'average', 'min', 'max']) })).max(12).exactOptional(),
+  offset: page.offset, limit: page.limit, expectedRevision: page.expectedRevision,
+});
 export const recordCreate = z.array(z.strictObject({ values }));
 export const recordUpdate = z.array(z.strictObject({ id, ...expectedVersion, values }));
 export const recordDelete = z.array(z.strictObject({ id, ...expectedVersion }));

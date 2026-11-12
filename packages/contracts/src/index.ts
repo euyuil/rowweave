@@ -129,6 +129,37 @@ export interface QueryPage extends RecordPage {
   schemaVersion: number;
 }
 
+export interface SummaryMeasure {
+  fieldId: string;
+  operation: 'sum' | 'average' | 'min' | 'max';
+}
+
+export interface SummaryRequest {
+  viewId?: string;
+  expectedViewVersion?: number;
+  filter?: FilterGroup;
+  search?: string;
+  groupBy?: string;
+  measures?: SummaryMeasure[];
+  offset?: number;
+  limit?: number;
+  expectedRevision?: number;
+}
+
+export interface SummaryValues {
+  count: number;
+  values: Array<number | null>;
+}
+
+export interface RecordSummary {
+  totals: SummaryValues;
+  groups: Array<SummaryValues & { key: CellValue; label: string }>;
+  groupCount: number;
+  offset: number;
+  revision: number;
+  schemaVersion: number;
+}
+
 export interface ViewColumn {
   fieldId: string;
   width: number;

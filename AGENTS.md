@@ -1,12 +1,12 @@
 # Repository Guidelines
 
-These guidelines define the contribution workflow and implementation boundaries for RowWeave. The project design is documented in `docs/design.md`; the current product delivery scope and acceptance criteria are in `docs/completion-plan.md`.
+These guidelines define the contribution workflow and implementation boundaries for RowWeave. The project design is documented in `docs/design.md`; the initial product delivery scope is in `docs/completion-plan.md`, extended by the current scope and acceptance criteria in `docs/refinement-plan.md`.
 
 ## Project Structure and Boundaries
 
 - Use **RowWeave** as the brand and product display name in prose, UI, and display metadata. Use `rowweave` as the codename for repository/package/command names, executable and artifact filenames, protocol identifiers, and process identifiers. Keep display names separate from technical names: `RowWeave` in a window title or `ProductName`, but `rowweave.exe`, `rowweave-win32-x64`, and `rowweave-data-service` in technical contexts. Follow interface casing conventions such as `ROWWEAVE_*` for environment variables.
 - Platform presentation conventions may use the brand for Windows installation/user-data directories and shortcuts (`Program Files\RowWeave\rowweave.exe`, `%APPDATA%\RowWeave`, `RowWeave.lnk`), names of services registered with Windows Service Control Manager, and macOS application bundles (`RowWeave.app`). Executables inside them still use the codename. Application-managed processes and services, including Electron utility processes, use codename identifiers. Linux desktop entries use `rowweave.desktop` with `Name=RowWeave`. These naming examples do not expand the supported platform scope. Preserve user-provided filenames and exact historical artifact references.
-- Follow `docs/development.md` for working commands and `docs/completion-plan.md` for delivery scope. Create directories only when they are needed by the implementation. Do not add unrelated features or refactoring while completing that scope.
+- Follow `docs/development.md` for working commands and the completion/refinement plans for delivery scope. Create directories only when they are needed by the implementation. Do not add unrelated features or refactoring while completing that scope.
 - `apps/desktop/` is the Electron entry point. `apps/server/` provides the standalone TypeScript/Node.js service and shared HTTP server.
 - `packages/ui/`, `packages/client/`, and `packages/contracts/` hold shared React UI, client models and caching, and API schemas and types. Shared code must not import Electron or Harness runtime APIs; inject host-specific capabilities through narrow interfaces or callbacks.
 - `packages/core/` owns business rules. `packages/storage-sqlite/` owns database access and migrations. Keep both independent of desktop and plugin hosts, and keep database work out of Electron's main and renderer threads.
@@ -39,6 +39,7 @@ These guidelines define the contribution workflow and implementation boundaries 
 - Stub external services and host integrations in unit tests. Use targeted integration tests to verify real SQLite transactions, persistence, HTTP behavior, and host adapters.
 - For grid changes, verify the affected keyboard navigation, selection, clipboard, and Chinese IME behavior. Do not treat headless tests as proof that native input-method interactions work.
 - Prefer automated validation during implementation. Defer Computer Use, native IME checks, and external spreadsheet interoperability to the final release candidate; record those checks as pending until performed. Invite the user to perform final end-to-end acceptance once the complete candidate is ready.
+- Validate business-only changes primarily with Node, SQLite, HTTP, CLI and protocol tests. Add automated UI acceptance for changed UI behavior. Describe new features in RowWeave's own terms; do not add reference-product names or comparisons to repository content.
 - Measure performance with production builds and reproducible datasets. Record hardware, OS, display settings, dependency versions, data scale, and test steps. Report measured results separately from estimates and unverified claims.
 - Do not assume a Windows-only CI environment or an existing coverage threshold. Follow the CI configuration actually present in the repository.
 
