@@ -1,6 +1,7 @@
 import type { SummaryMeasure, Table } from '../../contracts/src/index.js';
 import { ServiceError } from './errors.js';
 import { schemaObject } from './schema-validation.js';
+import { valueField } from '../../contracts/src/index.js';
 
 export interface CheckedSummary {
   groupBy?: string;
@@ -22,7 +23,7 @@ export function parseSummary(table: Table, input: Record<string, unknown>): Chec
     const item = schemaObject(value);
     const fieldId = item['fieldId'];
     const operation = item['operation'];
-    if (typeof fieldId !== 'string' || fields.get(fieldId)?.type !== 'number' ||
+    if (typeof fieldId !== 'string' || !fields.has(fieldId) || valueField(fields.get(fieldId)!).type !== 'number' ||
         !['sum', 'average', 'min', 'max'].includes(operation as string)) {
       throw new ServiceError('INVALID_SUMMARY', 'Each measure needs a numeric field and sum, average, min or max.');
     }

@@ -120,9 +120,9 @@ test('version-six migration builds saved-query indexes and preserves records, vi
   const before = service.queryView(table.id, view.id, {});
   store.close();
   for (const index of indexes()) db.exec(`DROP INDEX "${index['name']}"`);
-  db.exec('PRAGMA user_version = 6');
+  db.exec('ALTER TABLE records DROP COLUMN formula_errors_json; PRAGMA user_version = 6;');
   const reopened = new RecordService(data.open());
-  assert.equal(db.prepare('PRAGMA user_version').get()!['user_version'], 9);
+  assert.equal(db.prepare('PRAGMA user_version').get()!['user_version'], 10);
   assert.equal(indexes().length, 1);
   assert.deepEqual(reopened.getView(table.id, view.id), view);
   assert.deepEqual(reopened.queryView(table.id, view.id, {}), before);
@@ -135,7 +135,7 @@ test('a corrupt saved view aborts migration without leaving indexes or advancing
   store.close();
   for (const index of indexes()) db.exec(`DROP INDEX "${index['name']}"`);
   db.prepare("UPDATE views SET config_json = 'invalid json' WHERE table_id = ?").run(other.id);
-  db.exec('PRAGMA user_version = 6');
+  db.exec('ALTER TABLE records DROP COLUMN formula_errors_json; PRAGMA user_version = 6;');
   assert.throws(() => data.open(), /JSON/);
   assert.equal(db.prepare('PRAGMA user_version').get()!['user_version'], 6);
   assert.equal(indexes().length, 0);

@@ -64,7 +64,8 @@ export class Relations {
       return [record.id, record];
     }));
     const edges = this.db.prepare(`SELECT e.source_record_id, e.field_id, target.id, target.table_id,
-      target.values_json -> ('$.' || json_quote(t.primary_field_id)) AS value_json
+      target.values_json -> ('$.' || json_quote(t.primary_field_id)) AS value_json,
+      json_extract(target.formula_errors_json, '$.' || json_quote(t.primary_field_id)) AS formula_error
       FROM relation_edges e JOIN records target ON target.id = e.target_record_id
       JOIN tables t ON t.id = target.table_id
       WHERE e.source_record_id IN (SELECT value FROM json_each(?)) AND e.field_id IN (SELECT value FROM json_each(?))
@@ -73,7 +74,7 @@ export class Relations {
     for (const edge of edges) {
       const value = JSON.parse(edge['value_json'] as string ?? 'null') as CellValue;
       byId.get(edge['source_record_id'] as string)!.links![edge['field_id'] as string]!.push({
-        id: edge['id'] as string, label: fieldText(primary.get(edge['table_id'] as string)!, value),
+        id: edge['id'] as string, label: edge['formula_error'] ? `#ERROR: ${edge['formula_error']}` : fieldText(primary.get(edge['table_id'] as string)!, value),
       });
     }
     return records;

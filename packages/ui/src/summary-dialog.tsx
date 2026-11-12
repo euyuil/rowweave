@@ -8,7 +8,7 @@ export function SummaryDialog({ table, view, search, api, onClose }: {
   table: Table; view: GridView; search: string; api: WorkspaceApi; onClose(): void;
 }) {
   const [groupBy, setGroupBy] = useState('');
-  const [fieldId, setFieldId] = useState(table.fields.find(field => field.type === 'number')?.id ?? '');
+  const [fieldId, setFieldId] = useState(table.fields.find(field => (field.type === 'number' || field.formula?.resultType === 'number'))?.id ?? '');
   const [operation, setOperation] = useState<SummaryMeasure['operation']>('sum');
   const [page, setPage] = useState<{ offset: number; revision?: number }>({ offset: 0 });
   const [refresh, setRefresh] = useState(0);

@@ -4,6 +4,7 @@ import type { WorkspaceApi } from '../../client/src/http-client.js';
 import { cellDisplay } from '../../client/src/cell-values.js';
 
 function recordText(field: Field, record: RowRecord): string {
+  if (record.formulaErrors?.[field.id]) return `#ERROR: ${record.formulaErrors[field.id]}`;
   const value = record.values[field.id] ?? null;
   return field.type === 'relation' ? ((value ?? []) as string[]).map(id => record.links?.[field.id]?.find(link => link.id === id)?.label || id).join(', ')
     : cellDisplay(field, value);

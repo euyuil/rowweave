@@ -19,7 +19,8 @@ export function RelationInput({ id, field, value, disabled, onChange }: {
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState<string>();
   const [details, setDetails] = useState<RowRecord>();
-  const label = (record: RowRecord, target: Table) => cellText(target.fields.find(field => field.id === target.primaryFieldId)!, record.values[target.primaryFieldId]) || '(Untitled)';
+  const label = (record: RowRecord, target: Table) => record.formulaErrors?.[target.primaryFieldId] ? `#ERROR: ${record.formulaErrors[target.primaryFieldId]}`
+    : cellText(target.fields.find(field => field.id === target.primaryFieldId)!, record.values[target.primaryFieldId]) || '(Untitled)';
   const change = (ids: string[]) => onChange(ids, ids.map(id => ({ id, label: labels[id] ?? id })));
   const checkSchema = (result: QueryPage, target: Table) => {
     if (result.schemaVersion !== target.version) throw new Error('The target schema changed. Reload records before continuing.');
@@ -89,7 +90,8 @@ export function RelationInput({ id, field, value, disabled, onChange }: {
       void api.getTable(targetId).then(setTable).catch(error => setError(error.message));
     }}>Reload records</button></p>}
     {details && table && <section className="linked-details" aria-label="Linked record details"><strong>{label(details, table)}</strong>
-      <dl>{table.fields.map(field => <div key={field.id}><dt>{field.name}</dt><dd>{details.links?.[field.id]?.map(link => link.label).join(', ') ?? cellText(field, details.values[field.id])}</dd></div>)}</dl>
+      <dl>{table.fields.map(field => <div key={field.id}><dt>{field.name}</dt><dd>{details.formulaErrors?.[field.id] ? `#ERROR: ${details.formulaErrors[field.id]}`
+        : details.links?.[field.id]?.map(link => link.label).join(', ') ?? cellText(field, details.values[field.id])}</dd></div>)}</dl>
       <button type="button" onClick={() => setDetails(undefined)}>Close details</button></section>}
   </div>;
 }

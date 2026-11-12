@@ -16,6 +16,7 @@ import { verifySummaryWorkflow } from './summary-workflow.mjs';
 import { verifyColumnWorkflow } from './column-workflow.mjs';
 import { verifyDisplayWorkflow } from './display-workflow.mjs';
 import { verifyBoardWorkflow } from './board-workflow.mjs';
+import { verifyFormulaWorkflow } from './formula-workflow.mjs';
 
 const dataDirectory = await mkdtemp(join(tmpdir(), 'rowweave-workspace-'));
 await mkdir('.artifacts', { recursive: true });
@@ -249,6 +250,7 @@ try {
   await verifyColumnWorkflow(page);
   await verifyDisplayWorkflow(page);
   await verifyBoardWorkflow(page);
+  await verifyFormulaWorkflow(page);
   await application.close();
   application = undefined;
   application = await electron.launch({ executablePath, args: packaged ? [] : ['.'],

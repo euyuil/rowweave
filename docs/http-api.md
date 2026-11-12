@@ -39,11 +39,12 @@ Tables support up to 200 fields. Field definitions use `{ name, type, required?,
 | `singleSelect` | Option ID string | Up to 200 `options: [{ id?, name, color? }]`; names and IDs must each be unique; colors use `#RRGGBB`. |
 | `multiSelect` | Array of unique option IDs | Same options configuration; required values need at least one option. |
 | `relation` | Array of unique record IDs | `relation: { tableId, multiple }`; one target if false, up to 200 if true. Targets must exist in that table. |
+| `formula` | Read-only number, text or boolean (or null) | `formula: { expression, resultType }`; references use field UUIDs. See [formulas](formulas.md) for syntax, errors and transactional recalculation. |
 | `lookup` | Read-only array of computed scalars | `lookup: { relationFieldId, fieldId }`; use a local relation and an ordinary target field. No defaults, required constraint, direct writes, or chained lookups. |
 
 Optional writable fields allow null. New-record defaults apply only to omitted fields; explicit null does not use a default. Existing records do not receive a newly added default. Add a required field to a non-empty table as optional, fill it, then enable its constraint. Tightening constraints validates existing values atomically. A field's ID and option IDs survive rename and reorder. Returned lookup fields include the current resolved `lookupResult` metadata; that property is not writable configuration.
 
-Changing a field's type requires explicit conversion. Preview returns `tableId`, `fieldId`, proposed `field`, `schemaVersion`, `total`, `changed`, `invalid`, up to ten samples, and up to twenty issues. Apply validates current data again in one transaction. Invalid data, stale schema versions, or incompatible saved-view/lookup dependencies prevent all changes. Relation/lookup fields cannot be converted to or from another type. Use the returned resolved field definition when applying conversions that create select options.
+Changing a field's type requires explicit conversion. Preview returns `tableId`, `fieldId`, proposed `field`, `schemaVersion`, `total`, `changed`, `invalid`, up to ten samples, and up to twenty issues. Apply validates current data again in one transaction. Invalid data, stale schema versions, or incompatible saved-view/lookup dependencies prevent all changes. Relation/lookup/formula fields cannot be converted to or from another type. Use the returned resolved field definition when applying conversions that create select options.
 
 ## Records
 

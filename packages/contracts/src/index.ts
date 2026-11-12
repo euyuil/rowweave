@@ -7,7 +7,7 @@ export interface SelectOption {
   color?: string;
 }
 
-export type FieldType = 'text' | 'multiline' | 'number' | 'checkbox' | 'date' | 'datetime' | 'singleSelect' | 'multiSelect' | 'relation' | 'lookup';
+export type FieldType = 'text' | 'multiline' | 'number' | 'checkbox' | 'date' | 'datetime' | 'singleSelect' | 'multiSelect' | 'relation' | 'lookup' | 'formula';
 
 export interface Field {
   id: string;
@@ -21,6 +21,7 @@ export interface Field {
   currency?: string;
   relation?: { tableId: string; multiple: boolean };
   lookup?: { relationFieldId: string; fieldId: string };
+  formula?: { expression: string; resultType: 'number' | 'text' | 'checkbox' };
   // Resolved from the current target schema; not writable field configuration.
   lookupResult?: Field;
 }
@@ -60,6 +61,7 @@ export interface FieldCreate extends SchemaWrite {
   currency?: string;
   relation?: Field['relation'];
   lookup?: Field['lookup'];
+  formula?: Field['formula'];
 }
 
 export type FieldUpdate = SchemaWrite & Partial<Omit<FieldCreate, 'expectedVersion' | 'precision'>> & { precision?: number | null };
@@ -87,7 +89,13 @@ export interface RowRecord {
   version: number;
   values: Record<string, CellValue>;
   links?: Record<string, RecordLink[]>;
+  formulaErrors?: Record<string, string>;
 }
+
+export function valueField(field: Field): Field {
+  return field.type === 'formula' ? { ...field, type: field.formula!.resultType } : field;
+}
+
 
 export interface RecordPage {
   offset: number;

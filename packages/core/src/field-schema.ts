@@ -4,7 +4,7 @@ import { ServiceError } from './errors.js';
 import { schemaName, schemaObject } from './schema-validation.js';
 import { validateValue } from './field-values.js';
 
-const fieldTypes: FieldType[] = ['text', 'multiline', 'number', 'checkbox', 'date', 'datetime', 'singleSelect', 'multiSelect', 'relation', 'lookup'];
+const fieldTypes: FieldType[] = ['text', 'multiline', 'number', 'checkbox', 'date', 'datetime', 'singleSelect', 'multiSelect', 'relation', 'lookup', 'formula'];
 
 export function parseField(input: Record<string, unknown>, previous?: Field): Field {
   const config = { ...previous, ...input };
@@ -38,7 +38,17 @@ export function parseField(input: Record<string, unknown>, previous?: Field): Fi
       return result;
     });
   }
-  if (field.type === 'number') {
+  if (field.type === 'formula') {
+    const formula = schemaObject(config['formula']);
+    if (typeof formula['expression'] !== 'string' || !['number', 'text', 'checkbox'].includes(formula['resultType'] as string)) {
+      throw new ServiceError('INVALID_SCHEMA', 'A formula requires an expression and a number, text or checkbox result type.');
+    }
+    if (field.required || (config['defaultValue'] !== undefined && config['defaultValue'] !== null)) {
+      throw new ServiceError('INVALID_SCHEMA', 'Formulas are read-only and cannot require a value or set a default.');
+    }
+    field.formula = { expression: formula['expression'], resultType: formula['resultType'] as NonNullable<Field['formula']>['resultType'] };
+  }
+  if (field.type === 'number' || field.formula?.resultType === 'number') {
     if (config['numberFormat'] !== undefined) {
       if (!['decimal', 'currency', 'percent'].includes(config['numberFormat'] as string)) {
         throw new ServiceError('INVALID_SCHEMA', 'Unknown number format.');

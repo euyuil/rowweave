@@ -1,14 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { ConversionPreview, Field, FieldCreate, FieldType, SelectOption, Table } from '../../contracts/src/index.js';
 import type { WorkspaceApi } from '../../client/src/http-client.js';
 import { cellText } from '../../client/src/cell-values.js';
 import { Dialog } from './dialog.js';
 import { FieldInput } from './field-input.js';
 import { fromFormValue, toFormValue, type FormValue } from './field-input-values.js';
+import { rewriteFormulaReferences } from '../../core/src/formulas.js';
 
 export const fieldTypeNames: Record<FieldType, string> = {
   text: 'Text', multiline: 'Multiline text', number: 'Number', checkbox: 'Checkbox', date: 'Date',
-  datetime: 'Date and time', singleSelect: 'Single select', multiSelect: 'Multiple select', relation: 'Linked records', lookup: 'Lookup',
+  datetime: 'Date and time', singleSelect: 'Single select', multiSelect: 'Multiple select', relation: 'Linked records', lookup: 'Lookup', formula: 'Formula',
 };
 
 export function FieldForm({ table, field, api, setDirty, onClose, onSaved }: {
@@ -33,6 +34,13 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved }: {
   const [lookupRelation, setLookupRelation] = useState(field?.lookup?.relationFieldId ?? table.fields.find(field => field.type === 'relation')?.id ?? '');
   const [lookupField, setLookupField] = useState(field?.lookup?.fieldId ?? '');
   const [lookupTarget, setLookupTarget] = useState<Table>();
+  const formulaFields = table.fields.filter(candidate => candidate.id !== field?.id && !['relation', 'lookup', 'multiSelect'].includes(candidate.type));
+  const referenceName = (candidate: Field) => table.fields.filter(other => other.name === candidate.name).length > 1
+    ? `${candidate.name} (${candidate.id})` : candidate.name;
+  const [expression, setExpression] = useState(() => field?.formula
+    ? rewriteFormulaReferences(field.formula.expression, id => referenceName(table.fields.find(candidate => candidate.id === id)!)) : '');
+  const [resultType, setResultType] = useState<NonNullable<Field['formula']>['resultType']>(field?.formula?.resultType ?? 'number');
+  const formulaInput = useRef<HTMLTextAreaElement>(null);
   const relation = table.fields.find(field => field.id === lookupRelation);
   useEffect(() => {
     if (type === 'relation') void api.listTables().then(setTargets).catch(error => setError(error.message));
@@ -51,11 +59,12 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved }: {
   }, [api, type, relation]);
   const converting = !!field && type !== field.type;
   const selection = type === 'singleSelect' || type === 'multiSelect';
-  const target: Field = { id: field?.id ?? 'new-field', name, type, required: type !== 'lookup' && required,
+  const target: Field = { id: field?.id ?? 'new-field', name, type, required: type !== 'lookup' && type !== 'formula' && required,
     ...(type === 'relation' ? { relation: { tableId: targetId, multiple } } : {}),
     ...(type === 'lookup' ? { lookup: { relationFieldId: lookupRelation, fieldId: lookupField } } : {}),
+    ...(type === 'formula' ? { formula: { expression, resultType } } : {}),
     ...(selection ? { options } : {}),
-    ...(type === 'number' ? { numberFormat: format, ...(precision ? { precision: Number(precision) } : {}),
+    ...((type === 'number' || (type === 'formula' && resultType === 'number')) ? { numberFormat: format, ...(precision ? { precision: Number(precision) } : {}),
       ...(format === 'currency' ? { currency } : {}) } : {}) };
   const changed = () => { setDirty(true); setPreview(undefined); };
   useEffect(() => () => setDirty(false), [setDirty]);
@@ -80,13 +89,18 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved }: {
         const config: Omit<FieldCreate, 'expectedVersion'> = {
           ...definition, defaultValue: hasDefault ? fromFormValue(target, defaultValue) : null,
         };
+        if (type === 'formula') config.formula = { resultType, expression: rewriteFormulaReferences(expression, name => {
+          const matches = formulaFields.filter(candidate => referenceName(candidate) === name);
+          if (matches.length !== 1) throw new Error(`Choose a current field from Insert field: ${name}.`);
+          return matches[0]!.id;
+        }) };
         if (converting && !preview) {
           setPreview(await api.previewConversion(table.id, field.id, { expectedVersion: table.version, field: config }));
         } else {
           const result = converting
             ? await api.applyConversion(table.id, field.id, { expectedVersion: preview!.schemaVersion, field: preview!.field })
             : field ? await api.updateField(table.id, field.id, { ...config, expectedVersion: table.version,
-              ...(type === 'number' && !precision ? { precision: null } : {}) })
+              ...((type === 'number' || (type === 'formula' && resultType === 'number')) && !precision ? { precision: null } : {}) })
             : await api.createField(table.id, { ...config, expectedVersion: table.version });
           setDirty(false);
           await onSaved(result);
@@ -99,8 +113,31 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved }: {
         <label className="form-field">Field type<select aria-label="Field type" value={type} onChange={event => {
           setType(event.target.value as FieldType); setHasDefault(false); setDefaultValue(null);
         }}>{Object.entries(fieldTypeNames).map(([value, label]) => <option key={value} value={value}
-          disabled={field ? ['relation', 'lookup'].includes(field.type) ? value !== field.type : ['relation', 'lookup'].includes(value)
+          disabled={field ? ['relation', 'lookup', 'formula'].includes(field.type) ? value !== field.type : ['relation', 'lookup', 'formula'].includes(value)
             : value === 'lookup' && !table.fields.some(field => field.type === 'relation')}>{label}</option>)}</select></label>
+        {type === 'formula' && <>
+          <label className="form-field">Result type<select aria-label="Result type" value={resultType} onChange={event => setResultType(event.target.value as typeof resultType)}>
+            <option value="number">Number</option><option value="text">Text</option><option value="checkbox">Checkbox</option>
+          </select></label>
+          <label className="form-field">Formula<textarea ref={formulaInput} aria-label="Formula" rows={4} required maxLength={4096} value={expression}
+            placeholder={'["Quantity"] * ["Price"]'} onChange={event => setExpression(event.target.value)} /></label>
+          <label className="form-field">Insert field<select aria-label="Insert field" value="" onChange={event => {
+            const candidate = formulaFields.find(candidate => candidate.id === event.target.value)!;
+            const input = formulaInput.current!;
+            const token = `[${JSON.stringify(referenceName(candidate))}]`;
+            const start = input.selectionStart, end = input.selectionEnd;
+            setExpression(expression.slice(0, start) + token + expression.slice(end));
+            changed();
+            requestAnimationFrame(() => { input.focus(); input.setSelectionRange(start + token.length, start + token.length); });
+          }}><option value="" disabled>Choose a field…</option>{formulaFields.map(candidate =>
+            <option key={candidate.id} value={candidate.id}>{referenceName(candidate)}</option>)}</select></label>
+          <p className="form-note">Calculated after saving. Field references survive renaming. Empty inputs stay empty unless you use COALESCE.</p>
+          <details className="form-note"><summary>Formula help</summary>
+            <p>Use + − * / %, comparisons == != &gt; &gt;= &lt; &lt;=, parentheses, numbers, double-quoted text, TRUE, FALSE and NULL.</p>
+            <p>Functions: IF, COALESCE, CONCAT, LOWER, UPPER, TRIM, LEN, ROUND, ABS, AND, OR and NOT.</p>
+            <p>Example: IF(["Quantity"] &gt; 0, ROUND(["Quantity"] * ["Price"], 2), 0). Linked and multiple-select values are unavailable in formulas.</p>
+          </details>
+        </>}
         {type === 'lookup' && <>
           <label className="form-field">Linked field<select required aria-label="Linked field" value={lookupRelation} onChange={event => setLookupRelation(event.target.value)}>
             {table.fields.filter(field => field.type === 'relation').map(field => <option key={field.id} value={field.id}>{field.name}</option>)}
@@ -116,7 +153,7 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved }: {
           </select></label>
           <label className="check-field"><input type="checkbox" checked={multiple} onChange={event => setMultiple(event.target.checked)} />Allow multiple records</label>
         </>}
-        {type === 'number' && <div className="form-row">
+        {(type === 'number' || (type === 'formula' && resultType === 'number')) && <div className="form-row">
           <label className="form-field">Number format<select aria-label="Number format" value={format} onChange={event => setFormat(event.target.value as typeof format)}>
             <option value="decimal">Decimal</option><option value="currency">Currency</option><option value="percent">Percent</option>
           </select></label>
@@ -140,7 +177,7 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved }: {
             setOptions(current => [...current, { id: crypto.randomUUID(), name: `Option ${current.length + 1}` }]); changed();
           }}>Add option</button>
         </div>}
-        {type !== 'lookup' && <><label className="check-field"><input type="checkbox" checked={required} onChange={event => setRequired(event.target.checked)} />Require a value</label>
+        {type !== 'lookup' && type !== 'formula' && <><label className="check-field"><input type="checkbox" checked={required} onChange={event => setRequired(event.target.checked)} />Require a value</label>
         <label className="check-field"><input type="checkbox" checked={hasDefault} onChange={event => setHasDefault(event.target.checked)} />Use a default for new records</label></>}
         {hasDefault && <FieldInput field={{ ...target, name: 'Default value', required: false }} value={defaultValue}
           onChange={value => { setDefaultValue(value); changed(); }} />}

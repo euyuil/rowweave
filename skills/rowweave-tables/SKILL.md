@@ -48,3 +48,5 @@ For schema conversion, relation/lookup setup, filtered batch edits, or CSV, read
 MCP service failures have `isError: true`; inspect the JSON error in text content. CLI failures produce JSON on stderr with a nonzero exit status. A successful result is JSON text, except CSV export, which is CSV text. Do not interpret empty stdout, a transport error or a conversion preview as a successful write.
 
 Finish with the table/view affected, committed counts or IDs as useful, and any unresolved conflicts, incomplete batches or unverified writes. Distinguish saved data from proposed changes.
+
+For formula fields, use `type: "formula"` and `formula: { expression, resultType }`, with `resultType` number/text/checkbox and field-ID references such as `["<field-id>"]`. Formulas accept bounded same-record scalar expressions and are read-only; check returned `formulaErrors`. See `docs/formulas.md` for supported operators, functions and null semantics.

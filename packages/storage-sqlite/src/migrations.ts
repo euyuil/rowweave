@@ -5,8 +5,8 @@ import { syncQueryIndexes } from './query-indexes.js';
 
 export function migrate(db: DatabaseSync): boolean {
   const version = db.prepare('PRAGMA user_version').get()!['user_version'] as number;
-  if (version === 9) return false;
-  if (version < 0 || version > 9) throw new Error(`Unsupported database version: ${version}.`);
+  if (version === 10) return false;
+  if (version < 0 || version > 10) throw new Error(`Unsupported database version: ${version}.`);
   db.exec('BEGIN IMMEDIATE');
   try {
     if (version < 2) {
@@ -84,7 +84,8 @@ export function migrate(db: DatabaseSync): boolean {
       syncQueryIndexes(db, { id, fields }, queries);
     }
     if (version < 8) db.exec("UPDATE views SET config_json = json_set(config_json, '$.rowHeight', 36, '$.frozenColumns', 0);");
-    db.exec("UPDATE views SET config_json = json_set(config_json, '$.type', 'grid'); PRAGMA user_version = 9; COMMIT;");
+    if (version < 9) db.exec("UPDATE views SET config_json = json_set(config_json, '$.type', 'grid');");
+    db.exec("ALTER TABLE records ADD COLUMN formula_errors_json TEXT NOT NULL DEFAULT '{}'; PRAGMA user_version = 10; COMMIT;");
     return version === 0;
   } catch (error) {
     db.exec('ROLLBACK');

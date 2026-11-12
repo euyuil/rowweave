@@ -47,7 +47,7 @@ export function RecordDialog({ action, table, api, setDirty, onClose, onSaved }:
         if (deleting) {
           await api.deleteRecords(table.id, action.records.map(record => ({ id: record.id, expectedVersion: record.version })));
         } else {
-          const parsed = Object.fromEntries(table.fields.filter(field => field.type !== 'lookup').map(field => [field.id, fromFormValue(field, values[field.id]!)]));
+          const parsed = Object.fromEntries(table.fields.filter(field => field.type !== 'lookup' && field.type !== 'formula').map(field => [field.id, fromFormValue(field, values[field.id]!)]));
           if (action.kind === 'edit') {
             const changed = Object.fromEntries(Object.entries(parsed).filter(([id, value]) => !sameValue(value, original!.values[id] ?? null)));
             if (Object.keys(changed).length) await api.updateRecords(table.id, [{ id: original!.id, expectedVersion: original!.version, values: changed }]);
@@ -61,7 +61,7 @@ export function RecordDialog({ action, table, api, setDirty, onClose, onSaved }:
       });
     }}>
       {deleting ? <p>Delete {action.records.length === 1 ? 'this record' : `these ${action.records.length} records`} permanently? This cannot be undone.</p>
-        : table.fields.map(field => <FieldInput key={field.id} field={field} value={values[field.id]!} disabled={busy}
+        : table.fields.map(field => <FieldInput key={field.id} field={field} value={values[field.id]!} disabled={busy} calculationError={original?.formulaErrors?.[field.id]}
           onChange={value => { setValues(current => ({ ...current, [field.id]: value })); setDirty(true); }} />)}
       {error && <p className="form-error" role="alert">{error}</p>}
       <div className="dialog-actions"><button type="button" disabled={busy} onClick={onClose}>Cancel</button>

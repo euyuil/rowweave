@@ -4,14 +4,19 @@ import type { FormValue } from './field-input-values.js';
 import { RelationInput } from './relation-input.js';
 import { cellDisplay } from '../../client/src/cell-values.js';
 
-export function FieldInput({ field, value, onChange, disabled = false }: {
-  field: Field; value: FormValue; onChange(value: FormValue, links?: RecordLink[]): void; disabled?: boolean;
+export function FieldInput({ field, value, onChange, disabled = false, calculationError }: {
+  field: Field; value: FormValue; onChange(value: FormValue, links?: RecordLink[]): void; disabled?: boolean; calculationError?: string | undefined;
 }) {
   const id = useId();
   const common = { id, disabled, required: !!field.required };
   const scalar = (value ?? '') as string;
   let input;
-  if (field.type === 'lookup') {
+  if (calculationError) {
+    input = <output id={id} className="form-error">#ERROR: {calculationError}</output>;
+  } else if (field.type === 'formula') {
+    input = <output id={id}>{value === null ? ''
+      : cellDisplay(field, field.formula!.resultType === 'number' ? Number(value) : field.formula!.resultType === 'checkbox' ? value === 'true' : scalar)}</output>;
+  } else if (field.type === 'lookup') {
     input = <output id={id}>{cellDisplay(field, value === null ? [] : JSON.parse(value as string))}</output>;
   } else if (field.type === 'relation') {
     input = <RelationInput key={field.relation!.tableId} id={id} field={field} value={value as string[] | null} disabled={disabled} onChange={onChange} />;
@@ -37,11 +42,12 @@ export function FieldInput({ field, value, onChange, disabled = false }: {
   }
   return <div className="form-field">
     <div className="field-label"><label htmlFor={id}>{field.name}{field.required ? ' *' : ''}{field.type === 'datetime' ? ' (UTC)' : ''}</label>
-      {!field.required && field.type !== 'lookup' && <button type="button" className="clear-value" disabled={disabled || value === null}
+      {!field.required && field.type !== 'lookup' && field.type !== 'formula' && <button type="button" className="clear-value" disabled={disabled || value === null}
         aria-label={`Clear ${field.name}`} onClick={() => { onChange(null); document.getElementById(id)!.focus(); }}>Clear</button>}</div>
     {input}
     {field.type === 'lookup' && <small>Updates after saving linked records.</small>}
+    {field.type === 'formula' && <small>Calculated after saving this record.</small>}
     {field.type === 'number' && field.numberFormat === 'percent' && <small>Enter a fraction: 0.5 displays as 50%.</small>}
-    {value === null && <small>No value</small>}
+    {value === null && !calculationError && <small>No value</small>}
   </div>;
 }

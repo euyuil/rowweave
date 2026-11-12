@@ -61,6 +61,23 @@ async function setup(t: Context) {
   return { service, server, token, environment };
 }
 
+test('MCP creates formulas and returns recalculated values and explicit errors', async t => {
+  const { environment } = await setup(t);
+  const { json, call } = await connect(t, environment);
+  let table = await json<Table>('tables_create', { name: 'Formula records' });
+  table = await json<Table>('fields_create', { tableId: table.id, input: { expectedVersion: table.version, name: 'Length', type: 'formula',
+    formula: { expression: `LEN([${table.primaryFieldId}])`, resultType: 'number' } } });
+  const field = table.fields[1]!;
+  const record = (await json<BatchResult>('records_create', { tableId: table.id, records: [{ values: { [table.primaryFieldId]: 'Test' } }] })).records[0]!;
+  assert.equal(record.values[field.id], 4);
+  const changed = await json<BatchResult>('records_update', { tableId: table.id, records: [{ id: record.id, expectedVersion: 1, values: { [table.primaryFieldId]: 'Longer' } }] });
+  assert.equal(changed.records[0]!.values[field.id], 6);
+  assert.equal((await call('records_update', { tableId: table.id, records: [{ id: record.id, expectedVersion: 2, values: { [field.id]: 99 } }] })).isError, true);
+  await json('fields_update', { tableId: table.id, fieldId: field.id, input: { expectedVersion: table.version, formula: { expression: '1 / 0', resultType: 'number' } } });
+  const read = await json<QueryPage>('records_query', { tableId: table.id, query: {} });
+  assert.match(read.records[0]!.formulaErrors![field.id]!, /zero/);
+});
+
 test('MCP creates board views, queries empty lanes and moves records using their versions', async t => {
   const { environment } = await setup(t);
   const { json, call } = await connect(t, environment);
