@@ -1,0 +1,71 @@
+import { randomUUID } from 'node:crypto';
+import type { FieldFilter, FilterGroup, GridView, Table, ViewQuery } from '../../contracts/src/index.js';
+import { parseQuery } from './record-query.js';
+import { schemaName, schemaObject } from './schema-validation.js';
+import { ServiceError } from './errors.js';
+
+export function defaultView(table: Pick<Table, 'id' | 'fields'>): GridView {
+  return { id: randomUUID(), tableId: table.id, name: 'All records', version: 1, query: {},
+    columns: table.fields.map(field => ({ fieldId: field.id, width: 180, hidden: false })) };
+}
+
+export function parseView(table: Table, input: unknown, previous = defaultView(table)): GridView {
+  const item = schemaObject(input);
+  const query = parseQuery(table, item['query'] === undefined ? previous.query : item['query']);
+  const saved: ViewQuery = {};
+  if (query.filter) saved.filter = query.filter;
+  if (query.sort) saved.sort = query.sort;
+  if (query.search !== undefined) saved.search = query.search;
+  let columns = previous.columns;
+  if (item['columns'] !== undefined) {
+    const values = item['columns'];
+    const ids = new Set(table.fields.map(field => field.id));
+    if (!Array.isArray(values) || values.length !== ids.size) throw new ServiceError('INVALID_VIEW', 'Include each table field exactly once in columns.');
+    columns = values.map(value => {
+      const column = schemaObject(value);
+      if (typeof column['fieldId'] !== 'string' || !ids.delete(column['fieldId']) ||
+          !Number.isInteger(column['width']) || (column['width'] as number) < 50 || (column['width'] as number) > 1_000 ||
+          typeof column['hidden'] !== 'boolean') {
+        throw new ServiceError('INVALID_VIEW', 'Columns need unique field IDs, widths from 50 to 1000, and boolean visibility.');
+      }
+      return { fieldId: column['fieldId'], width: column['width'] as number, hidden: column['hidden'] };
+    });
+    if (columns.every(column => column.hidden)) throw new ServiceError('INVALID_VIEW', 'Keep at least one field visible.');
+  }
+  return { ...previous, name: item['name'] === undefined ? previous.name : schemaName(item['name']), query: saved, columns };
+}
+
+export function reconcileView(view: GridView, table: Table): GridView {
+  const ids = new Set(table.fields.map(field => field.id));
+  const columns = view.columns.filter(column => ids.has(column.fieldId)).map(column => ({ ...column }));
+  for (const field of table.fields) {
+    if (!columns.some(column => column.fieldId === field.id)) columns.push({ fieldId: field.id, width: 180, hidden: false });
+  }
+  if (columns.every(column => column.hidden)) columns.find(column => column.fieldId === table.primaryFieldId)!.hidden = false;
+  function prune(group: FilterGroup): FilterGroup | undefined {
+    const conditions: Array<FieldFilter | FilterGroup> = [];
+    let changed = false;
+    for (const condition of group.conditions) {
+      if ('conjunction' in condition) {
+        const child = prune(condition);
+        if (child !== condition) changed = true;
+        if (child) conditions.push(child);
+      } else if (ids.has(condition.fieldId)) conditions.push(condition);
+      else changed = true;
+    }
+    if (!changed) return group;
+    return conditions.length ? { conjunction: group.conjunction, conditions } : undefined;
+  }
+  const query: ViewQuery = { ...view.query };
+  if (query.filter) {
+    const filter = prune(query.filter);
+    if (filter) query.filter = filter;
+    else delete query.filter;
+  }
+  if (query.sort) query.sort = query.sort.filter(sort => ids.has(sort.fieldId));
+  try { return parseView(table, { query, columns }, view); }
+  catch (error) {
+    if (error instanceof ServiceError) throw new ServiceError('VIEW_DEPENDENCY', `Update view "${view.name}" before changing this field: ${error.message}`, 409);
+    throw error;
+  }
+}

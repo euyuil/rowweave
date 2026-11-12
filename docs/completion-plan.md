@@ -43,7 +43,7 @@ Each item may need more than one focused PR. Do not batch completed PRs while wa
 - [x] Typed validation, record creation/deletion, defaults, and constraint changes (service/HTTP/client regression tests).
 - [x] Schema conversion preview and atomic application (bounded diagnostics, stale-schema checks, failed-apply rollback, and HTTP regression tests).
 - [x] Service queries, filtering, sorting, search, and consistent pagination (SQLite/HTTP regression tests, including schema/data revision changes).
-- [ ] Saved grid views and persistent column configuration.
+- [x] Saved grid views and persistent column configuration (versioned HTTP operations, schema reconciliation, query dependencies, and migration regression tests).
 - [ ] Desktop workspace navigation and schema/record management.
 - [ ] Typed grid editors, draft undo/redo, views, and clipboard workflows.
 - [ ] Relations, lookups, record picker, and record details/navigation.

@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { maxPageSize, maxBatchRecords, maxBatchCells, maxFields, tableId,
-  type BatchResult, type CellValue, type ConversionPreview, type DeleteResult, type Field, type QueryPage, type RecordDelete, type RecordPage, type RecordUpdate, type RowRecord, type Table } from '../../contracts/src/index.js';
+  type BatchResult, type CellValue, type ConversionPreview, type DeleteResult, type Field, type GridView, type QueryPage, type RecordDelete, type RecordPage, type RecordUpdate, type RowRecord, type Table, type ViewPage } from '../../contracts/src/index.js';
 import { schemaName, schemaObject, schemaVersion } from './schema-validation.js';
 import { parseField } from './field-schema.js';
 import { validateValue } from './field-values.js';
 import { convertValue } from './field-conversion.js';
 import { parseQuery, type CheckedQuery } from './record-query.js';
+import { parseView } from './grid-views.js';
 import { ServiceError } from './errors.js';
 export { ServiceError } from './errors.js';
 
@@ -22,7 +23,11 @@ export interface RecordStore {
   deleteRecords(tableId: string, records: RecordDelete[]): DeleteResult;
   previewConversion(tableId: string, version: number, field: Field, convert: (value: CellValue) => CellValue): ConversionPreview;
   applyConversion(tableId: string, version: number, field: Field, convert: (value: CellValue) => CellValue): Table;
-  queryRecords(table: Table, query: CheckedQuery): QueryPage;
+  queryRecords(table: Table, query: CheckedQuery, view?: GridView): QueryPage;
+  listViews(tableId: string): GridView[];
+  getView(tableId: string, viewId: string): GridView;
+  saveView(table: Table, view: GridView, expectedVersion?: number): GridView;
+  deleteView(tableId: string, viewId: string, expectedVersion: number): void;
 }
 
 export class RecordService {
@@ -147,6 +152,49 @@ export class RecordService {
   queryRecords(id: string, input: unknown): QueryPage {
     const table = this.store.getTable(id);
     return this.store.queryRecords(table, parseQuery(table, input));
+  }
+
+  listViews(id: string): GridView[] {
+    this.store.getTable(id);
+    return this.store.listViews(id);
+  }
+
+  getView(id: string, viewId: string): GridView {
+    this.store.getTable(id);
+    return this.store.getView(id, viewId);
+  }
+
+  createView(id: string, input: unknown): GridView {
+    const table = this.store.getTable(id);
+    const item = schemaObject(input);
+    schemaName(item['name']);
+    return this.store.saveView(table, parseView(table, item));
+  }
+
+  updateView(id: string, viewId: string, input: unknown): GridView {
+    const table = this.store.getTable(id);
+    const item = schemaObject(input);
+    const version = schemaVersion(item['expectedVersion']);
+    const previous = this.store.getView(id, viewId);
+    if (previous.version !== version) throw new ServiceError('VIEW_CONFLICT', 'This view changed. Reload before saving again.', 409);
+    return this.store.saveView(table, parseView(table, item, previous), version);
+  }
+
+  deleteView(id: string, viewId: string, input: unknown): void {
+    this.store.deleteView(id, viewId, schemaVersion(schemaObject(input)['expectedVersion']));
+  }
+
+  queryView(id: string, viewId: string, input: unknown): ViewPage {
+    const item = schemaObject(input);
+    const table = this.store.getTable(id);
+    const view = this.store.getView(id, viewId);
+    if (item['expectedViewVersion'] !== undefined && schemaVersion(item['expectedViewVersion']) !== view.version) {
+      throw new ServiceError('VIEW_CONFLICT', 'This view changed. Refresh before continuing.', 409);
+    }
+    const query = parseQuery(table, { ...view.query, offset: item['offset'], limit: item['limit'],
+      fields: item['fields'] === undefined ? view.columns.filter(column => !column.hidden).map(column => column.fieldId) : item['fields'],
+      expectedRevision: item['expectedRevision'], search: item['search'] === undefined ? view.query.search : item['search'] });
+    return { ...this.store.queryRecords(table, query, view), viewId, viewVersion: view.version };
   }
 
   updateBatch(input: unknown, id = tableId): BatchResult {

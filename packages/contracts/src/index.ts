@@ -118,6 +118,42 @@ export interface QueryPage extends RecordPage {
   schemaVersion: number;
 }
 
+export interface ViewColumn {
+  fieldId: string;
+  width: number;
+  hidden: boolean;
+}
+
+export type ViewQuery = Pick<RecordQuery, 'filter' | 'sort' | 'search'>;
+
+export interface GridView {
+  id: string;
+  tableId: string;
+  name: string;
+  version: number;
+  query: ViewQuery;
+  columns: ViewColumn[];
+}
+
+export interface ViewCreate {
+  name: string;
+  query?: ViewQuery;
+  columns?: ViewColumn[];
+}
+
+export interface ViewUpdate extends Partial<ViewCreate> {
+  expectedVersion: number;
+}
+
+export interface ViewPageRequest extends Pick<RecordQuery, 'offset' | 'limit' | 'fields' | 'expectedRevision' | 'search'> {
+  expectedViewVersion?: number;
+}
+
+export interface ViewPage extends QueryPage {
+  viewId: string;
+  viewVersion: number;
+}
+
 export interface ApiError {
   error: { code: string; message: string };
 }

@@ -1,10 +1,11 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { tableId, type Field } from '../../contracts/src/index.js';
+import { defaultView } from '../../core/src/grid-views.js';
 
 export function migrate(db: DatabaseSync): boolean {
   const version = db.prepare('PRAGMA user_version').get()!['user_version'] as number;
-  if (version === 3) return false;
-  if (version < 0 || version > 3) throw new Error(`Unsupported database version: ${version}.`);
+  if (version === 4) return false;
+  if (version < 0 || version > 4) throw new Error(`Unsupported database version: ${version}.`);
   db.exec('BEGIN IMMEDIATE');
   try {
     if (version < 2) {
@@ -37,7 +38,20 @@ export function migrate(db: DatabaseSync): boolean {
         db.exec('DROP TABLE prototype_records; DROP TABLE table_metadata;');
       }
     }
-    db.exec('ALTER TABLE tables ADD COLUMN revision INTEGER NOT NULL DEFAULT 1; PRAGMA user_version = 3; COMMIT;');
+    if (version < 3) db.exec('ALTER TABLE tables ADD COLUMN revision INTEGER NOT NULL DEFAULT 1;');
+    db.exec(`CREATE TABLE views (
+      id TEXT PRIMARY KEY, table_id TEXT NOT NULL REFERENCES tables(id) ON DELETE CASCADE,
+      name TEXT NOT NULL, version INTEGER NOT NULL, config_json TEXT NOT NULL
+    ); CREATE INDEX views_by_table ON views(table_id);`);
+    const insertView = db.prepare('INSERT INTO views VALUES (?, ?, ?, ?, ?)');
+    for (const row of db.prepare('SELECT id FROM tables').all()) {
+      const id = row['id'] as string;
+      const fields = db.prepare('SELECT definition_json FROM fields WHERE table_id = ? ORDER BY position').all(id)
+        .map(row => JSON.parse(row['definition_json'] as string) as Field);
+      const view = defaultView({ id, fields });
+      insertView.run(view.id, id, view.name, view.version, JSON.stringify({ query: view.query, columns: view.columns }));
+    }
+    db.exec('PRAGMA user_version = 4; COMMIT;');
     return version === 0;
   } catch (error) {
     db.exec('ROLLBACK');
