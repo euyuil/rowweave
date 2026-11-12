@@ -2,6 +2,7 @@ import React from 'react';
 import type { Field, FilterOperator, SortRule } from '../../contracts/src/index.js';
 import { FieldInput } from './field-input.js';
 import { filterCount, filterOperators, type GroupDraft, type RuleDraft } from './filter-draft.js';
+import { queryValueField } from '../../core/src/record-query.js';
 
 const operatorNames: Record<FilterOperator, string> = {
   eq: 'is', neq: 'is not', contains: 'contains', gt: 'greater than', gte: 'at least', lt: 'less than', lte: 'at most',
@@ -65,8 +66,9 @@ function FilterGroupEditor({ fields, group, onChange, remaining, depth = 0, path
 }
 
 function FilterRule({ fields, rule, onChange, path }: { fields: Field[]; rule: RuleDraft; onChange(rule: RuleDraft): void; path: string }) {
-  const field = fields.find(field => field.id === rule.fieldId)!;
-  const operators = filterOperators(field);
+  const original = fields.find(field => field.id === rule.fieldId)!;
+  const field = queryValueField(original);
+  const operators = filterOperators(original);
   const empty = rule.operator === 'isEmpty' || rule.operator === 'isNotEmpty';
   const ordered = ['gt', 'gte', 'lt', 'lte'].includes(rule.operator);
   const collection = field.type === 'multiSelect' || field.type === 'relation';

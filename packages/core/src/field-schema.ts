@@ -4,7 +4,7 @@ import { ServiceError } from './errors.js';
 import { schemaName, schemaObject } from './schema-validation.js';
 import { validateValue } from './field-values.js';
 
-const fieldTypes: FieldType[] = ['text', 'multiline', 'number', 'checkbox', 'date', 'datetime', 'singleSelect', 'multiSelect', 'relation'];
+const fieldTypes: FieldType[] = ['text', 'multiline', 'number', 'checkbox', 'date', 'datetime', 'singleSelect', 'multiSelect', 'relation', 'lookup'];
 
 export function parseField(input: Record<string, unknown>, previous?: Field): Field {
   const config = { ...previous, ...input };
@@ -65,6 +65,16 @@ export function parseField(input: Record<string, unknown>, previous?: Field): Fi
       throw new ServiceError('INVALID_SCHEMA', 'A linked-record field requires a target table ID and a multiple flag.');
     }
     field.relation = { tableId: relation['tableId'], multiple: relation['multiple'] };
+  }
+  if (field.type === 'lookup') {
+    const lookup = schemaObject(config['lookup']);
+    if (['relationFieldId', 'fieldId'].some(key => typeof lookup[key] !== 'string' || !lookup[key] || (lookup[key] as string).length > 100)) {
+      throw new ServiceError('INVALID_SCHEMA', 'A lookup requires a linked field ID and a target field ID.');
+    }
+    if (field.required || (config['defaultValue'] !== undefined && config['defaultValue'] !== null)) {
+      throw new ServiceError('INVALID_SCHEMA', 'Lookups are read-only and cannot require a value or set a default.');
+    }
+    field.lookup = { relationFieldId: lookup['relationFieldId'] as string, fieldId: lookup['fieldId'] as string };
   }
   if (config['defaultValue'] !== undefined && config['defaultValue'] !== null) {
     field.defaultValue = validateValue(field, config['defaultValue']);

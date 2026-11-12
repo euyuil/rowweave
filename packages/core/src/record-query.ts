@@ -4,6 +4,10 @@ import { validateValue } from './field-values.js';
 
 export type CheckedQuery = RecordQuery & { offset: number; limit: number };
 
+export function queryValueField(field: Field): Field {
+  return field.type === 'lookup' ? { ...field.lookupResult!, id: field.id, name: field.name, required: false } : field;
+}
+
 export function parseQuery(table: Table, input: unknown): CheckedQuery {
   const invalid = (message: string): never => { throw new ServiceError('INVALID_QUERY', message); };
   const object = (value: unknown) => {
@@ -39,8 +43,12 @@ export function parseQuery(table: Table, input: unknown): CheckedQuery {
       if (++conditionCount > 100) return invalid('Use at most 100 filter conditions.');
       const item = object(entry);
       if ('conjunction' in item) return group(item, depth + 1);
-      const selected = field(item['fieldId']);
+      const original = field(item['fieldId']);
+      const selected = queryValueField(original);
       const operator = item['operator'];
+      if (original.type === 'lookup' && selected.type === 'multiSelect' && (operator === 'eq' || operator === 'neq')) {
+        return invalid('Use hasAny or empty checks for a multiple-select lookup.');
+      }
       if (operator === 'isEmpty' || operator === 'isNotEmpty') return { fieldId: selected.id, operator };
       if (operator === 'contains') {
         if (!['text', 'multiline'].includes(selected.type) || typeof item['value'] !== 'string' || item['value'].length > maxTextLength) {

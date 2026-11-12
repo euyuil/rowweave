@@ -23,6 +23,7 @@ export interface TableHost {
 
 function gridCell(record: RowRecord | undefined, field: Field | undefined, readonly: boolean, row: number): GridCell {
   if (!record || !field) return { kind: GridCellKind.Loading, allowOverlay: false };
+  readonly ||= field.type === 'lookup';
   const value = record.values[field.id] ?? null;
   const text = cellText(field, value);
   if (field.type === 'checkbox') return { kind: GridCellKind.Boolean, data: value as boolean | null, allowOverlay: false, readonly, copyData: text };
@@ -261,7 +262,12 @@ export function TableApp({ tableId, model, api, host, onManage }: {
         index += count;
       }
       if (generation !== model.queryVersion) throw new Error('The view changed. Select the records again.');
-      if (kind !== 'delete') records[0] = await api.getRecord(table!.id, records[0]!.id);
+      if (kind !== 'delete') {
+        const result = await api.queryRecords(table!.id, { recordIds: [records[0]!.id], limit: 1 });
+        if (result.schemaVersion !== table!.version) throw new Error('The table schema changed. Reload before opening this record.');
+        if (!result.records.length) throw new Error('This record was deleted. Reload the table.');
+        records[0] = result.records[0]!;
+      }
       setRecordAction({ kind, records });
     } catch (failure) { report(failure); }
     finally { busyRef.current = false; setBusy(false); }

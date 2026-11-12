@@ -4,8 +4,8 @@ import { defaultView } from '../../core/src/grid-views.js';
 
 export function migrate(db: DatabaseSync): boolean {
   const version = db.prepare('PRAGMA user_version').get()!['user_version'] as number;
-  if (version === 5) return false;
-  if (version < 0 || version > 5) throw new Error(`Unsupported database version: ${version}.`);
+  if (version === 6) return false;
+  if (version < 0 || version > 6) throw new Error(`Unsupported database version: ${version}.`);
   db.exec('BEGIN IMMEDIATE');
   try {
     if (version < 2) {
@@ -53,7 +53,7 @@ export function migrate(db: DatabaseSync): boolean {
         insertView.run(view.id, id, view.name, view.version, JSON.stringify({ query: view.query, columns: view.columns }));
       }
     }
-    db.exec(`CREATE TABLE field_relations (
+    if (version < 5) db.exec(`CREATE TABLE field_relations (
       field_id TEXT PRIMARY KEY REFERENCES fields(id) ON DELETE CASCADE,
       target_table_id TEXT NOT NULL REFERENCES tables(id) ON DELETE RESTRICT
     );
@@ -66,8 +66,15 @@ export function migrate(db: DatabaseSync): boolean {
       PRIMARY KEY(source_record_id, field_id, target_record_id),
       UNIQUE(source_record_id, field_id, position)
     );
-    CREATE INDEX relations_by_target_record ON relation_edges(target_record_id);
-    PRAGMA user_version = 5; COMMIT;`);
+    CREATE INDEX relations_by_target_record ON relation_edges(target_record_id);`);
+    db.exec(`CREATE TABLE field_lookups (
+      field_id TEXT PRIMARY KEY REFERENCES fields(id) ON DELETE CASCADE,
+      relation_field_id TEXT NOT NULL REFERENCES field_relations(field_id) ON DELETE RESTRICT,
+      target_field_id TEXT NOT NULL REFERENCES fields(id) ON DELETE RESTRICT
+    );
+    CREATE INDEX lookups_by_relation ON field_lookups(relation_field_id);
+    CREATE INDEX lookups_by_target ON field_lookups(target_field_id);
+    PRAGMA user_version = 6; COMMIT;`);
     return version === 0;
   } catch (error) {
     db.exec('ROLLBACK');

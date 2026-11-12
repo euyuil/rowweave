@@ -1,4 +1,5 @@
-export type CellValue = string | number | boolean | string[] | null;
+export type ScalarValue = string | number | boolean | null;
+export type CellValue = ScalarValue | ScalarValue[];
 
 export interface SelectOption {
   id: string;
@@ -6,7 +7,7 @@ export interface SelectOption {
   color?: string;
 }
 
-export type FieldType = 'text' | 'multiline' | 'number' | 'checkbox' | 'date' | 'datetime' | 'singleSelect' | 'multiSelect' | 'relation';
+export type FieldType = 'text' | 'multiline' | 'number' | 'checkbox' | 'date' | 'datetime' | 'singleSelect' | 'multiSelect' | 'relation' | 'lookup';
 
 export interface Field {
   id: string;
@@ -19,6 +20,9 @@ export interface Field {
   precision?: number;
   currency?: string;
   relation?: { tableId: string; multiple: boolean };
+  lookup?: { relationFieldId: string; fieldId: string };
+  // Resolved from the current target schema; not writable field configuration.
+  lookupResult?: Field;
 }
 
 export interface Table {
@@ -55,6 +59,7 @@ export interface FieldCreate extends SchemaWrite {
   precision?: number;
   currency?: string;
   relation?: Field['relation'];
+  lookup?: Field['lookup'];
 }
 
 export type FieldUpdate = SchemaWrite & Partial<Omit<FieldCreate, 'expectedVersion' | 'precision'>> & { precision?: number | null };

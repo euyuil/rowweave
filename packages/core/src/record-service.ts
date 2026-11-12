@@ -128,8 +128,8 @@ export class RecordService {
     if (!previous) throw new ServiceError('FIELD_NOT_FOUND', 'This field does not exist.', 404);
     const config = schemaObject(item['field']);
     const field = parseField(config, { id: previous.id, name: previous.name, type: previous.type });
-    if (previous.type === 'relation' || field.type === 'relation') {
-      throw new ServiceError('CONVERSION_REQUIRED', 'Create a linked-record field and assign record IDs explicitly; linked fields cannot be converted to another type.');
+    if (['relation', 'lookup'].includes(previous.type) || ['relation', 'lookup'].includes(field.type)) {
+      throw new ServiceError('CONVERSION_REQUIRED', 'Create linked-record and lookup fields explicitly; they cannot be converted to another type.');
     }
     return { version, field, convert: (value: CellValue) => convertValue(previous, field, value) };
   }
@@ -256,6 +256,10 @@ export class RecordService {
       for (const key of Object.keys(values)) if (!fields.has(key)) throw new ServiceError('INVALID_BATCH', `Unknown field: ${key}.`);
       const result: Record<string, CellValue> = {};
       for (const field of table.fields) {
+        if (field.type === 'lookup') {
+          if (Object.hasOwn(values, field.id)) throw new ServiceError('READ_ONLY_FIELD', `${field.name}: lookup values are read-only.`);
+          continue;
+        }
         const provided = (values as Record<string, unknown>)[field.id];
         const value = provided === undefined ? field.defaultValue ?? null : provided;
         try { result[field.id] = validateValue(field, value); }
@@ -264,7 +268,7 @@ export class RecordService {
           throw error;
         }
       }
-      cells += table.fields.length;
+      cells += Object.keys(result).length;
       if (cells > maxBatchCells) throw new ServiceError('INVALID_BATCH', `A batch may create at most ${maxBatchCells} cells.`);
       return result;
     });

@@ -8,7 +8,7 @@ import { fromFormValue, toFormValue, type FormValue } from './field-input-values
 
 export const fieldTypeNames: Record<FieldType, string> = {
   text: 'Text', multiline: 'Multiline text', number: 'Number', checkbox: 'Checkbox', date: 'Date',
-  datetime: 'Date and time', singleSelect: 'Single select', multiSelect: 'Multiple select', relation: 'Linked records',
+  datetime: 'Date and time', singleSelect: 'Single select', multiSelect: 'Multiple select', relation: 'Linked records', lookup: 'Lookup',
 };
 
 export function FieldForm({ table, field, api, setDirty, onClose, onSaved }: {
@@ -30,13 +30,30 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved }: {
   const [targets, setTargets] = useState<Table[]>([]);
   const [targetId, setTargetId] = useState(field?.relation?.tableId ?? table.id);
   const [multiple, setMultiple] = useState(field?.relation?.multiple ?? true);
+  const [lookupRelation, setLookupRelation] = useState(field?.lookup?.relationFieldId ?? table.fields.find(field => field.type === 'relation')?.id ?? '');
+  const [lookupField, setLookupField] = useState(field?.lookup?.fieldId ?? '');
+  const [lookupTarget, setLookupTarget] = useState<Table>();
+  const relation = table.fields.find(field => field.id === lookupRelation);
   useEffect(() => {
     if (type === 'relation') void api.listTables().then(setTargets).catch(error => setError(error.message));
   }, [api, type]);
+  useEffect(() => {
+    if (type !== 'lookup' || !relation) return;
+    let active = true;
+    setLookupTarget(undefined);
+    void api.getTable(relation.relation!.tableId).then(target => {
+      if (!active) return;
+      setLookupTarget(target);
+      const available = target.fields.filter(field => !['relation', 'lookup'].includes(field.type));
+      setLookupField(current => available.some(field => field.id === current) ? current : available[0]!.id);
+    }).catch(error => { if (active) setError(error.message); });
+    return () => { active = false; };
+  }, [api, type, relation]);
   const converting = !!field && type !== field.type;
   const selection = type === 'singleSelect' || type === 'multiSelect';
-  const target: Field = { id: field?.id ?? 'new-field', name, type, required,
+  const target: Field = { id: field?.id ?? 'new-field', name, type, required: type !== 'lookup' && required,
     ...(type === 'relation' ? { relation: { tableId: targetId, multiple } } : {}),
+    ...(type === 'lookup' ? { lookup: { relationFieldId: lookupRelation, fieldId: lookupField } } : {}),
     ...(selection ? { options } : {}),
     ...(type === 'number' ? { numberFormat: format, ...(precision ? { precision: Number(precision) } : {}),
       ...(format === 'currency' ? { currency } : {}) } : {}) };
@@ -78,7 +95,17 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved }: {
         <label className="form-field">Field type<select aria-label="Field type" value={type} onChange={event => {
           setType(event.target.value as FieldType); setHasDefault(false); setDefaultValue(null);
         }}>{Object.entries(fieldTypeNames).map(([value, label]) => <option key={value} value={value}
-          disabled={!!field && (field.type === 'relation' ? value !== 'relation' : value === 'relation')}>{label}</option>)}</select></label>
+          disabled={field ? ['relation', 'lookup'].includes(field.type) ? value !== field.type : ['relation', 'lookup'].includes(value)
+            : value === 'lookup' && !table.fields.some(field => field.type === 'relation')}>{label}</option>)}</select></label>
+        {type === 'lookup' && <>
+          <label className="form-field">Linked field<select required aria-label="Linked field" value={lookupRelation} onChange={event => setLookupRelation(event.target.value)}>
+            {table.fields.filter(field => field.type === 'relation').map(field => <option key={field.id} value={field.id}>{field.name}</option>)}
+          </select></label>
+          <label className="form-field">Look up field<select required aria-label="Look up field" value={lookupField} disabled={!lookupTarget} onChange={event => setLookupField(event.target.value)}>
+            {lookupTarget?.fields.filter(field => !['relation', 'lookup'].includes(field.type)).map(field => <option key={field.id} value={field.id}>{field.name}</option>)}
+          </select></label>
+          <p className="form-note">Values follow the linked records and cannot be edited here. Add a linked-record field first to use a lookup.</p>
+        </>}
         {type === 'relation' && <>
           <label className="form-field">Link to table<select required aria-label="Link to table" value={targetId} onChange={event => { setTargetId(event.target.value); setDefaultValue(null); }}>
             {targets.map(target => <option key={target.id} value={target.id}>{target.name}</option>)}
@@ -109,8 +136,8 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved }: {
             setOptions(current => [...current, { id: crypto.randomUUID(), name: `Option ${current.length + 1}` }]); changed();
           }}>Add option</button>
         </div>}
-        <label className="check-field"><input type="checkbox" checked={required} onChange={event => setRequired(event.target.checked)} />Require a value</label>
-        <label className="check-field"><input type="checkbox" checked={hasDefault} onChange={event => setHasDefault(event.target.checked)} />Use a default for new records</label>
+        {type !== 'lookup' && <><label className="check-field"><input type="checkbox" checked={required} onChange={event => setRequired(event.target.checked)} />Require a value</label>
+        <label className="check-field"><input type="checkbox" checked={hasDefault} onChange={event => setHasDefault(event.target.checked)} />Use a default for new records</label></>}
         {hasDefault && <FieldInput field={{ ...target, name: 'Default value', required: false }} value={defaultValue}
           onChange={value => { setDefaultValue(value); changed(); }} />}
       </fieldset>
@@ -127,7 +154,7 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved }: {
       </section>}
       {error && <p className="form-error" role="alert">{error}</p>}
       <div className="dialog-actions"><button type="button" disabled={busy} onClick={onClose}>Cancel</button>
-        <button className="primary" disabled={busy || (preview !== undefined && preview.invalid > 0)}>
+        <button className="primary" disabled={busy || (type === 'lookup' && !lookupTarget) || (preview !== undefined && preview.invalid > 0)}>
           {busy ? 'Working…' : converting ? preview ? 'Apply conversion' : 'Preview conversion' : 'Save field'}</button></div>
     </form>
   </Dialog>;

@@ -55,10 +55,11 @@ SQLite stores relational table/field/view metadata and JSON record values, with 
 | `singleSelect` | An existing option ID or null. |
 | `multiSelect` | Array of unique existing option IDs, or null. |
 | `relation` | Ordered array of unique record IDs from one target table, or null. Configure `relation: { tableId, multiple }`; allow one or up to 200 linked records. |
+| `lookup` | Read-only array of scalar values from linked records. Configure `lookup: { relationFieldId, fieldId }`; returned `lookupResult` describes the current target field. |
 
 Select fields have up to 200 `options`, each with `name`, optional `color` (`#RRGGBB`), and optional `id` on creation. The service generates missing IDs. Retain returned IDs when renaming options. IDs and names must be unique within the field. Removing an option still used by a record is rejected atomically.
 
-All fields accept `required` and `defaultValue`. Defaults apply only when a new record omits that field; explicit null does not apply the default. Passing `defaultValue: null` clears a configured default. Required text must not be blank, required multi-select must contain an option, and required fields reject null. To add a required field to a populated table, add it as optional, populate it, then enable `required`; enabling it checks all existing values transactionally.
+Writable fields accept `required` and `defaultValue`. Defaults apply only when a new record omits that field; explicit null does not apply the default. Passing `defaultValue: null` clears a configured default. Required text must not be blank, required multi-select must contain an option, and required fields reject null. To add a required field to a populated table, add it as optional, populate it, then enable `required`; enabling it checks all existing values transactionally.
 
 - `POST /tables/:tableId/records`: array of `{ values }` objects; returns `{ records }` with generated IDs and version 1. Creation is atomic and uses the same 2,000-record/20,000-cell limits (including defaulted cells).
 - `GET /tables/:tableId/records/:recordId`: fetch one record by stable ID.
@@ -76,7 +77,17 @@ Record responses keep IDs in `values` and include `links: { fieldId: [{ id, labe
 
 SQLite format 5 adds indexed relation edges and field-to-target dependencies. JSON IDs and their edge index change in the same transaction. Foreign keys protect targets; input validation also checks table ownership, uniqueness, cardinality, and defaults. Invalid links or a late version conflict roll back the complete batch. Linked fields cannot be converted to/from ordinary fields; create the field and assign IDs explicitly. Unlink existing values before retargeting a field to another table.
 
-Deleting referenced records returns `RELATION_DEPENDENCY` until external links and linked-field defaults are removed. A single batch may delete a self-linked set when nothing outside that set refers to it. Deleting a source record/field removes its outgoing edges. Deleting a target table requires removing fields in other tables that point to it, even if those fields are empty. Deletion failures retain all data and edges. Lookups are the next delivery step and are not yet part of this implementation.
+Deleting referenced records returns `RELATION_DEPENDENCY` until external links and linked-field defaults are removed. A single batch may delete a self-linked set when nothing outside that set refers to it. Deleting a source record/field removes its outgoing edges. Deleting a target table requires removing fields in other tables that point to it, even if those fields are empty. Deletion failures retain all data and edges.
+
+### Read-only lookups
+
+Add a **Lookup** field, choose an existing linked-record field, and select an ordinary field in its target table. The service computes values from saved links in link order, preserving numbers, booleans, timestamps, text, select IDs, and nulls. Multiple-select values are flattened without deduplication; no links produce an empty array. A lookup cannot target another lookup or a linked-record field, become a primary field, set defaults, or require values. This is a one-hop lookup, not a formula engine.
+
+The grid and record details display target formatting and option labels. Save changed links to refresh their lookup values. Copy produces a JSON array, using option labels for select values; other values retain their JSON types. Paste/clear operations that include a lookup fail atomically instead of partially overwriting a selection. Record creation and duplication omit lookup values; explicit writes, including null, return `READ_ONLY_FIELD`.
+
+Lookup filters use the target's typed operands. Comparisons match any looked-up member; `neq` means no member equals the operand. Multiple-select lookups support `hasAny` and empty checks. Empty means no non-null, non-empty member; zero and false remain meaningful. Search uses all displayed members. Sorting uses the first looked-up value, with numeric ordering for numbers and nulls last; equal values retain insertion order.
+
+Format 6 adds lookup dependencies while preserving format-5 links, data, and views. Deleting a lookup's linked field or target field, or converting its target type, returns `LOOKUP_DEPENDENCY`; remove the lookup first. Target configuration changes refresh derived metadata and advance dependent schema versions. Saved lookup filters are revalidated in the same transaction, so removing an option they reference fails without partially changing schema. Target data updates invalidate query revisions without rewriting source record versions. Refresh retains ordinary drafts while replacing computed values with the latest service result.
 
 ### Field conversion
 

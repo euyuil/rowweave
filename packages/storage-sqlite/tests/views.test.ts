@@ -104,7 +104,7 @@ test('version-three workspaces receive an initial view while preserving records 
   const records = store.readPage(0, 12);
   store.close();
   const db = new DatabaseSync(data.path);
-  db.exec('DROP TABLE relation_edges; DROP TABLE field_relations; DROP TABLE views; PRAGMA user_version = 3;');
+  db.exec('DROP TABLE field_lookups; DROP TABLE relation_edges; DROP TABLE field_relations; DROP TABLE views; PRAGMA user_version = 3;');
   db.close();
   const reopened = data.open();
   assert.deepEqual(reopened.getTable(), before);

@@ -103,8 +103,11 @@ export class TableModel {
     for (const [fieldId, current] of Object.entries(record.links ?? {})) {
       links[fieldId] = [...new Map([...(links[fieldId] ?? []), ...current].map(link => [link.id, link])).values()];
     }
-    return { ...draft.base, ...(Object.keys(links).length ? { links } : {}),
-      values: { ...record.values, ...draft.base.values, ...draft.values } };
+    const values = { ...record.values, ...draft.base.values, ...draft.values };
+    for (const field of this.table!.fields) {
+      if (field.type === 'lookup' && Object.hasOwn(record.values, field.id)) values[field.id] = record.values[field.id]!;
+    }
+    return { ...draft.base, ...(Object.keys(links).length ? { links } : {}), values };
   }
 
   getRecord(row: number): RowRecord | undefined {
