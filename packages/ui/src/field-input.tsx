@@ -1,5 +1,5 @@
 import React, { useId } from 'react';
-import type { Field, RecordLink } from '../../contracts/src/index.js';
+import { isLookupSummary, type Field, type RecordLink } from '../../contracts/src/index.js';
 import type { FormValue } from './field-input-values.js';
 import { RelationInput } from './relation-input.js';
 import { cellDisplay } from '../../client/src/cell-values.js';
@@ -17,7 +17,7 @@ export function FieldInput({ field, value, onChange, disabled = false, calculati
     input = <output id={id}>{value === null ? ''
       : cellDisplay(field, field.formula!.resultType === 'number' ? Number(value) : field.formula!.resultType === 'checkbox' ? value === 'true' : scalar)}</output>;
   } else if (field.type === 'lookup') {
-    input = <output id={id}>{cellDisplay(field, value === null ? [] : JSON.parse(value as string))}</output>;
+    input = <output id={id}>{cellDisplay(field, value === null ? isLookupSummary(field) ? null : [] : JSON.parse(value as string))}</output>;
   } else if (field.type === 'relation') {
     input = <RelationInput key={field.relation!.tableId} id={id} field={field} value={value as string[] | null} disabled={disabled} onChange={onChange} />;
   } else if (field.type === 'singleSelect' || field.type === 'checkbox') {

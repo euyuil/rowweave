@@ -85,6 +85,12 @@ export function parseField(input: Record<string, unknown>, previous?: Field): Fi
       throw new ServiceError('INVALID_SCHEMA', 'Lookups are read-only and cannot require a value or set a default.');
     }
     field.lookup = { relationFieldId: lookup['relationFieldId'] as string, fieldId: lookup['fieldId'] as string };
+    if (lookup['operation'] !== undefined) {
+      if (!['values', 'count', 'sum', 'average', 'min', 'max'].includes(lookup['operation'] as string)) {
+        throw new ServiceError('INVALID_SCHEMA', 'Choose values, count, sum, average, min or max for a lookup.');
+      }
+      field.lookup.operation = lookup['operation'] as NonNullable<NonNullable<Field['lookup']>['operation']>;
+    }
   }
   if (config['defaultValue'] !== undefined && config['defaultValue'] !== null) {
     field.defaultValue = validateValue(field, config['defaultValue']);

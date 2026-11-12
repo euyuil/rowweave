@@ -1,8 +1,9 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { CellValue, Field, RowRecord, Table } from '../../contracts/src/index.js';
+import { isLookupSummary, valueField, type CellValue, type Field, type RowRecord, type Table } from '../../contracts/src/index.js';
 import { ServiceError } from '../../core/src/errors.js';
 
 export function lookupSql(field: Field, alias = 'r'): string {
+  if (isLookupSummary(field)) return aggregateSql(field, alias);
   const literal = (text: string) => `'${text.replaceAll("'", "''")}'`;
   const path = literal(`$.${JSON.stringify(field.lookup!.fieldId)}`);
   const multi = field.lookupResult!.type === 'multiSelect';
@@ -14,12 +15,27 @@ export function lookupSql(field: Field, alias = 'r'): string {
     ORDER BY edge.position${multi ? ', CAST(choice.key AS INTEGER)' : ''}))`;
 }
 
-function lookupErrorSql(field: Field): string {
-  if (field.lookupResult!.type !== 'formula') return '0';
+function aggregateSql(field: Field, alias: string, error = false): string {
   const literal = (text: string) => `'${text.replaceAll("'", "''")}'`;
-  return `EXISTS (SELECT 1 FROM relation_edges edge JOIN records target ON target.id = edge.target_record_id
+  const path = literal(`$.${JSON.stringify(field.lookup!.fieldId)}`);
+  const functions = { count: 'COUNT', sum: 'SUM', average: 'AVG', min: 'MIN', max: 'MAX' };
+  const operation = field.lookup!.operation as keyof typeof functions;
+  const result = `${functions[operation]}(CAST(json_extract(target.values_json, ${path}) AS REAL))`;
+  const invalid = field.lookupResult!.type === 'formula' ? `MAX(json_extract(target.formula_errors_json, ${path}) IS NOT NULL)` : '0';
+  return `(SELECT CASE WHEN ${invalid} THEN ${error ? "'A linked formula has an error.'" : 'NULL'}
+    WHEN abs(${result}) > 1.7976931348623157e308 THEN ${error ? "'The linked summary exceeds the numeric range.'" : 'NULL'}
+    ELSE ${error ? 'NULL' : result} END FROM relation_edges edge JOIN records target ON target.id = edge.target_record_id
+    WHERE edge.source_record_id = ${alias}.id AND edge.field_id = ${literal(field.lookup!.relationFieldId)})`;
+}
+
+function lookupErrorSql(field: Field): string {
+  if (isLookupSummary(field)) return aggregateSql(field, 'r', true);
+  if (field.lookupResult!.type !== 'formula') return 'NULL';
+  const literal = (text: string) => `'${text.replaceAll("'", "''")}'`;
+  return `(CASE WHEN EXISTS (SELECT 1 FROM relation_edges edge JOIN records target ON target.id = edge.target_record_id
     WHERE edge.source_record_id = r.id AND edge.field_id = ${literal(field.lookup!.relationFieldId)}
-    AND json_extract(target.formula_errors_json, ${literal(`$.${JSON.stringify(field.lookup!.fieldId)}`)}) IS NOT NULL)`;
+    AND json_extract(target.formula_errors_json, ${literal(`$.${JSON.stringify(field.lookup!.fieldId)}`)}) IS NOT NULL)
+    THEN 'A linked formula has an error.' END)`;
 }
 
 export class Lookups {
@@ -50,6 +66,12 @@ export class Lookups {
       if (next && next.type !== previous.type && this.db.prepare('SELECT 1 FROM field_lookups WHERE target_field_id = ? LIMIT 1').get(previous.id)) {
         throw new ServiceError('LOOKUP_DEPENDENCY', 'Remove dependent lookup fields before converting this field.', 409);
       }
+      if (next?.type === 'formula' && valueField(next).type !== 'number') {
+        const dependents = this.db.prepare(`SELECT f.definition_json FROM field_lookups l JOIN fields f ON f.id = l.field_id WHERE l.target_field_id = ?`).all(next.id);
+        if (dependents.some(row => isLookupSummary(JSON.parse(row['definition_json'] as string) as Field))) {
+          throw new ServiceError('LOOKUP_DEPENDENCY', 'Remove dependent linked summaries before changing the formula result type.', 409);
+        }
+      }
     }
     for (const field of table.fields.filter(field => field.type === 'lookup')) {
       const relation = table.fields.find(source => source.id === field.lookup!.relationFieldId);
@@ -62,6 +84,9 @@ export class Lookups {
         throw new ServiceError('INVALID_SCHEMA', `${field.name}: choose a non-linked, non-lookup field in the target table.`);
       }
       field.lookupResult = target;
+      if (isLookupSummary(field) && valueField(target).type !== 'number') {
+        throw new ServiceError('INVALID_SCHEMA', `${field.name}: numeric summaries require a number or numeric formula in the target table.`);
+      }
     }
   }
 
@@ -80,10 +105,10 @@ export class Lookups {
     for (const row of rows) {
       const record = byId.get(row['id'] as string)!;
       fields.forEach((field, index) => {
-        record.values[field.id] = JSON.parse(row[`value_${index}`] as string) as CellValue;
+        record.values[field.id] = isLookupSummary(field) ? row[`value_${index}`] as number | null : JSON.parse(row[`value_${index}`] as string) as CellValue;
         if (row[`error_${index}`]) {
           record.formulaErrors ??= {};
-          record.formulaErrors[field.id] = 'A linked formula has an error.';
+          record.formulaErrors[field.id] = row[`error_${index}`] as string;
         }
       });
     }

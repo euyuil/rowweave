@@ -52,7 +52,7 @@ The service supports multiple tables with stable table, field, and record IDs. T
 
 Schema writes return the updated table and increment its schema version. A stale version returns HTTP 409 with `SCHEMA_CONFLICT`; reload schema before retrying. Names contain 1–200 characters and tables support up to 200 fields. A newly added text field has no stored values until edited; an absent field value means null. Renaming and reordering do not rewrite record identities or values. Set `precision: null` in a number-field update to restore automatic decimal formatting without changing stored values.
 
-SQLite stores relational table/field/view metadata and JSON record values, with a table/position index. Format 3 added persistent data revisions, 4 saved views, 5 relations, 6 lookup dependencies, 7 saved-query indexes, 8 persisted display settings, 9 board layouts, and 10 persisted formula errors. Opening older databases migrates transactionally, preserving field IDs, record IDs, positions, values, and record/schema versions. Format 8 preserves existing view versions and adds the original 36-pixel row height and zero frozen columns; format 9 keeps existing views as grids, retaining their display settings and versions. A failed migration rolls back; unsupported newer formats fail without replacing their schema. Back up a working database before upgrading; do not copy a live database without its pending WAL state.
+SQLite stores relational table/field/view metadata and JSON record values, with a table/position index. Format 3 added persistent data revisions, 4 saved views, 5 relations, 6 lookup dependencies, 7 saved-query indexes, 8 persisted display settings, 9 board layouts, 10 persisted formula errors, and 11 scalar lookup summaries. Opening older databases migrates transactionally, preserving field IDs, record IDs, positions, values, and record/schema versions. Format 8 preserves existing view versions and adds the original 36-pixel row height and zero frozen columns; format 9 keeps existing views as grids, retaining their display settings and versions. A failed migration rolls back; unsupported newer formats fail without replacing their schema. Back up a working database before upgrading; do not copy a live database without its pending WAL state.
 
 ### Typed values and record lifecycle
 
@@ -93,6 +93,10 @@ Deleting referenced records returns `RELATION_DEPENDENCY` until external links a
 ### Formula fields
 
 The [formula guide](formulas.md) defines the language, UI workflow and API contract. The core parses bounded expressions and orders dependencies; SQLite materializes results/errors transactionally on every supported write path. Schema changes recalculate records without loading them into the renderer. Database format 10 adds an empty error map to existing records without changing their versions or saved views.
+
+### Linked numeric summaries
+
+Lookup fields can return count/sum/average/min/max through the existing relationship. See [linked summaries](linked-summaries.md) for configuration, null/error semantics and API usage. The SQLite lookup expression is shared by hydration, filters, sorting, search and grouped summary queries. Format 11 preserves existing array lookups and blocks incompatible older applications.
 
 ### Read-only lookups
 

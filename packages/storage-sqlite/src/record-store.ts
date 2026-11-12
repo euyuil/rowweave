@@ -466,7 +466,7 @@ export class SqliteRecordStore implements RecordStore {
         this.lookups.hydrate(current, batch, fields.map(field => field.id));
         for (const record of batch) {
           if (fields.some(field => record.formulaErrors?.[field.id])) {
-            throw new ServiceError('FORMULA_ERROR', `Record ${record.id} has a formula error. Correct it or exclude the field before exporting.`);
+            throw new ServiceError('CALCULATION_ERROR', `Record ${record.id} has a calculation error. Correct it or exclude the field before exporting.`);
           }
           append(csvRecord(fields, record.values));
         }
