@@ -65,6 +65,14 @@ All fields accept `required` and `defaultValue`. Defaults apply only when a new 
 
 The grid retains its text editor until the dedicated typed-editor workflow is introduced, but renders typed values and parses typed edits/paste. Select clipboard values use option names; multi-select uses a JSON array of names. Number input uses decimal notation, checkboxes use `true`/`false`, and blank non-text input means null. Invalid cells reject the complete pasted rectangle and preserve existing drafts. Service writes always validate again.
 
+### Field conversion
+
+Use `POST /tables/:tableId/fields/:fieldId/conversion/preview` with `{ expectedVersion, field }`, where `field` is the complete target field configuration (name, type, and any options/default/format settings). The field ID stays unchanged. Preview returns total, changed, and invalid record counts, at most 10 before/after samples, and at most 20 failing record IDs/messages. Preview makes no changes.
+
+Submit the same body to `.../conversion/apply` to recheck current records and apply the conversion in one transaction. The table schema version increments; only records whose stored value changes receive a new record version. Any invalid value returns `CONVERSION_FAILED` and rolls back the entire operation, including earlier records. A schema change since preview returns `SCHEMA_CONFLICT`. Preview is informational: successful preview does not skip validation during apply.
+
+Text converts using the same rules as typed paste: decimal numbers, true/false, ISO dates/timestamps, option names/IDs, and JSON arrays for multi-select. Empty text becomes null for non-text targets; preview shows this change. Scalars become their textual representation; select values become their labels, and multi-select becomes a JSON array of labels. Multiple selected options cannot be collapsed into one. Same-type conversion validates all values against the target configuration. Target defaults are explicit and apply only to future records; existing nulls are never filled implicitly.
+
 Tests create and remove isolated temporary databases. No test opens a working database.
 
 ## Shared client

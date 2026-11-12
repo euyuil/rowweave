@@ -56,3 +56,23 @@ test('HTTP record creation, lookup and deletion enforce typed values and write v
   assert.equal((await call(`${root}/records/${records[0].id}`)).status, 404);
   assert.deepEqual((await (await call(`${root}/records`)).json()).records, [records[1]]);
 });
+
+test('HTTP conversion endpoints expose preview and atomic apply with stable field IDs', async t => {
+  const service = new RecordService(fixture(t, null).open());
+  const table = service.createTable({ name: 'Convert' });
+  service.createRecords(table.id, [{ values: { [table.primaryFieldId]: '42' } }]);
+  const token = randomBytes(32).toString('hex');
+  const server = await startServer({ service, token });
+  t.after(() => server.close());
+  const root = `${server.url}/tables/${table.id}/fields/${table.primaryFieldId}/conversion`;
+  const request = { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expectedVersion: 1, field: { name: 'Number', type: 'number' } }) };
+  const preview = await fetch(`${root}/preview`, request);
+  assert.equal(preview.status, 200);
+  assert.equal((await preview.json()).changed, 1);
+  assert.equal(service.getTable(table.id).fields[0]!.type, 'text');
+  const applied = await fetch(`${root}/apply`, request);
+  assert.equal(applied.status, 200);
+  assert.equal((await applied.json()).fields[0].type, 'number');
+  assert.equal((await fetch(`${root}/apply`, request)).status, 409);
+});
