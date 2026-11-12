@@ -6,6 +6,7 @@ import { basename, dirname, join, relative, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { pipeline } from 'node:stream/promises';
 import { execFileSync } from 'node:child_process';
+import { bundledNotices } from './bundled-notices.mjs';
 
 if (process.platform !== 'win32' || process.arch !== 'x64') throw new Error('Package on Windows x64.');
 const manifest = JSON.parse(await readFile('package.json', 'utf8'));
@@ -17,32 +18,15 @@ const output = resolve('release', `${manifest.version}-${stamp}`);
 try {
   await cp('dist', join(stage, 'dist'), {
     recursive: true,
-    filter: source => !source.split(/[\\/]/).includes('tests') && !source.endsWith('.map') && !source.endsWith('.meta.json'),
+    filter: source => !source.split(/[\\/]/).includes('tests') && !source.endsWith('.map') && !source.endsWith('.meta.json')
+      && !/^apps\/mcp(?:\/|$)/.test(relative('dist', source).replaceAll('\\', '/')),
   });
   await writeFile(join(stage, 'package.json'), JSON.stringify({
     name: 'rowweave', productName: 'RowWeave', version: manifest.version,
     type: 'module', main: manifest.main, description: 'Local structured tables for people and software.',
   }, null, 2));
   const meta = JSON.parse(await readFile('dist/apps/desktop/renderer.meta.json', 'utf8'));
-  const dependencyRoots = new Set();
-  const bundledInputs = new Set(Object.values(meta.outputs).flatMap(output => Object.entries(output.inputs)
-    .filter(([, details]) => details.bytesInOutput > 0).map(([input]) => input)));
-  for (const input of bundledInputs) {
-    const matches = [...input.replaceAll('\\', '/').matchAll(/(?:^|\/)node_modules\/((?:@[^/]+\/)?[^/]+)/g)];
-    const match = matches.at(-1);
-    if (match) dependencyRoots.add(input.slice(0, match.index + match[0].length));
-  }
-  const notices = [];
-  for (const root of [...dependencyRoots].sort()) {
-    const dependency = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
-    const names = (await readdir(root)).filter(name => /^(licen[sc]e|copying|notice)(\.|$)/i.test(name));
-    const fallback = dependency.name === 'react-easy-swipe' && dependency.version === '0.0.21'
-      ? await readFile('docs/third-party/react-easy-swipe-license.txt', 'utf8') : undefined;
-    if (fallback && !fallback.includes('Copyright (c) 2016 Leandro Lemos')) throw new Error('Incomplete fallback license notice.');
-    if (!names.length && !fallback) throw new Error(`Missing license notice for bundled dependency ${dependency.name}.`);
-    notices.push(`${dependency.name}@${dependency.version}\n${fallback ?? (await Promise.all(names.map(name => readFile(join(root, name), 'utf8')))).join('\n')}`);
-  }
-  await writeFile(join(stage, 'THIRD-PARTY-NOTICES.txt'), notices.join('\n\n--------------------\n\n'));
+  await writeFile(join(stage, 'THIRD-PARTY-NOTICES.txt'), await bundledNotices(meta));
   const electronVersion = manifest.devDependencies.electron;
   const localZip = join(artifacts, `electron-v${electronVersion}-win32-x64.zip`);
   const hasLocalZip = await access(localZip).then(() => true, () => false);

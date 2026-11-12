@@ -10,12 +10,15 @@
   "packageManager": "npm@11.19.1",
   "scripts": {
     "check": "tsc --noEmit",
-    "build": "tsc && node scripts/build-renderer.mjs && npm run build:sdk && npm run build:cli",
+    "build": "tsc && node scripts/build-renderer.mjs && npm run build:sdk && npm run build:cli && npm run build:mcp",
     "build:sdk": "node scripts/build-sdk.mjs",
     "package:sdk": "npm run build:sdk && node scripts/package-sdk.mjs",
     "build:cli": "node scripts/build-cli.mjs",
     "package:cli": "npm run build:cli && node scripts/package-cli.mjs",
     "cli": "node dist/apps/cli/src/main.js",
+    "build:mcp": "node scripts/build-mcp.mjs",
+    "package:mcp": "npm run build:mcp && node scripts/package-mcp.mjs",
+    "start:mcp": "node apps/mcp/dist/rowweave-mcp.js",
     "test": "npm run build && node --test \"dist/**/tests/*.test.js\"",
     "start:server": "node dist/apps/server/src/cli.js",
     "workspace:file": "node dist/apps/server/src/workspace-file.js",
@@ -36,6 +39,8 @@
   "devDependencies": {
     "@electron-internal/extract-zip": "1.0.8",
     "@electron/packager": "20.3.0",
+    "@modelcontextprotocol/client": "2.4.0",
+    "@modelcontextprotocol/server": "2.4.0",
     "@types/node": "24.10.0",
     "@types/react": "18.3.27",
     "@types/react-dom": "18.3.7",
@@ -43,7 +48,8 @@
     "esbuild": "0.28.2",
     "playwright": "1.65.0",
     "typescript": "7.0.2",
-    "yazl": "3.3.1"
+    "yazl": "3.3.1",
+    "zod": "4.6.7"
   },
   "dependencies": {
     "@glideapps/glide-data-grid": "6.0.3",

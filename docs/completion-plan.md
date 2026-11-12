@@ -66,6 +66,7 @@ Each item may need more than one focused PR. Do not batch completed PRs while wa
   - [x] Online workspace backups and restore to a new path with integrity checks, migration, overwrite protection, subprocess validation, and upgrade/rollback documentation.
   - [x] Desktop local/remote connection settings, encrypted credential persistence, process ownership, failed-switch protection, and outage/settings recovery (Node preference tests plus complete offscreen workspace/connection workflows; native checks remain deferred).
 - [ ] MCP protocol server and agent usage Skills.
+  - [x] Stdio MCP adapter with 24 discoverable tools, live schema/view resources, versioned writes, protocol-client workflows and an offline-installable bundle. Agent usage Skills remain below this gate.
 - [ ] Harness adapter and host integration verification.
 - [ ] Complete cross-interface regression, migration/backup verification, production performance, and packaging.
 - [ ] Final native-input checks and invitation for user end-to-end acceptance.
