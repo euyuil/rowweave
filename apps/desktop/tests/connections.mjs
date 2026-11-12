@@ -234,5 +234,5 @@ try {
   store.close();
   const target = resolve(directory);
   if (dirname(target) !== resolve(tmpdir()) || !basename(target).startsWith('rowweave-connections-')) throw new Error('Unexpected cleanup path.');
-  await rm(target, { recursive: true, force: true });
+  await rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }
