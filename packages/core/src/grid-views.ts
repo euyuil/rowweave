@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import type { FieldFilter, FilterGroup, GridView, Table, ViewQuery } from '../../contracts/src/index.js';
+import type { FieldFilter, FilterGroup, GridView, RowHeight, Table, ViewQuery } from '../../contracts/src/index.js';
 import { parseQuery } from './record-query.js';
 import { schemaName, schemaObject } from './schema-validation.js';
 import { ServiceError } from './errors.js';
 
 export function defaultView(table: Pick<Table, 'id' | 'fields'>): GridView {
-  return { id: randomUUID(), tableId: table.id, name: 'All records', version: 1, query: {},
+  return { id: randomUUID(), tableId: table.id, name: 'All records', version: 1, query: {}, rowHeight: 36, frozenColumns: 0,
     columns: table.fields.map(field => ({ fieldId: field.id, width: 180, hidden: false })) };
 }
 
@@ -32,7 +32,15 @@ export function parseView(table: Table, input: unknown, previous = defaultView(t
     });
     if (columns.every(column => column.hidden)) throw new ServiceError('INVALID_VIEW', 'Keep at least one field visible.');
   }
-  return { ...previous, name: item['name'] === undefined ? previous.name : schemaName(item['name']), query: saved, columns };
+  const rowHeight = item['rowHeight'] === undefined ? previous.rowHeight : item['rowHeight'];
+  if (![36, 48, 64].includes(rowHeight as number)) throw new ServiceError('INVALID_VIEW', 'Row height must be 36, 48 or 64 pixels.');
+  const visible = columns.filter(column => !column.hidden).length;
+  const frozenColumns = item['frozenColumns'] === undefined ? Math.min(previous.frozenColumns, visible) : item['frozenColumns'];
+  if (!Number.isInteger(frozenColumns) || (frozenColumns as number) < 0 || (frozenColumns as number) > visible) {
+    throw new ServiceError('INVALID_VIEW', 'Freeze a whole number of leading columns, up to the number of visible fields.');
+  }
+  return { ...previous, name: item['name'] === undefined ? previous.name : schemaName(item['name']), query: saved, columns,
+    rowHeight: rowHeight as RowHeight, frozenColumns: frozenColumns as number };
 }
 
 export function reconcileView(view: GridView, table: Table): GridView {

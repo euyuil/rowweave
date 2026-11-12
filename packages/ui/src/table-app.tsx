@@ -48,7 +48,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   const [view, setView] = useState<GridView>();
   const [search, setSearch] = useState('');
   const [searchComposing, setSearchComposing] = useState(false);
-  const [viewAction, setViewAction] = useState<'create' | 'edit' | 'delete' | 'query'>();
+  const [viewAction, setViewAction] = useState<'create' | 'edit' | 'delete' | 'query' | 'display'>();
   const currentView = useRef<GridView>();
   const appliedSearch = useRef('');
   const viewRequest = useRef(0);
@@ -416,6 +416,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
         <button disabled={!view || locked} onClick={() => setViewAction('create')}>New view</button>
         <button disabled={!view || locked} onClick={() => setViewAction('edit')}>View settings</button>
         <button disabled={!view || locked} onClick={() => setViewAction('query')}>Filter &amp; sort</button>
+        <button disabled={!view || locked} onClick={() => setViewAction('display')}>Display</button>
         <button disabled={!view || recordActionsLocked || searchComposing} onClick={() => setSummarizing(true)}>Summarize</button>
         <button disabled={!view || locked || views.length < 2} onClick={() => setViewAction('delete')}>Delete view</button>
         <input type="search" aria-label="Search records" placeholder="Search records…" value={search}
@@ -464,7 +465,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
           onVisibleRegionChanged={region => setVisible(previous =>
             previous.y === region.y && previous.height === region.height ? previous : { y: region.y, height: region.height })}
           gridSelection={selection} onGridSelectionChange={setSelection}
-          rowMarkers="both" rowHeight={36} headerHeight={40} rangeSelect="rect" rowSelectionMode="multi"
+          rowMarkers="both" rowHeight={view!.rowHeight} freezeColumns={view!.frozenColumns} headerHeight={40} rangeSelect="rect" rowSelectionMode="multi"
           cellActivationBehavior="double-click"
           keybindings={{ paste: false, copy: false }}
           onDelete={selected => { void clearSelection(selected); return false; }}

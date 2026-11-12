@@ -56,6 +56,8 @@ export const recordGet = z.strictObject({ ...tableId, recordId: id });
 const view = {
   name: z.string(), query: z.strictObject(query).exactOptional(),
   columns: z.array(z.strictObject({ fieldId: id, width: z.number(), hidden: z.boolean() })).exactOptional(),
+  rowHeight: z.union([z.literal(36), z.literal(48), z.literal(64)]).exactOptional(),
+  frozenColumns: z.int().min(0).exactOptional(),
 };
 export const viewCreate = z.strictObject(view);
 export const viewUpdate = z.strictObject({ ...view, ...expectedVersion, name: z.string().exactOptional() });
