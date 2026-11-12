@@ -42,7 +42,7 @@
 .rowweave-app .workspace-dialog p { line-height: 1.6; overflow-wrap: anywhere; }
 .rowweave-app .form-field { display: flex; flex-direction: column; gap: 8px; margin: 18px 0; font-weight: 600; }
 .rowweave-app input, .rowweave-app textarea, .rowweave-app select { padding: 10px; border: 1px solid #c6d0e0; border-radius: 6px; font: inherit; color: inherit; background: #fff; }
-.rowweave-app .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 26px; }
+.rowweave-app .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 26px; position: sticky; bottom: -26px; padding: 16px 0; background: #fff; z-index: 1; }
 .rowweave-app .form-error { color: #9a382a; }
 .rowweave-app button.danger { background: #b33e2f; border-color: #b33e2f; color: #fff; }
 .rowweave-app .record-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 0 24px 14px; }
@@ -76,3 +76,16 @@
 .rowweave-app .view-column .check-field { flex: 1; margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .rowweave-app .column-width { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #69768b; }
 .rowweave-app .column-width input { width: 80px; }
+.rowweave-app .query-section { margin: 24px 0; }
+.rowweave-app .query-heading { display: flex; align-items: center; justify-content: space-between; }
+.rowweave-app .query-heading button, .rowweave-app .filter-actions button, .rowweave-app .remove-filter, .rowweave-app .sort-rule button { font-size: 12px; padding: 6px 9px; }
+.rowweave-app .filter-group { border: 1px solid #d7dfec; border-radius: 6px; padding: 12px; margin-bottom: 8px; }
+.rowweave-app .group-conjunction { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.rowweave-app .group-conjunction select { flex: 1; min-width: 0; }
+.rowweave-app .filter-entry { margin: 14px 0; padding-bottom: 10px; border-bottom: 1px solid #e5eaf1; }
+.rowweave-app .filter-rule { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.rowweave-app .filter-rule select { min-width: 0; }
+.rowweave-app .filter-rule .form-field { grid-column: 1 / -1; margin: 0 0 8px; }
+.rowweave-app .filter-actions, .rowweave-app .sort-rule { display: flex; gap: 8px; flex-wrap: wrap; }
+.rowweave-app .sort-rule { margin: 8px 0; }
+.rowweave-app .sort-rule select { min-width: 0; flex: 1; }
