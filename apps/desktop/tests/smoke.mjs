@@ -7,8 +7,10 @@ import { join, resolve, dirname, basename } from 'node:path';
 import { _electron as electron } from 'playwright';
 import electronPath from 'electron';
 import extract from '@electron-internal/extract-zip';
+import { SqliteRecordStore } from '../../../dist/packages/storage-sqlite/src/record-store.js';
 
 const dataDirectory = await mkdtemp(join(tmpdir(), 'rowweave-desktop-'));
+new SqliteRecordStore(join(dataDirectory, 'prototype.sqlite'), { rows: 10_000, columns: 20 }).close();
 let packaged;
 await mkdir('.artifacts', { recursive: true });
 let application;

@@ -23,11 +23,11 @@ Requests use `Authorization: Bearer <token>`:
 
 Write limits are 2,000 distinct records, 20,000 changed cells, 10,000 UTF-16 code units per text value, and an 8 MiB JSON request body. Duplicate IDs and unknown fields are rejected. Empty strings and nulls remain distinct in storage.
 
-A new desktop database is still seeded deterministically with 10,000 rows and 20 text fields while the workspace navigation is being implemented. Tests and service consumers can open an empty database with `new SqliteRecordStore(path, null)`. Opening an existing database never reseeds deleted tables. Node's built-in SQLite driver runs only in the service.
+A new database starts empty. Create a table from the desktop sidebar or `POST /tables`; deterministic datasets are only created explicitly by tests and `npm run dataset`. Opening an existing database never reseeds deleted tables. Node's built-in SQLite driver runs only in the service.
 
 ### Dynamic tables and schema
 
-The service supports multiple tables with stable table, field, and record IDs. Typed schema and record operations are available through HTTP; the desktop management workflows follow the [completion plan](completion-plan.md).
+The service supports multiple tables with stable table, field, and record IDs. The desktop supports creating, switching, renaming, and deleting tables, with unsaved-edit navigation guards and explicit deletion confirmation. Typed schema and record management workflows follow the [completion plan](completion-plan.md).
 
 - `GET /tables`: list table definitions and counts.
 - `POST /tables`: create an empty table with `{ "name": "Projects" }` and an initial **Name** field.
@@ -136,7 +136,7 @@ Merge each PR after its checks pass, then start the next dependent change from t
 
 ## Desktop
 
-Run `npm start` to build the production renderer, install the pinned Electron binary if needed, and open the app. Electron's binary download requires network access on the first run. Use `npm run test:desktop` for the interactive desktop smoke test; it uses a temporary workspace and the native clipboard. Avoid interacting with the app or changing the clipboard during this test.
+Run `npm start` to build the production renderer, install the pinned Electron binary if needed, and open the app. Electron's binary download requires network access on the first run. Use `npm run test:desktop` for workspace lifecycle and grid smoke tests; they use temporary workspaces. The grid smoke test uses the native clipboard, so avoid changing the clipboard during that test. After a build, `node apps/desktop/tests/workspace.mjs` runs only the hidden-window workspace lifecycle test without native clipboard access. `ROWWEAVE_HEADLESS=1` uses offscreen rendering without showing a window or background throttling; it is not used for performance measurements or native IME verification.
 
 The Electron host starts the HTTP/SQLite service in a separate utility process. Its narrow preload bridge supplies the connection and host dialogs to the shared React UI; the renderer has no Node.js integration. SQLite never runs in the main or renderer process. The default database is `prototype.sqlite` under Electron's RowWeave user-data directory. `ROWWEAVE_DATA_DIR` selects an isolated workspace and browser profile.
 

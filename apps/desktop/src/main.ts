@@ -59,7 +59,8 @@ void app.whenReady().then(async () => {
       show: false, backgroundColor: '#f7f9fc',
       webPreferences: {
         preload: join(directory, '../preload.cjs'), contextIsolation: true,
-        nodeIntegration: false, sandbox: true,
+        nodeIntegration: false, sandbox: true, backgroundThrottling: process.env['ROWWEAVE_HEADLESS'] !== '1',
+        offscreen: process.env['ROWWEAVE_HEADLESS'] === '1',
       },
     });
     window.removeMenu();
@@ -92,7 +93,7 @@ void app.whenReady().then(async () => {
       if (!quitting && window && !window.isDestroyed()) window.webContents.send('service-exit');
     });
     await window.loadFile(join(directory, '../index.html'));
-    window.show();
+    if (process.env['ROWWEAVE_HEADLESS'] !== '1') window.show();
   } catch (error) {
     child?.kill();
     child = undefined;

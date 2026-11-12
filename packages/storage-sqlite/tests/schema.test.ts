@@ -3,8 +3,17 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { fixture } from './helpers.js';
 import { RecordService, ServiceError } from '../../core/src/record-service.js';
+import { SqliteRecordStore } from '../src/record-store.js';
 
 const hasCode = (code: string) => (error: unknown) => error instanceof ServiceError && error.code === code;
+
+test('a fresh workspace starts empty unless a fixture is explicitly requested', t => {
+  const data = fixture(t, null);
+  const store = new SqliteRecordStore(data.path);
+  try { assert.deepEqual(store.listTables(), []); }
+  finally { store.close(); }
+  assert.deepEqual(data.open().listTables(), []);
+});
 
 test('tables and fields retain identities through rename, reorder, primary changes and restart', t => {
   const data = fixture(t, null);
