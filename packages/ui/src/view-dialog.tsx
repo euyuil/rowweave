@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import type { GridView, Table, ViewColumn } from '../../contracts/src/index.js';
+import type { GridView, SortRule, Table, ViewColumn } from '../../contracts/src/index.js';
 import type { WorkspaceApi } from '../../client/src/http-client.js';
 import { Dialog } from './dialog.js';
+import { QueryEditor } from './query-editor.js';
+import { filterDraft, filterValue } from './filter-draft.js';
 
 export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, onSaved }: {
   kind: 'create' | 'edit' | 'delete'; view: GridView; search: string; table: Table; api: WorkspaceApi;
@@ -10,6 +12,8 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
   const [name, setName] = useState(kind === 'create' ? 'New view' : view.name);
   const [savedSearch, setSavedSearch] = useState(search);
   const [columns, setColumns] = useState<ViewColumn[]>(view.columns);
+  const [filter, setFilter] = useState(() => filterDraft(view.query.filter, table.fields));
+  const [sort, setSort] = useState<SortRule[]>(view.query.sort ?? []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const deleting = kind === 'delete';
@@ -35,7 +39,7 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
       setError(undefined);
       void (async () => {
         let result: GridView | undefined;
-        const config = { name, columns, query: { ...view.query, search: savedSearch } };
+        const config = { name, columns, query: { filter: filterValue(filter, table.fields), sort, search: savedSearch } };
         if (deleting) await api.deleteView(table.id, view.id, view.version);
         else if (kind === 'create') result = await api.createView(table.id, config);
         else result = await api.updateView(table.id, view.id, { ...config, expectedVersion: view.version });
@@ -46,6 +50,9 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
       {deleting ? <p>Delete <strong>{view.name}</strong>? Its records remain in the table.</p> : <fieldset disabled={busy}>
         <label className="form-field">View name<input autoFocus required maxLength={200} value={name} onChange={event => setName(event.target.value)} /></label>
         <label className="form-field">Saved search<input value={savedSearch} onChange={event => setSavedSearch(event.target.value)} /></label>
+        <QueryEditor fields={table.fields} filter={filter} sort={sort}
+          onFilter={value => { setFilter(value); setDirty(true); }} onSort={value => { setSort(value); setDirty(true); }} />
+        <h3>Columns</h3>
         <p className="form-note">Choose the fields and their order in this view. Hidden fields remain in each record.</p>
         <div>{columns.map((column, index) => {
           const field = fields.get(column.fieldId)!;
@@ -54,8 +61,8 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
               onChange={event => setColumns(current => current.map(item => item.fieldId === field.id ? { ...item, hidden: !event.target.checked } : item))} />{field.name}</label>
             <label className="column-width">Width<input type="number" min={50} max={1000} step={1} required value={column.width} aria-label={`${field.name} width`}
               onChange={event => setColumns(current => current.map(item => item.fieldId === field.id ? { ...item, width: Number(event.target.value) } : item))} /></label>
-            <button type="button" disabled={index === 0} aria-label={`Move ${field.name} up`} onClick={() => move(index, -1)}>↑</button>
-            <button type="button" disabled={index === columns.length - 1} aria-label={`Move ${field.name} down`} onClick={() => move(index, 1)}>↓</button>
+            <button type="button" disabled={index === 0} aria-label={`Move ${field.name} up`} onClick={event => { move(index, -1); event.currentTarget.parentElement!.querySelector('input')!.focus(); }}>↑</button>
+            <button type="button" disabled={index === columns.length - 1} aria-label={`Move ${field.name} down`} onClick={event => { move(index, 1); event.currentTarget.parentElement!.querySelector('input')!.focus(); }}>↓</button>
           </div>;
         })}</div>
         {columns.every(column => column.hidden) && <p className="form-error">Keep at least one field visible.</p>}

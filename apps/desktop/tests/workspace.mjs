@@ -7,6 +7,7 @@ import electronPath from 'electron';
 import extract from '@electron-internal/extract-zip';
 import { verifySchemaWorkflow } from './schema-workflow.mjs';
 import { verifyViewWorkflow } from './view-workflow.mjs';
+import { verifyQueryWorkflow } from './query-workflow.mjs';
 
 const dataDirectory = await mkdtemp(join(tmpdir(), 'rowweave-workspace-'));
 await mkdir('.artifacts', { recursive: true });
@@ -227,6 +228,7 @@ try {
   await verifySchemaWorkflow(page);
   await recordLifecycle();
   await verifyViewWorkflow(page);
+  await verifyQueryWorkflow(page);
   await application.close();
   application = undefined;
   application = await electron.launch({ executablePath, args: packaged ? [] : ['.'],
