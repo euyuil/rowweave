@@ -11,6 +11,8 @@ npm test
 
 On Windows, use `npm.cmd` if PowerShell execution policy prevents `npm` from running.
 
+Build the stdio MCP adapter with `npm run build:mcp` and its independently installable archive with `npm run package:mcp`. Run the built entry directly from an MCP host as described in the [MCP guide](mcp.md); `npm run start:mcp` is available for development. Protocol and offline installation tests run in `npm test`.
+
 ## Standalone service
 
 Set `ROWWEAVE_TOKEN` to a random secret of at least 32 printable ASCII characters without spaces, then run `npm run start:server`. `ROWWEAVE_DB` selects the database (default: `.data/prototype.sqlite`), and `ROWWEAVE_PORT` selects the port (default: 4317). The default binding is 127.0.0.1. For independent/remote operation, configure `ROWWEAVE_HOST`, `ROWWEAVE_ALLOWED_HOSTS`, and `ROWWEAVE_ALLOWED_ORIGINS` as described in the [service operations guide](service.md). Do not commit credentials or put them in URLs.
