@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Table } from '../../contracts/src/index.js';
 import type { WorkspaceApi } from '../../client/src/http-client.js';
 import { TableModel } from '../../client/src/table-model.js';
@@ -9,7 +9,9 @@ import { WorkspaceContext } from './workspace-context.js';
 type TableAction = { kind: 'create' } | { kind: 'rename' | 'delete'; table: Table };
 const message = (error: unknown) => error instanceof Error ? error.message : 'The operation failed.';
 
-export function WorkspaceApp({ api, host }: { api: WorkspaceApi; host: TableHost }) {
+export function WorkspaceApp({ api, host, workspaceLabel = 'Local workspace', onConnectionSettings, children }: {
+  api: WorkspaceApi; host: TableHost; workspaceLabel?: string; onConnectionSettings?(): void; children?: ReactNode;
+}) {
   const [tables, setTables] = useState<Table[]>([]);
   const [selected, setSelected] = useState<string>();
   const [loaded, setLoaded] = useState(false);
@@ -80,7 +82,12 @@ export function WorkspaceApp({ api, host }: { api: WorkspaceApi; host: TableHost
   return <WorkspaceContext.Provider value={api}><main className="rowweave-app">
     <header className="app-header">
       <div className="brand"><span className="brand-mark" aria-hidden="true">▦</span> RowWeave</div>
-      <span className="workspace-label">Local workspace</span>
+      <span className="workspace-label">{workspaceLabel}{onConnectionSettings && <button onClick={() => {
+        if (model?.saving) { setError('Wait for the current save to finish before changing the connection.'); return; }
+        if (dirty.current.table || dirty.current.form) { setError('Save or discard your workspace edits before changing the connection.'); return; }
+        setError(undefined);
+        onConnectionSettings();
+      }}>Connection</button>}</span>
     </header>
     <div className="workspace-body">
       <aside className="workspace-sidebar" aria-label="Workspace tables">
@@ -108,6 +115,7 @@ export function WorkspaceApp({ api, host }: { api: WorkspaceApi; host: TableHost
     </div>
     {action && <TableDialog action={action} api={api} setDirty={setFormDirty}
       onClose={() => setAction(undefined)} onComplete={completed} />}
+    {children}
   </main></WorkspaceContext.Provider>;
 }
 
