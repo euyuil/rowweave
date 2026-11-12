@@ -1,15 +1,15 @@
 # Repository Guidelines
 
-These guidelines define the contribution workflow and implementation boundaries for RowWeave. The project design is documented in `docs/design.md`.
+These guidelines define the contribution workflow and implementation boundaries for RowWeave. The project design is documented in `docs/design.md`; the current product delivery scope and acceptance criteria are in `docs/completion-plan.md`.
 
 ## Project Structure and Boundaries
 
 - Use **RowWeave** for the brand, documentation, and UI. Use `rowweave` for repository, package, and command names.
-- The prototype is being implemented incrementally. Follow `docs/development.md` for working commands; create directories only when they are needed by the implementation.
+- Follow `docs/development.md` for working commands and `docs/completion-plan.md` for delivery scope. Create directories only when they are needed by the implementation. Do not add unrelated features or refactoring while completing that scope.
 - `apps/desktop/` is the Electron entry point. `apps/server/` provides the standalone TypeScript/Node.js service and shared HTTP server.
 - `packages/ui/`, `packages/client/`, and `packages/contracts/` hold shared React UI, client models and caching, and API schemas and types. Shared code must not import Electron or Harness runtime APIs; inject host-specific capabilities through narrow interfaces or callbacks.
 - `packages/core/` owns business rules. `packages/storage-sqlite/` owns database access and migrations. Keep both independent of desktop and plugin hosts, and keep database work out of Electron's main and renderer threads.
-- `integrations/harness/` and `skills/` are future integrations. Implement the independent desktop prototype first; do not add these integrations or an internal AI runtime unless the task calls for them.
+- `integrations/harness/` and `skills/` provide the host adapter and agent usage guidance defined in the delivery scope. Keep them thin consumers of the shared UI/client/service. Do not add an internal AI runtime.
 - Treat build output, test databases, and generated pressure-test datasets as generated artifacts, not source files.
 
 ## Build, Test, and Run
@@ -26,6 +26,7 @@ These guidelines define the contribution workflow and implementation boundaries 
 - Keep user-facing wording and test descriptions consistent with their target language and existing conventions.
 - Write documentation and code comments in English by default. Use Chinese proper nouns where English cannot convey them accurately. Write localized documentation in its target language. Keep `README.md` in English and `README.zh-CN.md` in Simplified Chinese, with their user-facing content aligned.
 - Keep table, field, and record identities separate from display names and row or column positions. Perform authoritative validation and data mutations in the service layer.
+- Validate untrusted input at real system boundaries and rely on checked types and invariants internally. Avoid speculative abstractions, redundant checks, silent fallbacks, and retries of non-idempotent writes. Add compatibility paths only for concrete supported consumers.
 
 ## Testing
 
@@ -35,6 +36,7 @@ These guidelines define the contribution workflow and implementation boundaries 
 - Reuse helpers for temporary SQLite databases and deterministic fixtures. Isolate test data, clean it up, and never run tests against a user's working database.
 - Stub external services and host integrations in unit tests. Use targeted integration tests to verify real SQLite transactions, persistence, HTTP behavior, and host adapters.
 - For grid changes, verify the affected keyboard navigation, selection, clipboard, and Chinese IME behavior. Do not treat headless tests as proof that native input-method interactions work.
+- Prefer automated validation during implementation. Defer Computer Use, native IME checks, and external spreadsheet interoperability to the final release candidate; record those checks as pending until performed. Invite the user to perform final end-to-end acceptance once the complete candidate is ready.
 - Measure performance with production builds and reproducible datasets. Record hardware, OS, display settings, dependency versions, data scale, and test steps. Report measured results separately from estimates and unverified claims.
 - Do not assume a Windows-only CI environment or an existing coverage threshold. Follow the CI configuration actually present in the repository.
 

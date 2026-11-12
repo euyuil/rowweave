@@ -2,7 +2,7 @@
 
 [Product overview](../README.md) · [简体中文产品介绍](../README.zh-CN.md)
 
-This document records the target architecture, scope, and validation plan for RowWeave. The prototype is being implemented incrementally; see [development instructions](development.md) for the components and commands currently available. This document includes future work as well as prototype scope.
+This document records the target architecture and original prototype plan for RowWeave. The prototype is complete. The [first product release plan](completion-plan.md) defines the current delivery scope, implementation sequence, and acceptance criteria; see [development instructions](development.md) for the components and commands currently available.
 
 ## Product direction
 
@@ -118,7 +118,7 @@ The service core will progressively provide:
 
 The prototype starts with a fixed schema and text fields. Basic field types and dynamic schema management come later.
 
-**The physical storage model for dynamic fields in SQLite is undecided.** Evaluate physical table columns, JSON, and hybrid approaches against field changes, queries, and indexing. Field type changes must define how existing data is converted and how failures and rollbacks behave.
+The first release stores record values as JSON keyed by stable field IDs, with relational table/field/view metadata and normalized relation edges. Parameterized SQLite JSON queries and measured indexes support filtering and sorting without rebuilding a physical table for every field change. Field type changes preview conversion failures and apply atomically; incompatible values prevent the conversion without changing existing data.
 
 ## First prototype
 
