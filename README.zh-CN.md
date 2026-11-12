@@ -2,35 +2,28 @@
 
 [English](README.md) | 简体中文
 
-**让团队、应用和 AI Agent，共用一份结构化数据。**
+**让表格适应你的工作，让数据连接你的应用和 AI Agent。**
 
-RowWeave 希望为人和软件提供共同处理业务数据的空间。按照团队的需要定义表结构，在桌面表格中维护记录，再通过清晰的接口，让应用和 AI Agent 操作同一份数据。
+无需编写表结构代码，就能搭建项目跟踪表、客户清单或库存台账。RowWeave 将可自定义的表结构、流畅的桌面表格和开放接口放在一起，连接你已有的软件和工作流程。
 
-> **项目状态：** 首个 Windows 桌面原型已可运行，通过固定的示例表体验本地编辑和可靠保存。自定义表结构、团队部署和 Agent 集成仍在规划中。
+- **按业务定义结构。** 自定义表和字段，使用文本、数字、日期、复选框和选项；关联其他记录，通过查找字段显示关联数据。
+- **只看当前需要的信息。** 为不同任务保存筛选、排序、搜索和列布局。
+- **高效完成日常编辑。** 用键盘编辑，整块粘贴，撤销草稿，再一起保存。通过 CSV 导入和导出数据。
+- **连接你的工具。** 使用 HTTP API、TypeScript SDK、CLI、MCP 或 Agent Skills；也可在 DeepSeek Harness 面板中使用同一套表格工作区。
+- **决定数据放在哪里。** 从 Windows 本机开始，或连接自行部署的服务。人工编辑与软件操作遵循相同的校验和版本检查。
 
-## 为什么选择 RowWeave？
+## 体验 RowWeave
 
-- **让数据适应你的业务。** 自定义表和字段，组织客户清单、项目记录、库存以及其他业务数据。
-- **用熟悉的表格方式工作。** 在桌面应用中浏览、编辑、选择和粘贴数据。
-- **让人和 Agent 使用同一套数据能力。** 规划中的 API 和工具支持应用与 AI Agent 发现表结构、查询记录，并执行经过校验的更新。
-- **从自己的电脑开始。** 优先支持本机运行，后续也可部署一套供团队共享的数据服务。
-- **让数据操作更可靠。** 统一校验、原子批量更新和版本检查是设计重点，让自动化与人工编辑遵循相同的规则。
+首个产品候选版本已可供评估。从成功的 [CI 运行记录](https://github.com/euyuil/rowweave/actions)下载 **rowweave-windows**，解压其中的应用 ZIP，打开 `RowWeave.exe`。桌面版无需额外安装 Node.js。
 
-## 为日常用表格管理业务的团队而设计
+从空白工作区开始：创建表，添加字段，再录入或导入记录。点击 **Save changes** 或按 **Ctrl+S** 保存修改。
 
-如果你希望同时拥有自定义表格的灵活性、桌面应用的便利，以及将数据连接到其他软件的清晰接口，RowWeave 正在围绕这些需求构建。
+[桌面连接（英文）](docs/connections.md) · [CSV 指南（英文）](docs/data-exchange.md) · [验收步骤（英文）](docs/acceptance.md)
 
-产品聚焦结构化记录和可靠的数据操作。Excel 式公式、内置 AI 聊天和离线同步不在首版范围内。
+## 连接你的软件
 
-## 体验桌面原型
+[部署服务（英文）](docs/service.md) · [TypeScript SDK（英文）](packages/client/README.md) · [CLI（英文）](apps/cli/README.md) · [MCP（英文）](docs/mcp.md) · [Agent Skills（英文）](docs/agent-skills.md) · [Harness（英文）](docs/harness.md)
 
-打开包含 10,000 条示例记录的表格，编辑单元格，从电子表格粘贴整块数据，并将修改保存在本机。保存后的内容可在重启后读回；版本检查可防止冲突更新悄悄覆盖已有修改。
+本版专注灵活的结构化表格和可靠的数据操作。Excel 式公式、内置 AI 聊天、企业级权限和实时协同编辑不在当前范围内。
 
-从成功的 [CI 运行记录](https://github.com/euyuil/rowweave/actions)下载 Windows 原型产物，解压其中的应用 ZIP，打开 `RowWeave.exe` 即可体验。也可以[从源码运行（英文）](docs/development.md#desktop)。这是用于验证工作流程的早期原型，目前采用固定表结构和文本字段。实测结果与当前限制见[验证记录（英文）](docs/validation.md)。
-
-后续逐步加入自定义表结构、字段类型、筛选排序和 CSV 导入导出。团队部署、SDK、MCP、CLI 和 Agent Skills 仍在整体规划中。
-
-## 关注项目
-
-- 浏览 [Issues](https://github.com/euyuil/rowweave/issues)，或提交你的使用场景和最关心的工作流程。
-- 架构、原型范围和开发计划请参阅[设计文档（英文）](docs/design.md)。
+实测性能与当前限制见[验证报告（英文）](docs/product-performance.md)。源码运行与架构见[开发文档（英文）](docs/development.md)和[设计文档（英文）](docs/design.md)。欢迎在 [Issues](https://github.com/euyuil/rowweave/issues) 中分享使用场景和反馈。
