@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import type { TestContext } from 'node:test';
 import { SqliteRecordStore, type SeedOptions } from '../src/record-store.js';
 
-export function fixture(t: TestContext, seed: SeedOptions = { rows: 12, columns: 3 }) {
+export function fixture(t: TestContext, seed: SeedOptions | null = { rows: 12, columns: 3 }) {
   const directory = mkdtempSync(join(tmpdir(), 'rowweave-test-'));
   const path = join(directory, 'test.sqlite');
   const stores: SqliteRecordStore[] = [];

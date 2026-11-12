@@ -1,6 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
-import { tableId } from '../../../packages/contracts/src/index.js';
 import { RecordService, ServiceError } from '../../../packages/core/src/record-service.js';
 
 export interface ServerOptions {
@@ -43,7 +42,7 @@ export async function startServer({ service, token, port = 0 }: ServerOptions) {
       response.setHeader('Vary', 'Origin');
     }
     if (request.method === 'OPTIONS') {
-      response.setHeader('Access-Control-Allow-Methods', 'GET, PATCH, OPTIONS');
+      response.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
       response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
       response.writeHead(204).end();
       return;
@@ -53,15 +52,33 @@ export async function startServer({ service, token, port = 0 }: ServerOptions) {
       throw new ServiceError('UNAUTHORIZED', 'A valid access token is required.', 401);
     }
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
-    const root = `/tables/${tableId}`;
-    if (request.method === 'GET' && url.pathname === root) {
-      send(response, 200, service.getTable());
-    } else if (request.method === 'GET' && url.pathname === `${root}/records`) {
+    const match = url.pathname.match(/^\/tables\/([^/]+)(?:\/(records|fields)(?:\/([^/]+))?)?$/);
+    const id = match?.[1];
+    const resource = match?.[2];
+    const fieldId = match?.[3];
+    if (url.pathname === '/tables' && request.method === 'GET') {
+      send(response, 200, service.listTables());
+    } else if (url.pathname === '/tables' && request.method === 'POST') {
+      send(response, 201, service.createTable(await readJson(request)));
+    } else if (id && !resource && request.method === 'GET') {
+      send(response, 200, service.getTable(id));
+    } else if (id && !resource && request.method === 'PATCH') {
+      send(response, 200, service.updateTable(id, await readJson(request)));
+    } else if (id && !resource && request.method === 'DELETE') {
+      service.deleteTable(id, await readJson(request));
+      send(response, 200, { deleted: id });
+    } else if (id && resource === 'fields' && !fieldId && request.method === 'POST') {
+      send(response, 201, service.createField(id, await readJson(request)));
+    } else if (id && resource === 'fields' && fieldId && request.method === 'PATCH') {
+      send(response, 200, service.updateField(id, fieldId, await readJson(request)));
+    } else if (id && resource === 'fields' && fieldId && request.method === 'DELETE') {
+      send(response, 200, service.deleteField(id, fieldId, await readJson(request)));
+    } else if (id && resource === 'records' && !fieldId && request.method === 'GET') {
       const offset = Number(url.searchParams.get('offset') ?? '0');
       const limit = Number(url.searchParams.get('limit') ?? '100');
-      send(response, 200, service.readPage(offset, limit));
-    } else if (request.method === 'PATCH' && url.pathname === `${root}/records`) {
-      send(response, 200, service.updateBatch(await readJson(request)));
+      send(response, 200, service.readPage(offset, limit, id));
+    } else if (id && resource === 'records' && !fieldId && request.method === 'PATCH') {
+      send(response, 200, service.updateBatch(await readJson(request), id));
     } else {
       throw new ServiceError('NOT_FOUND', 'This endpoint does not exist.', 404);
     }

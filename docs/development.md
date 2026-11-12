@@ -23,7 +23,25 @@ Requests use `Authorization: Bearer <token>`:
 
 Write limits are 2,000 distinct records, 20,000 changed cells, 10,000 UTF-16 code units per text value, and an 8 MiB JSON request body. Duplicate IDs and unknown fields are rejected. Empty strings and nulls remain distinct in storage.
 
-A new database is seeded deterministically with 10,000 rows and 20 text fields. Existing databases retain their schema and data. Node's built-in SQLite driver runs only in the service; the JSON row representation is a prototype choice, not a decision about the future dynamic schema engine.
+A new desktop database is still seeded deterministically with 10,000 rows and 20 text fields while the workspace navigation is being implemented. Tests and service consumers can open an empty database with `new SqliteRecordStore(path, null)`. Opening an existing database never reseeds deleted tables. Node's built-in SQLite driver runs only in the service.
+
+### Dynamic tables and schema
+
+The service supports multiple tables with stable table, field, and record IDs. Schema management currently supports text fields; the typed-field and desktop management workflows follow the [completion plan](completion-plan.md).
+
+- `GET /tables`: list table definitions and counts.
+- `POST /tables`: create an empty table with `{ "name": "Projects" }` and an initial **Name** field.
+- `GET /tables/:tableId`: read a table, including its schema `version` and `primaryFieldId`.
+- `PATCH /tables/:tableId`: pass `expectedVersion` and any of `name`, `primaryFieldId`, or `fieldOrder` (every field ID exactly once).
+- `DELETE /tables/:tableId`: pass `{ "expectedVersion": 1 }` in the JSON body. The table, its fields, and its records are removed atomically.
+- `POST /tables/:tableId/fields`: pass `expectedVersion`, `name`, and `type: "text"`.
+- `PATCH /tables/:tableId/fields/:fieldId`: pass `expectedVersion` and `name`.
+- `DELETE /tables/:tableId/fields/:fieldId`: pass `expectedVersion`. Choose another primary field before deleting the primary field. Existing cell values are removed and affected record versions increment atomically.
+- The existing paginated record reads and atomic updates work at `/tables/:tableId/records` for any table.
+
+Schema writes return the updated table and increment its schema version. A stale version returns HTTP 409 with `SCHEMA_CONFLICT`; reload schema before retrying. Names contain 1–200 characters and tables support up to 200 fields. A newly added text field has no stored values until edited; an absent field value means null. Renaming and reordering do not rewrite record identities or values.
+
+SQLite format version 2 stores relational table/field metadata and JSON record values, with a table/position index. Opening a version-1 prototype database migrates it transactionally, preserving field IDs, record IDs, positions, values, and record versions. A failed migration rolls back; unsupported newer formats fail without replacing their schema. Back up a working database before upgrading; do not copy a live database without its pending WAL state.
 
 Tests create and remove isolated temporary databases. No test opens a working database.
 
