@@ -1,15 +1,19 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { RecordService, ServiceError } from '../../../packages/core/src/record-service.js';
+import { networkPolicy, type NetworkOptions } from './network.js';
 
-export interface ServerOptions {
+export interface ServerOptions extends NetworkOptions {
   service: RecordService;
   token: string;
-  port?: number;
 }
 
-export async function startServer({ service, token, port = 0 }: ServerOptions) {
-  if (token.length < 32) throw new Error('Use an access token of at least 32 characters.');
+export async function startServer({ service, token, ...options }: ServerOptions) {
+  if (!/^[\x21-\x7e]{32,}$/.test(token)) throw new Error('Use an access token of at least 32 printable ASCII characters without spaces.');
+  const policy = networkPolicy(options);
+  const hosts = policy.hosts ?? new Set<string>();
+  const methods = ['GET', 'POST', 'PATCH', 'DELETE'];
+  const headers = ['authorization', 'content-type'];
   const expectedAuth = Buffer.from(`Bearer ${token}`);
   const server = createServer((request, response) => {
     void handle(request, response).catch(error => {
@@ -30,20 +34,25 @@ export async function startServer({ service, token, port = 0 }: ServerOptions) {
 
   async function handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const host = request.headers.host;
-    const address = server.address();
-    if (!address || typeof address === 'string' || host !== `127.0.0.1:${address.port}`) {
-      throw new ServiceError('INVALID_HOST', 'Use the loopback service address.', 403);
+    if (!host || !hosts.has(host.toLowerCase())) {
+      throw new ServiceError('INVALID_HOST', 'Use a configured service address.', 403);
     }
-    if (request.headers.origin && request.headers.origin !== 'null') {
+    const origin = request.headers.origin;
+    if (origin !== undefined && !policy.origins.has(origin)) {
       throw new ServiceError('INVALID_ORIGIN', 'This origin is not allowed.', 403);
     }
-    if (request.headers.origin === 'null') {
-      response.setHeader('Access-Control-Allow-Origin', 'null');
-      response.setHeader('Vary', 'Origin');
-    }
+    response.setHeader('Vary', 'Origin');
+    if (origin !== undefined) response.setHeader('Access-Control-Allow-Origin', origin);
     if (request.method === 'OPTIONS') {
-      response.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
-      response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+      const method = request.headers['access-control-request-method'];
+      const requestedHeaders = request.headers['access-control-request-headers'] ?? '';
+      if (origin === undefined || typeof method !== 'string' || !methods.includes(method)
+        || typeof requestedHeaders !== 'string' || requestedHeaders.split(',').some(value => value.trim() && !headers.includes(value.trim().toLowerCase()))) {
+        throw new ServiceError('INVALID_PREFLIGHT', 'Request an allowed method and headers from a configured origin.', 403);
+      }
+      response.setHeader('Access-Control-Allow-Methods', methods.join(', '));
+      response.setHeader('Access-Control-Allow-Headers', headers.join(', '));
+      response.setHeader('Cache-Control', 'no-store');
       response.writeHead(204).end();
       return;
     }
@@ -134,12 +143,14 @@ export async function startServer({ service, token, port = 0 }: ServerOptions) {
   server.requestTimeout = 15_000;
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
-    server.listen(port, '127.0.0.1', () => { server.off('error', reject); resolve(); });
+    server.listen(policy.port, policy.host, () => { server.off('error', reject); resolve(); });
   });
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('Could not determine the listening address.');
+  const authority = `${address.family === 'IPv6' ? `[${address.address}]` : address.address}:${address.port}`;
+  if (!policy.hosts) hosts.add(authority);
   return {
-    url: `http://127.0.0.1:${address.port}`,
+    url: `http://${authority}`,
     close: async () => {
       server.closeIdleConnections();
       await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));

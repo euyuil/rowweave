@@ -13,7 +13,7 @@ On Windows, use `npm.cmd` if PowerShell execution policy prevents `npm` from run
 
 ## Standalone service
 
-Set `ROWWEAVE_TOKEN` to a random secret of at least 32 characters, then run `npm run start:server`. Do not commit this value or put it in a URL. `ROWWEAVE_DB` optionally selects the database (default: `.data/prototype.sqlite`), and `ROWWEAVE_PORT` selects the port (default: 4317). The prototype listens only on 127.0.0.1.
+Set `ROWWEAVE_TOKEN` to a random secret of at least 32 printable ASCII characters without spaces, then run `npm run start:server`. `ROWWEAVE_DB` selects the database (default: `.data/prototype.sqlite`), and `ROWWEAVE_PORT` selects the port (default: 4317). The default binding is 127.0.0.1. For independent/remote operation, configure `ROWWEAVE_HOST`, `ROWWEAVE_ALLOWED_HOSTS`, and `ROWWEAVE_ALLOWED_ORIGINS` as described in the [service operations guide](service.md). Do not commit credentials or put them in URLs.
 
 Requests use `Authorization: Bearer <token>`:
 
