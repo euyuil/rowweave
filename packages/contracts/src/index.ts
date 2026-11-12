@@ -199,3 +199,36 @@ export const maxBatchRecords = 2_000;
 export const maxBatchCells = 20_000;
 export const maxTextLength = 10_000;
 export const maxFields = 200;
+
+export const maxCsvBytes = 32 * 1024 * 1024;
+export const maxCsvRows = 100_000;
+export const maxCsvCells = 2_000_000;
+
+export interface CsvImportRequest extends SchemaWrite {
+  csv: string;
+  hasHeader: boolean;
+  // One entry per source column; null skips that column.
+  mapping?: Array<string | null>;
+}
+
+export interface CsvPreview {
+  tableId: string;
+  schemaVersion: number;
+  columns: string[];
+  mapping: Array<string | null>;
+  validated: boolean;
+  total: number;
+  invalid: number;
+  samples: Array<{ row: number; cells: Array<string | null> }>;
+  issues: Array<{ row: number; code: string; message: string }>;
+}
+
+export interface CsvImportResult {
+  imported: number;
+}
+
+export interface CsvExportRequest {
+  viewId?: string;
+  expectedViewVersion?: number;
+  search?: string;
+}

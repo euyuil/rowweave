@@ -29,7 +29,7 @@ export class Relations {
     for (const field of table.fields.filter(field => field.type === 'relation')) write.run(field.id, field.relation!.tableId);
   }
 
-  private validateTargets(field: Field, value: CellValue): void {
+  validateTargets(field: Field, value: CellValue): void {
     const ids = (value ?? []) as string[];
     if (!ids.length) return;
     const rows = this.db.prepare(`SELECT id FROM records WHERE table_id = ? AND id IN (SELECT value FROM json_each(?))`)
