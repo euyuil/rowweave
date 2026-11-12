@@ -52,7 +52,7 @@ The service supports multiple tables with stable table, field, and record IDs. T
 
 Schema writes return the updated table and increment its schema version. A stale version returns HTTP 409 with `SCHEMA_CONFLICT`; reload schema before retrying. Names contain 1–200 characters and tables support up to 200 fields. A newly added text field has no stored values until edited; an absent field value means null. Renaming and reordering do not rewrite record identities or values. Set `precision: null` in a number-field update to restore automatic decimal formatting without changing stored values.
 
-SQLite stores relational table/field/view metadata and JSON record values, with a table/position index. Format 3 added persistent data revisions, 4 saved views, 5 relations, 6 lookup dependencies, and 7 saved-query indexes. Opening older databases migrates transactionally, preserving field IDs, record IDs, positions, values, and record/schema versions. A failed migration rolls back; unsupported newer formats fail without replacing their schema. Back up a working database before upgrading; do not copy a live database without its pending WAL state.
+SQLite stores relational table/field/view metadata and JSON record values, with a table/position index. Format 3 added persistent data revisions, 4 saved views, 5 relations, 6 lookup dependencies, 7 saved-query indexes, and 8 persisted display settings. Opening older databases migrates transactionally, preserving field IDs, record IDs, positions, values, and record/schema versions. Format 8 preserves existing view versions and adds the original 36-pixel row height and zero frozen columns. A failed migration rolls back; unsupported newer formats fail without replacing their schema. Back up a working database before upgrading; do not copy a live database without its pending WAL state.
 
 ### Typed values and record lifecycle
 
@@ -142,12 +142,14 @@ Use **Filter & sort** to edit the current view's query directly. Open a column's
 
 Desktop pagination uses the saved view ID and version as well as the data revision. A concurrent view/schema change stops stale loading and retains drafts. **Refresh view** fetches current metadata while keeping drafts (and resets undo history); **Discard edits** asks before removing drafts. Configuration dialogs retain inputs when their own versioned save conflicts. Record details and duplication include fields hidden from the grid.
 
-Every table starts with an **All records** view. A view contains a stable `id`, `tableId`, `name`, independent `version`, saved `query` (`filter`, `sort`, `search`), and ordered `columns` (`fieldId`, `width`, `hidden`). At least one column and one view remain visible/available. Column widths range from 50 to 1,000 pixels.
+**Display** saves row density, frozen columns, visibility and column arrangement for the current view. Compact, Comfortable and Spacious use row heights of 36, 48 and 64 pixels. Frozen columns are the leading visible columns in the current order; their count decreases if hiding or deleting fields leaves fewer visible columns. Other views keep their own settings. New view copies the current display settings along with its query.
+
+Every table starts with an **All records** view. A view contains a stable `id`, `tableId`, `name`, independent `version`, saved `query` (`filter`, `sort`, `search`), ordered `columns` (`fieldId`, `width`, `hidden`), `rowHeight` and `frozenColumns`. New API views default to `rowHeight: 36` and `frozenColumns: 0`. At least one column and one view remain visible/available. Column widths range from 50 to 1,000 pixels.
 
 - `GET /tables/:tableId/views`: list saved views.
-- `POST /tables/:tableId/views`: create with `{ name, query?, columns? }`. Omitting columns shows all fields in schema order; a supplied column list includes every field once.
+- `POST /tables/:tableId/views`: create with `{ name, query?, columns?, rowHeight?, frozenColumns? }`. Omitting columns shows all fields in schema order; a supplied column list includes every field once.
 - `GET /tables/:tableId/views/:viewId`: read one view.
-- `PATCH /tables/:tableId/views/:viewId`: pass its `expectedVersion` and changed `name`, `query`, or `columns`. Query/columns replace the corresponding configuration; use `query: {}` to clear saved conditions. A stale version returns `VIEW_CONFLICT`.
+- `PATCH /tables/:tableId/views/:viewId`: pass its `expectedVersion` and changed `name`, `query`, `columns`, `rowHeight`, or `frozenColumns`. Query/columns replace the corresponding configuration; use `query: {}` to clear saved conditions. A stale version returns `VIEW_CONFLICT`.
 - `DELETE /tables/:tableId/views/:viewId`: pass `expectedVersion`; the last view cannot be deleted.
 - `POST /tables/:tableId/views/:viewId/query`: apply the saved query. The request accepts `offset`, `limit`, `expectedRevision`, `expectedViewVersion`, optional output `fields`, and an optional temporary `search` override. By default only visible columns' values are returned. The response adds `viewId` and `viewVersion`; pass both revision/version checks when continuing pages.
 

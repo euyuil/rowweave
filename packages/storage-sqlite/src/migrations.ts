@@ -5,8 +5,8 @@ import { syncQueryIndexes } from './query-indexes.js';
 
 export function migrate(db: DatabaseSync): boolean {
   const version = db.prepare('PRAGMA user_version').get()!['user_version'] as number;
-  if (version === 7) return false;
-  if (version < 0 || version > 7) throw new Error(`Unsupported database version: ${version}.`);
+  if (version === 8) return false;
+  if (version < 0 || version > 8) throw new Error(`Unsupported database version: ${version}.`);
   db.exec('BEGIN IMMEDIATE');
   try {
     if (version < 2) {
@@ -75,7 +75,7 @@ export function migrate(db: DatabaseSync): boolean {
     );
     CREATE INDEX lookups_by_relation ON field_lookups(relation_field_id);
     CREATE INDEX lookups_by_target ON field_lookups(target_field_id);`);
-    for (const row of db.prepare('SELECT id FROM tables').all()) {
+    if (version < 7) for (const row of db.prepare('SELECT id FROM tables').all()) {
       const id = row['id'] as string;
       const fields = db.prepare('SELECT definition_json FROM fields WHERE table_id = ? ORDER BY position').all(id)
         .map(row => JSON.parse(row['definition_json'] as string) as Field);
@@ -83,7 +83,8 @@ export function migrate(db: DatabaseSync): boolean {
         .map(row => (JSON.parse(row['config_json'] as string) as { query: ViewQuery }).query);
       syncQueryIndexes(db, { id, fields }, queries);
     }
-    db.exec('PRAGMA user_version = 7; COMMIT;');
+    db.exec(`UPDATE views SET config_json = json_set(config_json, '$.rowHeight', 36, '$.frozenColumns', 0);
+      PRAGMA user_version = 8; COMMIT;`);
     return version === 0;
   } catch (error) {
     db.exec('ROLLBACK');

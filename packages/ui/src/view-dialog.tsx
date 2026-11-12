@@ -1,23 +1,27 @@
 import React, { useEffect, useState } from 'react';
-import type { GridView, SortRule, Table, ViewColumn } from '../../contracts/src/index.js';
+import type { GridView, RowHeight, SortRule, Table, ViewColumn } from '../../contracts/src/index.js';
 import type { WorkspaceApi } from '../../client/src/http-client.js';
 import { Dialog } from './dialog.js';
 import { QueryEditor } from './query-editor.js';
 import { filterDraft, filterValue } from './filter-draft.js';
 
 export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, onSaved }: {
-  kind: 'create' | 'edit' | 'delete' | 'query'; view: GridView; search: string; table: Table; api: WorkspaceApi;
+  kind: 'create' | 'edit' | 'delete' | 'query' | 'display'; view: GridView; search: string; table: Table; api: WorkspaceApi;
   setDirty(value: boolean): void; onClose(): void; onSaved(view: GridView | undefined): void;
 }) {
   const [name, setName] = useState(kind === 'create' ? 'New view' : view.name);
   const [savedSearch, setSavedSearch] = useState(search);
   const [columns, setColumns] = useState<ViewColumn[]>(view.columns);
+  const [rowHeight, setRowHeight] = useState<RowHeight>(view.rowHeight);
+  const [frozenColumns, setFrozenColumns] = useState(view.frozenColumns);
   const [filter, setFilter] = useState(() => filterDraft(view.query.filter, table.fields));
   const [sort, setSort] = useState<SortRule[]>(view.query.sort ?? []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const deleting = kind === 'delete';
   const queryOnly = kind === 'query';
+  const displayOnly = kind === 'display';
+  const visibleCount = columns.filter(column => !column.hidden).length;
   const fields = new Map(table.fields.map(field => [field.id, field]));
   useEffect(() => () => setDirty(false), [setDirty]);
   const move = (index: number, delta: number) => {
@@ -26,7 +30,7 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
     setColumns(next);
     setDirty(true);
   };
-  return <Dialog title={kind === 'create' ? 'Create view' : deleting ? 'Delete view' : queryOnly ? 'Filter and sort' : 'View settings'} onClose={onClose} busy={busy} wide={!deleting}>
+  return <Dialog title={kind === 'create' ? 'Create view' : deleting ? 'Delete view' : queryOnly ? 'Filter and sort' : displayOnly ? 'Display settings' : 'View settings'} onClose={onClose} busy={busy} wide={!deleting}>
     <form onChange={() => setDirty(true)} onKeyDown={event => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's' && !event.nativeEvent.isComposing) {
         event.preventDefault();
@@ -40,20 +44,32 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
       setError(undefined);
       void (async () => {
         let result: GridView | undefined;
-        const config = { name, columns, query: { filter: filterValue(filter, table.fields), sort, search: savedSearch } };
+        const display = { columns, rowHeight, frozenColumns: Math.min(frozenColumns, visibleCount) };
+        const config = { name, ...display, query: { filter: filterValue(filter, table.fields), sort, search: savedSearch } };
         if (deleting) await api.deleteView(table.id, view.id, view.version);
         else if (kind === 'create') result = await api.createView(table.id, config);
-        else result = await api.updateView(table.id, view.id, { ...(queryOnly ? { query: config.query } : config), expectedVersion: view.version });
+        else result = await api.updateView(table.id, view.id, { ...(queryOnly ? { query: config.query } : displayOnly ? display : config), expectedVersion: view.version });
         setDirty(false);
         onSaved(result);
       })().catch(error => { setError(error instanceof Error ? error.message : 'The view could not be saved.'); setBusy(false); });
     }}>
       {deleting ? <p>Delete <strong>{view.name}</strong>? Its records remain in the table.</p> : <fieldset disabled={busy}>
-        {!queryOnly && <label className="form-field">View name<input autoFocus required maxLength={200} value={name} onChange={event => setName(event.target.value)} /></label>}
-        <label className="form-field">Saved search<input value={savedSearch} onChange={event => setSavedSearch(event.target.value)} /></label>
+        {!queryOnly && !displayOnly && <label className="form-field">View name<input autoFocus required maxLength={200} value={name} onChange={event => setName(event.target.value)} /></label>}
+        {!displayOnly && <><label className="form-field">Saved search<input value={savedSearch} onChange={event => setSavedSearch(event.target.value)} /></label>
         <QueryEditor fields={table.fields} filter={filter} sort={sort}
-          onFilter={value => { setFilter(value); setDirty(true); }} onSort={value => { setSort(value); setDirty(true); }} />
-        {!queryOnly && <><h3>Columns</h3>
+          onFilter={value => { setFilter(value); setDirty(true); }} onSort={value => { setSort(value); setDirty(true); }} /></>}
+        {!queryOnly && <><h3>Display</h3>
+        <div className="form-row">
+          <label className="form-field">Row density<select aria-label="Row density" value={rowHeight} onChange={event => setRowHeight(Number(event.target.value) as RowHeight)}>
+            <option value={36}>Compact</option><option value={48}>Comfortable</option><option value={64}>Spacious</option>
+          </select></label>
+          <label className="form-field">Frozen columns<select aria-label="Frozen columns" value={Math.min(frozenColumns, visibleCount)} onChange={event => setFrozenColumns(Number(event.target.value))}>
+            <option value={0}>None</option>{Array.from({ length: visibleCount }, (_, index) => <option key={index + 1} value={index + 1}>
+              {index === 0 ? 'First column' : `First ${index + 1} columns`}</option>)}
+          </select></label>
+        </div>
+        <p className="form-note">Keep leading columns visible while you scroll horizontally. These settings apply only to this view.</p>
+        <h3>Columns</h3>
         <p className="form-note">Choose the fields and their order in this view. Hidden fields remain in each record.</p>
         <div>{columns.map((column, index) => {
           const field = fields.get(column.fieldId)!;

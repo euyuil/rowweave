@@ -167,6 +167,7 @@ export interface ViewColumn {
 }
 
 export type ViewQuery = Pick<RecordQuery, 'filter' | 'sort' | 'search'>;
+export type RowHeight = 36 | 48 | 64;
 
 export interface GridView {
   id: string;
@@ -175,12 +176,16 @@ export interface GridView {
   version: number;
   query: ViewQuery;
   columns: ViewColumn[];
+  rowHeight: RowHeight;
+  frozenColumns: number;
 }
 
 export interface ViewCreate {
   name: string;
   query?: ViewQuery;
   columns?: ViewColumn[];
+  rowHeight?: RowHeight;
+  frozenColumns?: number;
 }
 
 export interface ViewUpdate extends Partial<ViewCreate> {

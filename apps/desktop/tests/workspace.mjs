@@ -14,6 +14,7 @@ import { verifyLookupWorkflow } from './lookup-workflow.mjs';
 import { verifyCsvWorkflow } from './csv-workflow.mjs';
 import { verifySummaryWorkflow } from './summary-workflow.mjs';
 import { verifyColumnWorkflow } from './column-workflow.mjs';
+import { verifyDisplayWorkflow } from './display-workflow.mjs';
 
 const dataDirectory = await mkdtemp(join(tmpdir(), 'rowweave-workspace-'));
 await mkdir('.artifacts', { recursive: true });
@@ -245,6 +246,7 @@ try {
   await verifyCsvWorkflow(page, application, dataDirectory);
   await verifySummaryWorkflow(page);
   await verifyColumnWorkflow(page);
+  await verifyDisplayWorkflow(page);
   await application.close();
   application = undefined;
   application = await electron.launch({ executablePath, args: packaged ? [] : ['.'],

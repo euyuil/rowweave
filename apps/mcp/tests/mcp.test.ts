@@ -117,7 +117,9 @@ test('MCP discovers all operations and runs versioned schema, records, views and
   } } });
   assert.equal((await json<GridView[]>('views_list', { tableId: table.id })).length, 2);
   assert.deepEqual(await json('views_get', { tableId: table.id, viewId: view.id }), view);
-  view = await json<GridView>('views_update', { tableId: table.id, viewId: view.id, input: { expectedVersion: view.version, name: 'High costs' } });
+  view = await json<GridView>('views_update', { tableId: table.id, viewId: view.id, input: { expectedVersion: view.version, name: 'High costs', rowHeight: 64, frozenColumns: 1 } });
+  assert.equal(view.rowHeight, 64);
+  assert.equal(view.frozenColumns, 1);
   const viewConflict = await call('views_query', { tableId: table.id, viewId: view.id, query: { expectedViewVersion: view.version - 1 } });
   assert.equal(viewConflict.isError, true);
   assert.equal(JSON.parse(text(viewConflict)).error.code, 'VIEW_CONFLICT');
