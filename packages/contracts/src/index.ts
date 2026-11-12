@@ -6,7 +6,7 @@ export interface SelectOption {
   color?: string;
 }
 
-export type FieldType = 'text' | 'multiline' | 'number' | 'checkbox' | 'date' | 'datetime' | 'singleSelect' | 'multiSelect';
+export type FieldType = 'text' | 'multiline' | 'number' | 'checkbox' | 'date' | 'datetime' | 'singleSelect' | 'multiSelect' | 'relation';
 
 export interface Field {
   id: string;
@@ -18,6 +18,7 @@ export interface Field {
   numberFormat?: 'decimal' | 'currency' | 'percent';
   precision?: number;
   currency?: string;
+  relation?: { tableId: string; multiple: boolean };
 }
 
 export interface Table {
@@ -53,6 +54,7 @@ export interface FieldCreate extends SchemaWrite {
   numberFormat?: Field['numberFormat'];
   precision?: number;
   currency?: string;
+  relation?: Field['relation'];
 }
 
 export type FieldUpdate = SchemaWrite & Partial<Omit<FieldCreate, 'expectedVersion' | 'precision'>> & { precision?: number | null };
@@ -73,10 +75,13 @@ export interface ConversionPreview {
   issues: Array<{ recordId: string; message: string }>;
 }
 
+export interface RecordLink { id: string; label: string }
+
 export interface RowRecord {
   id: string;
   version: number;
   values: Record<string, CellValue>;
+  links?: Record<string, RecordLink[]>;
 }
 
 export interface RecordPage {
@@ -103,6 +108,7 @@ export interface SortRule {
 }
 
 export interface RecordQuery {
+  recordIds?: string[];
   offset?: number;
   limit?: number;
   filter?: FilterGroup;

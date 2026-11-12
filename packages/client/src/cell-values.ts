@@ -1,15 +1,9 @@
 import type { CellValue, Field } from '../../contracts/src/index.js';
+import { fieldText } from '../../core/src/field-display.js';
 
 const numberFormats = new WeakMap<Field, Intl.NumberFormat>();
 
-export function cellText(field: Field, value: CellValue | undefined): string {
-  if (value === null || value === undefined) return '';
-  if (field.type === 'singleSelect') return field.options!.find(option => option.id === value)!.name;
-  if (field.type === 'multiSelect') {
-    return JSON.stringify((value as string[]).map(id => field.options!.find(option => option.id === id)!.name));
-  }
-  return String(value);
-}
+export const cellText = fieldText;
 
 export function cellDisplay(field: Field, value: CellValue | undefined): string {
   if (field.type === 'number' && typeof value === 'number') {

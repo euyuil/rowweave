@@ -17,7 +17,7 @@ export function filterValue(group: GroupDraft, fields: Field[]): FilterGroup {
     if (operator === 'isEmpty' || operator === 'isNotEmpty') return { fieldId, operator };
     const field = fields.find(field => field.id === fieldId)!;
     return { fieldId, operator, value: operator === 'contains' ? value as string ?? ''
-      : fromFormValue({ ...field, required: false }, value) };
+      : fromFormValue({ ...field, required: false, ...(field.relation ? { relation: { ...field.relation, multiple: true } } : {}) }, value) };
   }) };
 }
 
@@ -26,7 +26,7 @@ export function filterCount(group: GroupDraft): number {
 }
 
 export function filterOperators(field: Field): FilterOperator[] {
-  const operators: FilterOperator[] = field.type === 'multiSelect' ? ['hasAny', 'eq', 'neq'] : ['eq', 'neq'];
+  const operators: FilterOperator[] = ['multiSelect', 'relation'].includes(field.type) ? ['hasAny', 'eq', 'neq'] : ['eq', 'neq'];
   if (field.type === 'text' || field.type === 'multiline') operators.push('contains');
   if (field.type === 'number' || field.type === 'date' || field.type === 'datetime') operators.push('gt', 'gte', 'lt', 'lte');
   return [...operators, 'isEmpty', 'isNotEmpty'];

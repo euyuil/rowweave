@@ -69,7 +69,8 @@ function FilterRule({ fields, rule, onChange, path }: { fields: Field[]; rule: R
   const operators = filterOperators(field);
   const empty = rule.operator === 'isEmpty' || rule.operator === 'isNotEmpty';
   const ordered = ['gt', 'gte', 'lt', 'lte'].includes(rule.operator);
-  const nullOnly = field.type === 'multiSelect' && (rule.operator === 'eq' || rule.operator === 'neq');
+  const collection = field.type === 'multiSelect' || field.type === 'relation';
+  const nullOnly = collection && (rule.operator === 'eq' || rule.operator === 'neq');
   return <div className="filter-rule" role="group" aria-label={`Filter ${path}`}>
     <select aria-label="Filter field" value={field.id} onChange={event => onChange({ fieldId: event.target.value, operator: 'isNotEmpty', value: null })}>
       {fields.map(item => <option value={item.id} key={item.id}>{item.name}</option>)}
@@ -77,10 +78,11 @@ function FilterRule({ fields, rule, onChange, path }: { fields: Field[]; rule: R
     <select aria-label="Filter operator" value={rule.operator} onChange={event => {
       const operator = event.target.value as FilterOperator;
       const value = operator === 'hasAny' ? Array.isArray(rule.value) ? rule.value : []
-        : field.type === 'multiSelect' ? null : operator === 'contains' ? rule.value ?? '' : rule.value;
+        : collection ? null : operator === 'contains' ? rule.value ?? '' : rule.value;
       onChange({ ...rule, operator, value });
-    }}>{operators.map(operator => <option value={operator} key={operator}>{field.type === 'multiSelect' && (operator === 'eq' || operator === 'neq')
+    }}>{operators.map(operator => <option value={operator} key={operator}>{collection && (operator === 'eq' || operator === 'neq')
       ? operator === 'eq' ? 'is not set (null)' : 'is set (not null)' : operatorNames[operator]}</option>)}</select>
-    {!empty && !nullOnly && <FieldInput field={{ ...field, name: 'Value', required: ordered }} value={rule.value} onChange={value => onChange({ ...rule, value })} />}
+    {!empty && !nullOnly && <FieldInput field={{ ...field, name: 'Value', required: ordered,
+      ...(field.relation ? { relation: { ...field.relation, multiple: true } } : {}) }} value={rule.value} onChange={value => onChange({ ...rule, value })} />}
   </div>;
 }

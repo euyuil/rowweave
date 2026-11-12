@@ -8,6 +8,7 @@ import type { CheckedQuery } from '../../core/src/record-query.js';
 import { defaultView, reconcileView } from '../../core/src/grid-views.js';
 import { migrate } from './migrations.js';
 import { querySql } from './query-sql.js';
+import { Relations } from './relations.js';
 
 export interface SeedOptions {
   rows: number;
@@ -45,6 +46,7 @@ const selectTables = `SELECT t.*,
 
 export class SqliteRecordStore implements RecordStore {
   private readonly db: DatabaseSync;
+  private readonly relations: Relations;
 
   constructor(path: string, seed: SeedOptions | null = null) {
     if (seed && (!Number.isSafeInteger(seed.rows) || seed.rows < 1 || seed.rows > 100_000 ||
@@ -53,6 +55,7 @@ export class SqliteRecordStore implements RecordStore {
     }
     if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
     this.db = new DatabaseSync(path);
+    this.relations = new Relations(this.db);
     try {
       this.db.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;');
       const fresh = migrate(this.db);
@@ -148,6 +151,7 @@ export class SqliteRecordStore implements RecordStore {
         throw new ServiceError('SCHEMA_CONFLICT', 'The table schema changed. Reload it before trying again.', 409);
       }
       const before = this.getTable(table.id);
+      this.relations.validateSchema(table, before);
       if (validateRecord) {
         for (const row of this.db.prepare('SELECT id, version, values_json FROM records WHERE table_id = ?').iterate(table.id)) {
           validateRecord(this.decode(row as unknown as StoredRecord));
@@ -161,9 +165,11 @@ export class SqliteRecordStore implements RecordStore {
           .run(`$."${field.id}"`, table.id, `$."${field.id}"`);
       }
       this.insertFields(table);
+      this.relations.syncFields(table);
       this.syncViews(table);
-      this.db.prepare('UPDATE tables SET name = ?, primary_field_id = ?, version = version + 1, revision = revision + 1 WHERE id = ?')
+      this.db.prepare('UPDATE tables SET name = ?, primary_field_id = ?, version = version + 1 WHERE id = ?')
         .run(table.name, table.primaryFieldId, table.id);
+      this.relations.bumpRevision(table.id);
       return this.getTable(table.id);
     });
   }
@@ -171,6 +177,7 @@ export class SqliteRecordStore implements RecordStore {
   deleteTable(id: string, expectedVersion: number): void {
     this.transaction(() => {
       this.checkSchema(id, expectedVersion);
+      this.relations.deleteTable(id);
       this.db.prepare('DELETE FROM tables WHERE id = ?').run(id);
     });
   }
@@ -221,15 +228,18 @@ export class SqliteRecordStore implements RecordStore {
       }
       this.db.prepare('UPDATE fields SET definition_json = ? WHERE id = ? AND table_id = ?')
         .run(JSON.stringify(field), field.id, id);
-      this.db.prepare('UPDATE tables SET version = version + 1, revision = revision + 1 WHERE id = ?').run(id);
+      this.db.prepare('UPDATE tables SET version = version + 1 WHERE id = ?').run(id);
+      this.relations.bumpRevision(id);
       return this.getTable(id);
     });
   }
 
   readPage(offset: number, limit: number, id = tableId): RecordPage {
-    const rows = this.db.prepare(`SELECT id, version, values_json FROM records WHERE table_id = ?
-      ORDER BY position LIMIT ? OFFSET ?`).all(id, limit, offset) as unknown as StoredRecord[];
-    return { offset, records: rows.map(row => this.decode(row)) };
+    return this.transaction(() => {
+      const rows = this.db.prepare(`SELECT id, version, values_json FROM records WHERE table_id = ?
+        ORDER BY position LIMIT ? OFFSET ?`).all(id, limit, offset) as unknown as StoredRecord[];
+      return { offset, records: this.relations.hydrate(this.getTable(id), rows.map(row => this.decode(row))) };
+    }, 'DEFERRED');
   }
 
   queryRecords(table: Table, query: CheckedQuery, view?: GridView): QueryPage {
@@ -242,15 +252,21 @@ export class SqliteRecordStore implements RecordStore {
       if (query.expectedRevision !== undefined && query.expectedRevision !== current.revision) {
         throw new ServiceError('DATA_CHANGED', 'The table changed between pages. Refresh the query before continuing.', 409);
       }
-      const sql = querySql(current, query);
+      const targets = new Map(current.fields.filter(field => field.type === 'relation').map(field => {
+        const target = this.getTable(field.relation!.tableId);
+        return [target.id, target];
+      }));
+      const sql = querySql(current, query, targets);
       const total = this.db.prepare(`SELECT COUNT(*) AS total FROM records r WHERE ${sql.where}`)
         .get(sql.countParameters)!['total'] as number;
       const rows = this.db.prepare(`SELECT r.id, r.version, r.values_json FROM records r WHERE ${sql.where}
         ORDER BY ${sql.order} LIMIT :limit OFFSET :offset`)
         .all({ ...sql.parameters, ':limit': query.limit, ':offset': query.offset }) as unknown as StoredRecord[];
-      const records = rows.map(row => {
-        const record = this.decode(row);
-        if (query.fields) record.values = Object.fromEntries(query.fields.map(id => [id, record.values[id] ?? null]));
+      const output = query.fields ? { ...current, fields: current.fields.filter(field => query.fields!.includes(field.id)) } : current;
+      const records = this.relations.hydrate(output, rows.map(row => this.decode(row))).map(record => {
+        if (query.fields) {
+          record.values = Object.fromEntries(query.fields.map(id => [id, record.values[id] ?? null]));
+        }
         return record;
       });
       return { offset: query.offset, records, total, revision: current.revision, schemaVersion: current.version };
@@ -312,6 +328,10 @@ export class SqliteRecordStore implements RecordStore {
   }
 
   getRecord(id: string, recordId: string): RowRecord {
+    return this.transaction(() => this.relations.hydrate(this.getTable(id), [this.readRecord(id, recordId)])[0]!, 'DEFERRED');
+  }
+
+  private readRecord(id: string, recordId: string): RowRecord {
     const row = this.db.prepare('SELECT id, version, values_json FROM records WHERE table_id = ? AND id = ?')
       .get(id, recordId) as unknown as StoredRecord | undefined;
     if (!row) throw new ServiceError('RECORD_NOT_FOUND', `Record ${recordId} does not exist.`, 404);
@@ -327,10 +347,11 @@ export class SqliteRecordStore implements RecordStore {
       const records = values.map(values => {
         const id = randomUUID();
         insert.run(id, table.id, position++, JSON.stringify(values));
+        this.relations.write(table, id, values);
         return { id, version: 1, values };
       });
-      this.db.prepare('UPDATE tables SET revision = revision + 1 WHERE id = ?').run(table.id);
-      return { records };
+      this.relations.bumpRevision(table.id);
+      return { records: this.relations.hydrate(table, records) };
     });
   }
 
@@ -338,13 +359,14 @@ export class SqliteRecordStore implements RecordStore {
     return this.transaction(() => {
       const remove = this.db.prepare('DELETE FROM records WHERE table_id = ? AND id = ?');
       for (const item of records) {
-        const record = this.getRecord(id, item.id);
+        const record = this.readRecord(id, item.id);
         if (record.version !== item.expectedVersion) {
           throw new ServiceError('VERSION_CONFLICT', `Record ${item.id} changed. Reload before deleting again.`, 409);
         }
-        remove.run(id, item.id);
       }
-      this.db.prepare('UPDATE tables SET revision = revision + 1 WHERE id = ?').run(id);
+      this.relations.deleteRecords(records.map(record => record.id));
+      for (const item of records) remove.run(id, item.id);
+      this.relations.bumpRevision(id);
       return { deleted: records.map(record => record.id) };
     });
   }
@@ -354,6 +376,7 @@ export class SqliteRecordStore implements RecordStore {
     const write = this.db.prepare('UPDATE records SET values_json = ?, version = version + 1 WHERE id = ? AND table_id = ?');
     return this.transaction(() => {
       this.checkSchema(id, schemaVersion);
+      const table = this.getTable(id);
       const records = updates.map(update => {
         const stored = read.get(update.id, id) as unknown as StoredRecord | undefined;
         if (!stored) throw new ServiceError('RECORD_NOT_FOUND', `Record ${update.id} does not exist.`, 404);
@@ -364,10 +387,11 @@ export class SqliteRecordStore implements RecordStore {
         record.values = { ...record.values, ...update.values };
         record.version++;
         write.run(JSON.stringify(record.values), record.id, id);
+        this.relations.write(table, record.id, update.values);
         return record;
       });
-      this.db.prepare('UPDATE tables SET revision = revision + 1 WHERE id = ?').run(id);
-      return { records };
+      this.relations.bumpRevision(id);
+      return { records: this.relations.hydrate(table, records) };
     });
   }
 

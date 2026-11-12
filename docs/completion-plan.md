@@ -54,6 +54,8 @@ Each item may need more than one focused PR. Do not batch completed PRs while wa
   - [x] Desktop nested AND/OR filter builder with typed operands and ordered multi-field sorting (round-trip and offscreen combined-query tests).
   - [x] Typed cell editors, invalid-input retention, keyboard commit/cancel/save, null preservation, and atomic selection clearing beyond the cache (offscreen desktop and client regression tests).
 - [ ] Relations, lookups, record picker, and record details/navigation.
+  - [x] Single/multiple linked records, transactional reference constraints, primary labels, dependency-aware revisions, searchable/paged desktop picker, and linked details (SQLite/HTTP/client and offscreen desktop workflows).
+  - [ ] Read-only lookups with field dependency checks and desktop configuration.
 - [ ] CSV import/export through service and desktop.
 - [ ] SDK, CLI, HTTP reference, and standalone/remote connection workflow.
 - [ ] MCP protocol server and agent usage Skills.

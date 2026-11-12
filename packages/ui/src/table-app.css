@@ -101,3 +101,15 @@
 .typed-cell-editor .clear-value { border: 0; padding: 0; }
 .typed-cell-editor button:disabled { opacity: .5; }
 .cell-editor-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.relation-input { min-width: 260px; font-weight: 400; white-space: normal; }
+.relation-input > input { width: 100%; box-sizing: border-box; }
+.linked-records { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.linked-records > div { display: flex; max-width: 100%; }
+.linked-records button { padding: 5px 8px; overflow-wrap: anywhere; }
+.relation-results { max-height: 180px; overflow-y: auto; margin: 8px 0; }
+.relation-results label { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 13px; }
+.relation-pages { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.relation-pages button { padding: 5px 8px; font-size: 12px; }
+.linked-details { margin-top: 12px; padding: 12px; background: #f0f4fb; max-height: 220px; overflow-y: auto; font-size: 12px; }
+.linked-details dt { color: #69768b; }
+.linked-details dd { margin: 3px 0 10px; white-space: pre-wrap; overflow-wrap: anywhere; }

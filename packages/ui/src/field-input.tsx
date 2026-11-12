@@ -1,15 +1,18 @@
 import React, { useId } from 'react';
-import type { Field } from '../../contracts/src/index.js';
+import type { Field, RecordLink } from '../../contracts/src/index.js';
 import type { FormValue } from './field-input-values.js';
+import { RelationInput } from './relation-input.js';
 
 export function FieldInput({ field, value, onChange, disabled = false }: {
-  field: Field; value: FormValue; onChange(value: FormValue): void; disabled?: boolean;
+  field: Field; value: FormValue; onChange(value: FormValue, links?: RecordLink[]): void; disabled?: boolean;
 }) {
   const id = useId();
   const common = { id, disabled, required: !!field.required };
   const scalar = (value ?? '') as string;
   let input;
-  if (field.type === 'singleSelect' || field.type === 'checkbox') {
+  if (field.type === 'relation') {
+    input = <RelationInput key={field.relation!.tableId} id={id} field={field} value={value as string[] | null} disabled={disabled} onChange={onChange} />;
+  } else if (field.type === 'singleSelect' || field.type === 'checkbox') {
     input = <select {...common} value={scalar} onChange={event => onChange(event.target.value || null)}>
       <option value="">Not set</option>
       {field.type === 'checkbox' ? <><option value="true">Checked</option><option value="false">Unchecked</option></>

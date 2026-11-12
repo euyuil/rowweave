@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useLayoutEffect, useRef, useState } from 'react';
 import type { GridCell, ProvideEditorComponent, TextCell } from '@glideapps/glide-data-grid';
-import type { CellValue, Field } from '../../contracts/src/index.js';
+import type { CellValue, Field, RecordLink } from '../../contracts/src/index.js';
 import { sameValue } from '../../client/src/cell-values.js';
 import { FieldInput } from './field-input.js';
 import { fromFormValue, toFormValue, type FormValue } from './field-input-values.js';
@@ -12,7 +12,7 @@ interface EditorBridge {
   save(): void;
   setDirty(value: boolean): void;
   register(handle: EditorHandle | undefined): void;
-  commit(row: number, field: Field, value: CellValue): string | undefined;
+  commit(row: number, field: Field, value: CellValue, links?: RecordLink[]): string | undefined;
 }
 export const EditorContext = createContext<EditorBridge | undefined>(undefined);
 
@@ -23,6 +23,7 @@ export const CellEditor: ProvideEditorComponent<GridCell> = ({ value: gridValue,
   const input = useRef<HTMLTextAreaElement>(null);
   const composing = useRef(false);
   const closed = useRef(false);
+  const links = useRef<RecordLink[]>();
   const text = ['text', 'multiline', 'number'].includes(value.field.type);
   const initial = useRef<FormValue>(text ? value.copyData ?? value.data : toFormValue(value.field, value.rawValue));
   const [draft, setDraft] = useState<FormValue>(text ? value.data : initial.current);
@@ -36,7 +37,7 @@ export const CellEditor: ProvideEditorComponent<GridCell> = ({ value: gridValue,
     if (commit && !sameValue(current.draft, initial.current)) {
       try {
         const parsed = fromFormValue(current.value.field, current.draft);
-        const failure = bridge.commit(current.value.row, current.value.field, parsed);
+        const failure = bridge.commit(current.value.row, current.value.field, parsed, links.current);
         if (failure) { setError(failure); return false; }
       } catch (failure) { setError(failure instanceof Error ? failure.message : 'Enter a valid value.'); return false; }
     }
@@ -56,7 +57,8 @@ export const CellEditor: ProvideEditorComponent<GridCell> = ({ value: gridValue,
       else input.current.setSelectionRange(input.current.value.length, input.current.value.length);
     } else root.current!.querySelector<HTMLElement>('input, select, textarea')!.focus();
   }, [isHighlighted]);
-  const change = (next: FormValue) => {
+  const change = (next: FormValue, labels?: RecordLink[]) => {
+    links.current = labels;
     setDraft(next);
     setError(undefined);
     bridge.setDirty(!sameValue(next, initial.current));
@@ -73,6 +75,8 @@ export const CellEditor: ProvideEditorComponent<GridCell> = ({ value: gridValue,
         event.stopPropagation();
       } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
         event.preventDefault(); event.stopPropagation(); bridge.save();
+      } else if (event.key === 'Enter' && event.target instanceof HTMLButtonElement) {
+        event.stopPropagation();
       } else if (event.key === 'Escape' || event.key === 'Tab' || (event.key === 'Enter' && !event.shiftKey)) {
         event.preventDefault(); event.stopPropagation();
         finish(event.key !== 'Escape', event.key === 'Tab' ? [event.shiftKey ? -1 : 1, 0] : event.key === 'Enter' ? [0, 1] : [0, 0]);
