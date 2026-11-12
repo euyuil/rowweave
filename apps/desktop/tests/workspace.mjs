@@ -38,6 +38,123 @@ async function create(name) {
 async function choose(name) {
   await page.getByRole('navigation', { name: 'Tables', exact: true }).getByRole('button', { name, exact: true }).click();
 }
+async function recordLifecycle() {
+  const table = await page.evaluate(async () => {
+    const connection = await window.rowweave.connection();
+    const headers = { Authorization: `Bearer ${connection.token}`, 'Content-Type': 'application/json' };
+    let table = (await fetch(`${connection.url}/tables`, { headers }).then(r => r.json())).find(table => table.name === 'Tasks');
+    for (const field of [
+      { name: 'Notes', type: 'multiline' }, { name: 'Cost', type: 'number', required: true, defaultValue: 0 },
+      { name: 'Done', type: 'checkbox', required: true, defaultValue: false }, { name: 'Due', type: 'date' },
+      { name: 'Time', type: 'datetime' },
+      { name: 'Status', type: 'singleSelect', options: [{ name: 'In progress' }, { name: 'Complete' }] },
+      { name: 'Tags', type: 'multiSelect', options: [{ name: '中文' }, { name: 'Review' }] },
+    ]) {
+      const response = await fetch(`${connection.url}/tables/${table.id}/fields`, {
+        method: 'POST', headers, body: JSON.stringify({ ...field, expectedVersion: table.version }),
+      });
+      if (!response.ok) throw new Error('Could not prepare the typed record fixture.');
+      table = await response.json();
+    }
+    return table;
+  });
+  const field = name => table.fields.find(field => field.name === name);
+  const records = () => page.evaluate(async id => {
+    const connection = await window.rowweave.connection();
+    const result = await fetch(`${connection.url}/tables/${id}/records?offset=0&limit=10`, {
+      headers: { Authorization: `Bearer ${connection.token}` },
+    }).then(r => r.json());
+    return result.records;
+  }, table.id);
+  const externalChange = record => page.evaluate(async ({ id, record, fieldId }) => {
+    const connection = await window.rowweave.connection();
+    const response = await fetch(`${connection.url}/tables/${id}/records`, {
+      method: 'PATCH', headers: { Authorization: `Bearer ${connection.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify([{ id: record.id, expectedVersion: record.version, values: { [fieldId]: 'External name' } }]),
+    });
+    if (!response.ok) throw new Error('Could not prepare the concurrent record update.');
+  }, { id: table.id, record, fieldId: table.primaryFieldId });
+  const reload = async () => {
+    await page.getByRole('button', { name: 'Reload', exact: true }).click();
+    await page.waitForFunction(() => ![...document.querySelectorAll('button')].find(button => button.textContent === 'Reload').disabled);
+  };
+  const selectAll = async () => {
+    const bounds = await page.locator('canvas').first().boundingBox();
+    await page.mouse.click(bounds.x + 15, bounds.y + 20);
+    await page.getByText('2 selected', { exact: true }).waitFor();
+  };
+  const selectRow = async row => {
+    const bounds = await page.locator('canvas').first().boundingBox();
+    await page.mouse.click(bounds.x + 15, bounds.y + 58 + row * 36);
+  };
+  await choose('Tasks');
+  await page.getByText('0 records · 8 fields', { exact: true }).waitFor();
+  await page.getByRole('button', { name: '+ New record', exact: true }).click();
+  await page.getByLabel('Name', { exact: true }).fill('Ship the workspace 🌱');
+  await page.getByLabel('Notes', { exact: true }).fill('Line one\n中文第二行');
+  assert.equal(await page.getByLabel('Cost *', { exact: true }).inputValue(), '0');
+  assert.equal(await page.getByLabel('Done *', { exact: true }).inputValue(), 'false');
+  await page.getByLabel('Due', { exact: true }).fill('2026-11-30');
+  await page.getByLabel('Time (UTC)', { exact: true }).fill('2026-11-12T09:30:45.123');
+  await page.getByLabel('Status', { exact: true }).selectOption({ label: 'In progress' });
+  await page.getByLabel('Tags', { exact: true }).selectOption([{ label: '中文' }, { label: 'Review' }]);
+  await page.screenshot({ path: '.artifacts/desktop-record-form.png' });
+  await page.getByRole('button', { name: 'Create record', exact: true }).click();
+  await page.getByText('1 record · 8 fields', { exact: true }).waitFor();
+  const [created] = await records();
+  assert.equal(created.values[field('Cost').id], 0);
+  assert.equal(created.values[field('Done').id], false);
+  assert.equal(created.values[field('Time').id], '2026-11-12T09:30:45.123Z');
+  assert.deepEqual(created.values[field('Tags').id], field('Tags').options.map(option => option.id));
+  await selectRow(0);
+  await page.getByRole('button', { name: 'Open record', exact: true }).click();
+  assert.equal(await page.getByLabel('Notes', { exact: true }).inputValue(), 'Line one\n中文第二行');
+  await page.getByLabel('Cost *', { exact: true }).fill('not a number');
+  await page.getByRole('button', { name: 'Save record', exact: true }).click();
+  await page.getByRole('dialog').getByRole('alert').filter({ hasText: 'decimal number' }).waitFor();
+  assert.equal((await records())[0].values[field('Cost').id], 0);
+  await page.getByLabel('Cost *', { exact: true }).fill('12.5');
+  await page.getByRole('button', { name: 'Clear Notes', exact: true }).click();
+  await page.keyboard.press('Control+s');
+  await page.getByRole('dialog').waitFor({ state: 'detached' });
+  assert.equal((await records())[0].values[field('Notes').id], null);
+  assert.equal((await records())[0].values[field('Cost').id], 12.5);
+  await selectRow(0);
+  await page.getByRole('button', { name: 'Duplicate', exact: true }).click();
+  await page.getByLabel('Name', { exact: true }).fill('Copied task');
+  await page.getByRole('button', { name: 'Create record', exact: true }).click();
+  await page.getByText('2 records · 8 fields', { exact: true }).waitFor();
+  const copied = (await records())[1];
+  assert.notEqual(copied.id, created.id);
+  assert.deepEqual(copied.values[field('Tags').id], created.values[field('Tags').id]);
+  await selectRow(0);
+  await page.getByRole('button', { name: 'Open record', exact: true }).click();
+  await page.getByLabel('Name', { exact: true }).fill('Keep conflict draft');
+  await externalChange((await records())[0]);
+  await page.getByRole('button', { name: 'Save record', exact: true }).click();
+  await page.getByRole('dialog').getByRole('alert').filter({ hasText: 'changed' }).waitFor();
+  assert.equal(await page.getByLabel('Name', { exact: true }).inputValue(), 'Keep conflict draft');
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+  await reload();
+  // Header checkbox selects both records; the delete preview retains their versions.
+  await selectAll();
+  await page.getByRole('button', { name: 'Delete records', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+  assert.equal((await records()).length, 2);
+  await page.screenshot({ path: '.artifacts/desktop-records.png' });
+  await page.getByRole('button', { name: 'Delete records', exact: true }).click();
+  await externalChange((await records())[1]);
+  await page.getByRole('button', { name: 'Delete permanently', exact: true }).click();
+  await page.getByRole('dialog').getByRole('alert').filter({ hasText: 'changed' }).waitFor();
+  assert.equal((await records()).length, 2);
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+  await reload();
+  await selectAll();
+  await page.getByRole('button', { name: 'Delete records', exact: true }).click();
+  await page.getByRole('button', { name: 'Delete permanently', exact: true }).click();
+  await page.getByText('0 records · 8 fields', { exact: true }).waitFor();
+  assert.deepEqual(await records(), []);
+}
 try {
   if (packaged) {
     const manifest = JSON.parse(await readFile('release/latest.json', 'utf8'));
@@ -104,6 +221,7 @@ try {
   await page.getByRole('button', { name: 'Delete table', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
   assert.equal((await tables()).length, 2);
+  await recordLifecycle();
   await application.close();
   application = undefined;
   application = await electron.launch({ executablePath, args: packaged ? [] : ['.'],
@@ -129,7 +247,7 @@ try {
   await launch();
   assert.deepEqual(await tables(), []);
   assert.deepEqual(errors, []);
-  console.log('Workspace lifecycle passed: fresh empty workspace, create/rename/switch, draft and form guards, deletion confirmation, and restart persistence.');
+  console.log('Workspace lifecycle passed: table management, typed record create/edit/duplicate/delete, validation, conflict retention, draft/form guards, confirmations, and restart persistence.');
 } catch (error) {
   console.error('Renderer errors:', errors);
   if (page && !page.isClosed()) await page.screenshot({ path: '.artifacts/desktop-workspace-failure.png' });

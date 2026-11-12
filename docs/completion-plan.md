@@ -47,6 +47,7 @@ Each item may need more than one focused PR. Do not batch completed PRs while wa
 - [x] Workspace HTTP client, query-aware bounded cache, drafts keyed by record ID, and bounded draft undo/redo (cross-query, paste, conflict, cancellation, and real HTTP workflow tests).
 - [ ] Desktop workspace navigation and schema/record management.
   - [x] Empty first workspace, table navigation/create/rename/delete, and draft-safe switching (automated desktop lifecycle tests).
+  - [x] Typed record forms, details, duplication, and versioned batch deletion (automated desktop validation/conflict/lifecycle tests).
 - [ ] Typed grid editors, draft undo/redo, views, and clipboard workflows.
 - [ ] Relations, lookups, record picker, and record details/navigation.
 - [ ] CSV import/export through service and desktop.
