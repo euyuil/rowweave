@@ -1,0 +1,3 @@
+- insert:
+    - id: rowweave-tables
+      name: '@rowweave/harness'

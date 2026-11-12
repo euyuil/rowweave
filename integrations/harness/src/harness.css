@@ -1,0 +1,4 @@
+.rowweave-harness { height: 100%; min-height: 0; padding-top: var(--dsh-frame-top-clearance, 0); box-sizing: border-box; }
+.rowweave-harness .rowweave-app { height: 100%; }
+.rowweave-harness .harness-connect { width: min(560px, 100%); margin: auto; padding: 30px; overflow-y: auto; }
+.rowweave-harness .harness-connect p { line-height: 1.6; }

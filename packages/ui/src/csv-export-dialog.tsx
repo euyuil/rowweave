@@ -18,7 +18,8 @@ export function CsvExportDialog({ table, view, search, api, host, onClose }: {
     try {
       const csv = await api.exportCsv(table.id, scope === 'view' ? { viewId: view.id, expectedViewVersion: view.version, search } : {});
       const saved = await host.saveCsv(scope === 'view' ? `${table.name}-${view.name}` : table.name, csv);
-      setStatus(saved ? 'CSV saved.' : 'Save canceled. No file was written.');
+      setStatus(saved === 'download-started' ? 'CSV download started. Check your browser downloads for the file.'
+        : saved ? 'CSV saved.' : 'Save canceled. No file was written.');
     } catch (error) { setError(error instanceof Error ? error.message : 'The CSV could not be saved.'); }
     finally { setBusy(false); }
   };

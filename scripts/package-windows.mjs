@@ -19,7 +19,7 @@ try {
   await cp('dist', join(stage, 'dist'), {
     recursive: true,
     filter: source => !source.split(/[\\/]/).includes('tests') && !source.endsWith('.map') && !source.endsWith('.meta.json')
-      && !/^apps\/mcp(?:\/|$)/.test(relative('dist', source).replaceAll('\\', '/')),
+      && !/^(?:apps\/mcp|integrations\/harness)(?:\/|$)/.test(relative('dist', source).replaceAll('\\', '/')),
   });
   await writeFile(join(stage, 'package.json'), JSON.stringify({
     name: 'rowweave', productName: 'RowWeave', version: manifest.version,

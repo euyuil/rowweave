@@ -1,0 +1,15 @@
+{
+  "name": "@rowweave/harness",
+  "version": "0.1.0",
+  "private": true,
+  "description": "RowWeave tables inside DeepSeek Harness, using an independent RowWeave service.",
+  "type": "module",
+  "engines": { "node": ">=24.22.1 <25", "dsh": "0.2.2-rc.2" },
+  "exports": { ".": "./lib/index.js", "./client": "./lib/client.js", "./cordis.patch.yml": "./cordis.patch.yml", "./package.json": "./package.json" },
+  "files": ["lib", "cordis.patch.yml"],
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": { "platform": "web", "inject": ["@deepseek-ai/dsh-client-ui-renderer", "@deepseek-ai/dsh-client-ui-layout", "@deepseek-ai/dsh-client-ui-sidebar"] }
+  },
+  "repository": { "type": "git", "url": "https://github.com/euyuil/rowweave.git", "directory": "integrations/harness" }
+}
