@@ -161,7 +161,7 @@ export class SqliteRecordStore implements RecordStore {
   }
 
   private scanConversion(table: Table, field: Field, convert: (value: CellValue) => CellValue, apply: boolean): ConversionPreview {
-    const preview: ConversionPreview = { tableId: table.id, fieldId: field.id, schemaVersion: table.version,
+    const preview: ConversionPreview = { tableId: table.id, fieldId: field.id, field, schemaVersion: table.version,
       total: 0, changed: 0, invalid: 0, samples: [], issues: [] };
     const update = this.db.prepare('UPDATE records SET values_json = ?, version = version + 1 WHERE id = ?');
     const rows = this.db.prepare('SELECT id, version, values_json FROM records WHERE table_id = ? ORDER BY position');

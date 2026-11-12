@@ -63,6 +63,7 @@ export interface FieldConversion extends SchemaWrite {
 export interface ConversionPreview {
   tableId: string;
   fieldId: string;
+  field: Field;
   schemaVersion: number;
   total: number;
   changed: number;

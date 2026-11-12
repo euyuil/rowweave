@@ -76,3 +76,15 @@ test('select conversions preserve labels and reject collapsing multiple selected
     field: { name: 'Status', type: 'multiSelect', options: [{ id: 'ready', name: 'Renamed again' }] } });
   assert.deepEqual(service.getRecord(table.id, current.id).values[field.id], ['ready']);
 });
+
+test('conversion preview returns resolved option IDs that can be applied unchanged', t => {
+  const service = new RecordService(fixture(t, null).open());
+  const table = service.createTable({ name: 'Status' });
+  const record = service.createRecords(table.id, [{ values: { [table.primaryFieldId]: 'Ready' } }]).records[0]!;
+  const preview = service.previewConversion(table.id, table.primaryFieldId, { expectedVersion: 1,
+    field: { name: 'Status', type: 'singleSelect', options: [{ name: 'Ready' }] } });
+  const optionId = preview.field.options![0]!.id;
+  assert.equal(preview.samples[0]!.after, optionId);
+  service.applyConversion(table.id, table.primaryFieldId, { expectedVersion: preview.schemaVersion, field: preview.field });
+  assert.equal(service.getRecord(table.id, record.id).values[table.primaryFieldId], optionId);
+});
