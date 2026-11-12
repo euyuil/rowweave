@@ -29,6 +29,21 @@ Environment: Windows 11 x64 10.0.22631, Intel Core i7-8700K (12 logical CPUs), 3
 | Primary-text sort p95 | 69 ms | 1,926 ms | ≤500 ms |
 | Numeric sort p95 | 118 ms | 2,482 ms | ≤500 ms |
 
-The large-table paste and query targets are **not met**. This storage revision uses a table/position index and JSON record values; these filter/sort expressions scan records rather than using field expression indexes. Query optimization and narrower reads for batch editing are the next focused changes. Scrolling and memory are not measured by this `--timings-only` run. None of these targets has been relaxed.
+The baseline **does not meet** the large-table paste and query targets. This storage revision uses a table/position index and JSON record values; these filter/sort expressions scan records rather than using field expression indexes. The follow-up below addresses batch editing; query optimization remains required. Scrolling and memory are not measured by this `--timings-only` run. None of these targets has been relaxed.
 
 Raw local report: `.artifacts/benchmarks/2026-11-12T10-54-35-417Z/results.json`. Package SHA-256: `3be1a6fce9d468e20fa49750825430d00fb4da15ef56bdf37bebbbb8c7c91ede`. Generated reports and databases are excluded from Git; this summary preserves the method and measured limits.
+
+## Batch editing follow-up
+
+Profiling attributed roughly 600 ms of the large paste to nine sequential display-page reads, versus about 50–65 ms to staging drafts. Batch editing now reads up to 500 rows per request without replacing the small display-page cache. It retains complete record values, revision checks, atomic staging, cancellation, and the global four-read limit. No write is retried.
+
+The production package was retimed on isolated copies of both baseline databases, using the same DOM paste path, pending-count frame, and successful-save feedback. Each size used three separate launches. The Harness dependency download had completed before this run.
+
+| Measurement | 10,000 × 20 | 100,000 × 100 |
+| --- | ---: | ---: |
+| Stage 1,000 × 10, range of three trials | 98–110 ms | 412–448 ms |
+| Save that batch, range of three trials | 205–239 ms | 487–980 ms |
+
+Both measured operations meet their targets in all three trials. This focused retest does not replace the final complete candidate run, query fixes, or scrolling/memory verification. TypeScript/build checks, 113 local Node tests, and the complete offscreen desktop workspace workflow passed; the local IPv6-bind restriction still leaves that test to CI.
+
+Raw local report: `.artifacts/batch-edit-timings.json`. The manifest records base revision `cc17f9a8ed23847cb387ff05e05792b11ba58564` with the batch-read working-tree changes. Package SHA-256: `9d9c6c0a8f13711df3d471a620fce4b6eab8d24a1712b5f193be28a9c8a84442`. The final candidate will have its own clean revision and artifact identity.
