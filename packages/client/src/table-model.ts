@@ -1,5 +1,5 @@
 import {
-  maxBatchCells, maxBatchRecords,
+  maxBatchCells, maxBatchRecords, maxPageSize,
   type CellValue, type Field, type QueryPage, type RecordLink, type RowRecord, type Table,
 } from '../../contracts/src/index.js';
 import { parseTextValue, validateValue } from '../../core/src/field-values.js';
@@ -45,6 +45,7 @@ export class TableModel {
   private readonly listeners = new Set<() => void>();
   private readonly pages = new Map<number, QueryPage>();
   private readonly requests = new Map<number, { promise: Promise<QueryPage>; controller: AbortController }>();
+  private readonly batchReads = new Map<AbortController, Promise<QueryPage>>();
   private edits: EditState = { drafts: new Map(), rows: new Map() };
   private undoStack: HistoryEntry[] = [];
   private redoStack: HistoryEntry[] = [];
@@ -86,7 +87,7 @@ export class TableModel {
 
   get cacheStats() {
     return { pages: this.pages.size, rows: [...this.pages.values()].reduce((n, page) => n + page.records.length, 0),
-      inFlight: this.requests.size, historyCells: this.undoStack.reduce((n, entry) => n + entry.cells, 0) };
+      inFlight: this.requests.size + this.batchReads.size, historyCells: this.undoStack.reduce((n, entry) => n + entry.cells, 0) };
   }
 
   async initialize(): Promise<void> {
@@ -119,6 +120,19 @@ export class TableModel {
     return draft ? this.overlay(draft.base) : undefined;
   }
 
+  private inFlightReads(): Promise<QueryPage>[] {
+    return [...this.requests.values()].map(request => request.promise).concat([...this.batchReads.values()]);
+  }
+
+  private failRead(error: unknown): never {
+    if (error instanceof ApiFailure && ['DATA_CHANGED', 'SCHEMA_CONFLICT', 'VIEW_CONFLICT'].includes(error.code)) {
+      this.stale = true;
+      this.error = 'The table changed. Refresh to load current rows; your drafts are retained.';
+      this.emit();
+    }
+    throw error;
+  }
+
   private async loadPage(index: number): Promise<QueryPage> {
     if (this.disposed) throw new Error('This table was closed.');
     if (index > 0 && this.queryRevision === undefined) await this.loadPage(0);
@@ -130,8 +144,8 @@ export class TableModel {
     }
     const existing = this.requests.get(index);
     if (existing) return existing.promise;
-    if (this.requests.size >= 4) {
-      await Promise.race([...this.requests.values()].map(request => request.promise.catch(() => undefined)));
+    if (this.requests.size + this.batchReads.size >= 4) {
+      await Promise.race(this.inFlightReads().map(request => request.catch(() => undefined)));
       return this.loadPage(index);
     }
     const generation = this.generation;
@@ -160,12 +174,7 @@ export class TableModel {
       return page;
     }).catch(error => {
       if (generation !== this.generation && !this.disposed) return this.loadPage(index);
-      if (error instanceof ApiFailure && ['DATA_CHANGED', 'SCHEMA_CONFLICT', 'VIEW_CONFLICT'].includes(error.code)) {
-        this.stale = true;
-        this.error = 'The table changed. Refresh to load current rows; your drafts are retained.';
-        this.emit();
-      }
-      throw error;
+      return this.failRead(error);
     }).finally(() => {
       if (this.requests.get(index)?.promise === task) this.requests.delete(index);
     });
@@ -189,6 +198,43 @@ export class TableModel {
       for (; offset < end; offset++) rows.push(this.overlay(page.records[offset - page.offset]!));
     }
     return rows;
+  }
+
+  private async readForEditing(start: number, count: number): Promise<RowRecord[]> {
+    if (count <= this.pageSize) return this.readRange(start, count);
+    const generation = this.generation;
+    const rows: RowRecord[] = [];
+    try {
+      for (let offset = start; offset < start + count;) {
+        while (this.requests.size + this.batchReads.size >= 4) {
+          await Promise.race(this.inFlightReads().map(request => request.catch(() => undefined)));
+        }
+        if (generation !== this.generation) throw new Error('The query changed before loading selected rows. Select them again.');
+        const limit = Math.min(maxPageSize, start + count - offset);
+        const controller = new AbortController();
+        const request = this.api.readPage(offset, limit, { ...this.query,
+          ...(this.queryRevision === undefined ? {} : { expectedRevision: this.queryRevision }),
+        }, controller.signal);
+        this.batchReads.set(controller, request);
+        let page: QueryPage;
+        try { page = await request; }
+        finally { this.batchReads.delete(controller); }
+        if (generation !== this.generation) throw new Error('The query changed before loading selected rows. Select them again.');
+        if (page.schemaVersion !== this.table!.version) throw new ApiFailure('SCHEMA_CONFLICT', 'The table schema changed. Reload before editing.', 409);
+        if (page.records.length !== limit) throw new Error('The service returned an incomplete page.');
+        this.queryRevision = page.revision;
+        for (const record of page.records) {
+          const draft = this.edits.drafts.get(record.id);
+          if (draft && draft.base.version !== record.version) this.conflicted = true;
+        }
+        rows.push(...page.records.map(record => this.overlay(record)));
+        offset += limit;
+      }
+      return rows;
+    } catch (error) {
+      if (generation !== this.generation) throw new Error('The query changed before loading selected rows. Select them again.');
+      return this.failRead(error);
+    }
   }
 
   private stage(edits: CellEdit[], loaded = new Map<number, RowRecord>()): void {
@@ -263,7 +309,7 @@ export class TableModel {
       throw new Error('The pasted rectangle exceeds the table or batch limits.');
     }
     const generation = this.generation;
-    const records = await this.readRange(startRow, cells.length);
+    const records = await this.readForEditing(startRow, cells.length);
     if (generation !== this.generation) throw new Error('The query changed before paste completed. Paste again into the current view.');
     this.stage(cells.flatMap((row, y) => row.map((value, x) => ({
       row: startRow + y, fieldId: fields[startColumn + x]!.id,
@@ -286,7 +332,7 @@ export class TableModel {
       const start = rows[index]!;
       let count = 1;
       while (rows[index + count] === start + count) count++;
-      const records = await this.readRange(start, count);
+      const records = await this.readForEditing(start, count);
       records.forEach((record, offset) => loaded.set(start + offset, record));
       index += count;
     }
@@ -297,6 +343,8 @@ export class TableModel {
   private resetPages(): void {
     this.generation++;
     for (const request of this.requests.values()) request.controller.abort();
+    for (const controller of this.batchReads.keys()) controller.abort();
+    this.batchReads.clear();
     this.requests.clear();
     this.pages.clear();
     this.queryRevision = undefined;
@@ -361,6 +409,8 @@ export class TableModel {
     this.disposed = true;
     this.generation++;
     for (const request of this.requests.values()) request.controller.abort();
+    for (const controller of this.batchReads.keys()) controller.abort();
+    this.batchReads.clear();
     this.requests.clear();
     this.listeners.clear();
   }

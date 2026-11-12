@@ -60,12 +60,16 @@ test('failed and conflicting saves preserve drafts until an explicit discard', a
 });
 
 test('paste stages a whole 1000 by 10 rectangle even when larger than the cache', async t => {
-  const model = new TableModel(apiFor(t, 1_100), 100, 2);
+  const api = apiFor(t, 1_100);
+  const reads: number[] = [];
+  const model = new TableModel({ ...api, readPage: (...args) => { reads.push(args[1]); return api.readPage(...args); } }, 100, 2);
   await model.initialize();
   const cells = Array.from({ length: 1_000 }, (_, row) =>
     Array.from({ length: 10 }, (_, col) => `粘贴 🌱 ${row}/${col}`));
   await model.paste(0, 0, cells);
   assert.equal(model.pendingCells, 10_000);
+  assert.ok(reads.length <= 3, 'Large paste should not repeat metadata/count work for every display page.');
+  assert.ok(reads.every(limit => limit <= 500));
   assert.ok(model.cacheStats.rows <= 200);
   assert.equal(model.getRecord(999)?.values['field_10'], '粘贴 🌱 999/9');
   await assert.rejects(model.paste(1_099, 0, [['a'], ['b']]));
@@ -73,6 +77,55 @@ test('paste stages a whole 1000 by 10 rectangle even when larger than the cache'
   await model.save();
   const records = await model.readRange(995, 5);
   assert.equal(records[4]?.values['field_10'], '粘贴 🌱 999/9');
+});
+
+test('a revision change during a large paste preserves existing drafts without partially staging rows', async t => {
+  const service = new RecordService(fixture(t, { rows: 700, columns: 20 }).open());
+  const token = randomBytes(32).toString('hex');
+  const server = await startServer({ service, token });
+  t.after(() => server.close());
+  const api = createHttpClient({ url: server.url, token });
+  const model = new TableModel({ ...api, readPage: async (offset, limit, query, signal) => {
+    if (offset === 500) await api.save([{ id: 'record_700', expectedVersion: 1, values: { field_1: 'Changed elsewhere' } }]);
+    return api.readPage(offset, limit, query, signal);
+  } });
+  await model.initialize();
+  model.applyEdits([{ row: 0, fieldId: 'field_2', value: 'Keep this draft' }]);
+  await assert.rejects(model.paste(0, 0, Array.from({ length: 600 }, () => ['New value'])),
+    (error: unknown) => error instanceof ApiFailure && error.code === 'DATA_CHANGED');
+  assert.equal(model.pendingCells, 1);
+  assert.equal(model.getRecord(0)!.values['field_2'], 'Keep this draft');
+  assert.equal(model.stale, true);
+  assert.equal(model.cacheStats.inFlight, 0);
+  assert.notEqual(service.readPage(0, 1).records[0]!.values['field_1'], 'New value');
+});
+
+test('switching queries aborts a batch read and a late response cannot stage into the new order', async t => {
+  const api = apiFor(t, 700);
+  let release: (() => void) | undefined;
+  let batchSignal: AbortSignal | undefined;
+  const model = new TableModel({ ...api, readPage: async (offset, limit, query, signal) => {
+    const snapshot = await api.readPage(offset, limit, query, signal);
+    if (limit > 100) {
+      batchSignal = signal;
+      await new Promise<void>(resolve => { release = resolve; });
+    }
+    return snapshot;
+  } });
+  await model.initialize();
+  model.applyEdits([{ row: 0, fieldId: 'field_2', value: 'Keep this draft' }]);
+  const pasting = model.paste(0, 0, Array.from({ length: 600 }, () => ['New value']));
+  const rejected = assert.rejects(pasting, /query changed/);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.ok(release);
+  await model.setQuery({ sort: [{ fieldId: 'field_1', direction: 'desc' }] });
+  assert.equal(batchSignal!.aborted, true);
+  release();
+  await rejected;
+  assert.equal(model.pendingCells, 1);
+  assert.equal(model.pendingRecords[0]!.values['field_2'], 'Keep this draft');
+  assert.equal(model.cacheStats.inFlight, 0);
+  assert.notEqual(model.getRecord(0)!.id, 'record_1');
 });
 
 test('clear loads the entire selection, supports one-step undo, and bounds work before reading', async t => {
