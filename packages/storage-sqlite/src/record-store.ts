@@ -1,7 +1,8 @@
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { tableId, type BatchResult, type Field, type RecordPage, type RecordUpdate, type RowRecord, type Table } from '../../contracts/src/index.js';
+import { randomUUID } from 'node:crypto';
+import { tableId, type BatchResult, type CellValue, type DeleteResult, type Field, type RecordDelete, type RecordPage, type RecordUpdate, type RowRecord, type Table } from '../../contracts/src/index.js';
 import { ServiceError, type RecordStore } from '../../core/src/record-service.js';
 import { migrate } from './migrations.js';
 
@@ -126,13 +127,18 @@ export class SqliteRecordStore implements RecordStore {
     }
   }
 
-  updateSchema(table: Table, expectedVersion: number): Table {
+  updateSchema(table: Table, expectedVersion: number, validateRecord?: (record: RowRecord) => void): Table {
     return this.transaction(() => {
       this.checkSchema(table.id, expectedVersion);
       if (table.version !== expectedVersion) {
         throw new ServiceError('SCHEMA_CONFLICT', 'The table schema changed. Reload it before trying again.', 409);
       }
       const before = this.getTable(table.id);
+      if (validateRecord) {
+        for (const row of this.db.prepare('SELECT id, version, values_json FROM records WHERE table_id = ?').iterate(table.id)) {
+          validateRecord(this.decode(row as unknown as StoredRecord));
+        }
+      }
       for (const field of before.fields) {
         if (table.fields.some(next => next.id === field.id)) continue;
         this.db.prepare('DELETE FROM fields WHERE id = ? AND table_id = ?').run(field.id, table.id);
@@ -162,6 +168,42 @@ export class SqliteRecordStore implements RecordStore {
 
   private decode(row: StoredRecord): RowRecord {
     return { id: row.id, version: row.version, values: JSON.parse(row.values_json) as RowRecord['values'] };
+  }
+
+  getRecord(id: string, recordId: string): RowRecord {
+    const row = this.db.prepare('SELECT id, version, values_json FROM records WHERE table_id = ? AND id = ?')
+      .get(id, recordId) as unknown as StoredRecord | undefined;
+    if (!row) throw new ServiceError('RECORD_NOT_FOUND', `Record ${recordId} does not exist.`, 404);
+    return this.decode(row);
+  }
+
+  createRecords(table: Table, values: Array<Record<string, CellValue>>): BatchResult {
+    return this.transaction(() => {
+      this.checkSchema(table.id, table.version);
+      let position = (this.db.prepare('SELECT COALESCE(MAX(position), -1) AS last FROM records WHERE table_id = ?')
+        .get(table.id)!['last'] as number) + 1;
+      const insert = this.db.prepare('INSERT INTO records (id, table_id, position, version, values_json) VALUES (?, ?, ?, 1, ?)');
+      const records = values.map(values => {
+        const id = randomUUID();
+        insert.run(id, table.id, position++, JSON.stringify(values));
+        return { id, version: 1, values };
+      });
+      return { records };
+    });
+  }
+
+  deleteRecords(id: string, records: RecordDelete[]): DeleteResult {
+    return this.transaction(() => {
+      const remove = this.db.prepare('DELETE FROM records WHERE table_id = ? AND id = ?');
+      for (const item of records) {
+        const record = this.getRecord(id, item.id);
+        if (record.version !== item.expectedVersion) {
+          throw new ServiceError('VERSION_CONFLICT', `Record ${item.id} changed. Reload before deleting again.`, 409);
+        }
+        remove.run(id, item.id);
+      }
+      return { deleted: records.map(record => record.id) };
+    });
   }
 
   updateBatch(updates: RecordUpdate[], id: string, schemaVersion: number): BatchResult {

@@ -79,6 +79,12 @@ export async function startServer({ service, token, port = 0 }: ServerOptions) {
       send(response, 200, service.readPage(offset, limit, id));
     } else if (id && resource === 'records' && !fieldId && request.method === 'PATCH') {
       send(response, 200, service.updateBatch(await readJson(request), id));
+    } else if (id && resource === 'records' && !fieldId && request.method === 'POST') {
+      send(response, 201, service.createRecords(id, await readJson(request)));
+    } else if (id && resource === 'records' && !fieldId && request.method === 'DELETE') {
+      send(response, 200, service.deleteRecords(id, await readJson(request)));
+    } else if (id && resource === 'records' && fieldId && request.method === 'GET') {
+      send(response, 200, service.getRecord(id, fieldId));
     } else {
       throw new ServiceError('NOT_FOUND', 'This endpoint does not exist.', 404);
     }

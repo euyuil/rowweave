@@ -32,3 +32,27 @@ test('HTTP clients can manage multiple table schemas with versioned writes', asy
   assert.equal((await call(root)).status, 404);
   assert.deepEqual(await (await call('/tables')).json(), []);
 });
+
+test('HTTP record creation, lookup and deletion enforce typed values and write versions', async t => {
+  const token = randomBytes(32).toString('hex');
+  const server = await startServer({ service: new RecordService(fixture(t, null).open()), token });
+  t.after(() => server.close());
+  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  const call = (path: string, method = 'GET', body?: unknown) => fetch(`${server.url}${path}`, {
+    method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  const table = await (await call('/tables', 'POST', { name: 'Amounts' })).json();
+  const root = `/tables/${table.id}`;
+  const schema = await (await call(`${root}/fields`, 'POST', { expectedVersion: 1, name: 'Amount', type: 'number', defaultValue: 0 })).json();
+  const fieldId = schema.fields[1].id;
+  assert.equal((await call(`${root}/records`, 'POST', [{ values: { [fieldId]: 'wrong' } }])).status, 400);
+  const created = await call(`${root}/records`, 'POST', [{ values: {} }, { values: { [fieldId]: 12.5 } }]);
+  assert.equal(created.status, 201);
+  const { records } = await created.json();
+  assert.equal(records[0].values[fieldId], 0);
+  assert.deepEqual(await (await call(`${root}/records/${records[1].id}`)).json(), records[1]);
+  assert.equal((await call(`${root}/records`, 'DELETE', [{ id: records[0].id, expectedVersion: 9 }])).status, 409);
+  assert.equal((await call(`${root}/records`, 'DELETE', [{ id: records[0].id, expectedVersion: 1 }])).status, 200);
+  assert.equal((await call(`${root}/records/${records[0].id}`)).status, 404);
+  assert.deepEqual((await (await call(`${root}/records`)).json()).records, [records[1]]);
+});
