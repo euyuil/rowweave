@@ -46,7 +46,7 @@ const selectTables = `SELECT t.*,
 export class SqliteRecordStore implements RecordStore {
   private readonly db: DatabaseSync;
 
-  constructor(path: string, seed: SeedOptions | null = { rows: 10_000, columns: 20 }) {
+  constructor(path: string, seed: SeedOptions | null = null) {
     if (seed && (!Number.isSafeInteger(seed.rows) || seed.rows < 1 || seed.rows > 100_000 ||
         !Number.isSafeInteger(seed.columns) || seed.columns < 1 || seed.columns > 100)) {
       throw new Error('Seed size must be 1–100,000 rows and 1–100 columns.');

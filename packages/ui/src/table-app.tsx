@@ -3,7 +3,7 @@ import DataEditor, {
   CompactSelection, GridCellKind, type DataEditorRef, type GridCell, type GridSelection, type Rectangle,
 } from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
-import { maxBatchCells, maxBatchRecords, type Field, type RowRecord } from '../../contracts/src/index.js';
+import { maxBatchCells, maxBatchRecords, type Field, type RowRecord, type Table } from '../../contracts/src/index.js';
 import type { TableModel } from '../../client/src/table-model.js';
 import { cellDisplay, cellText } from '../../client/src/cell-values.js';
 import { parseTextValue } from '../../core/src/field-values.js';
@@ -25,7 +25,9 @@ function textCell(record: RowRecord | undefined, field: Field | undefined, reado
     allowOverlay: !readonly, readonly };
 }
 
-export function TableApp({ model, host }: { model: TableModel; host: TableHost }) {
+export function TableApp({ model, host, onManage }: {
+  model: TableModel; host: TableHost; onManage(kind: 'rename' | 'delete', table: Table): void;
+}) {
   const revision = useSyncExternalStore(model.subscribe, model.getSnapshot);
   const queryVersion = model.queryVersion;
   const fields = model.fields;
@@ -165,14 +167,11 @@ export function TableApp({ model, host }: { model: TableModel; host: TableHost }
     : editorDirty ? 'Editing cell…'
     : pending ? `${pending.toLocaleString()} unsaved ${pending === 1 ? 'cell' : 'cells'}` : 'All changes saved';
   const message = error ?? model.error;
-  return <main className="rowweave-app" ref={rootHost}>
-    <header className="app-header">
-      <div className="brand"><span className="brand-mark" aria-hidden="true">▦</span> RowWeave</div>
-      <span className="workspace-label">Local workspace <span className="prototype-tag">Prototype</span></span>
-    </header>
+  return <section className="table-workspace" ref={rootHost}>
     <section className="table-heading">
-      <div><p className="eyebrow">YOUR DATA, ON YOUR DEVICE</p><h1>Prototype workspace</h1>
-        <p className="subtitle">A shared foundation for your team, your apps, and your agents.</p></div>
+      <div className="table-title"><h1>{table?.name ?? 'Loading table…'}</h1>
+        <div className="table-management"><button disabled={!table || locked} onClick={() => onManage('rename', table!)}>Rename table</button>
+          <button disabled={!table || locked || pending > 0 || editorDirty} onClick={() => onManage('delete', table!)}>Delete table</button></div></div>
       <div className="actions">
         <button onClick={() => model.undo()} disabled={locked || !model.canUndo}>Undo</button>
         <button onClick={() => model.redo()} disabled={locked || !model.canRedo}>Redo</button>
@@ -183,9 +182,9 @@ export function TableApp({ model, host }: { model: TableModel; host: TableHost }
     {message && <div role="alert" className="error-banner">{message}
       {model.conflicted && <span> Your edits are still here. Copy them before discarding and reloading the current records.</span>}
     </div>}
-    <section className="table-panel" aria-label="Prototype data table">
+    <section className="table-panel" aria-label="Data table">
       <div className="table-toolbar"><strong>▦ &nbsp; All records</strong>
-        <span>{table ? `${model.rowCount.toLocaleString()} records · ${fields.length} fields` : 'Loading records…'}</span></div>
+        <span>{table ? `${model.rowCount.toLocaleString()} ${model.rowCount === 1 ? 'record' : 'records'} · ${fields.length} ${fields.length === 1 ? 'field' : 'fields'}` : 'Loading records…'}</span></div>
       <div className="grid-host" ref={gridHost} onPasteCapture={event => {
         if (!gridHost.current?.querySelector('canvas')?.contains(document.activeElement) || !selection.current) return;
         event.preventDefault();
@@ -229,5 +228,5 @@ export function TableApp({ model, host }: { model: TableModel; host: TableHost }
     </section>
     <footer><span role="status" className={pending ? 'pending-status' : ''}>{status}</span>
       <span>Enter to edit · Esc to cancel · Ctrl+C / Ctrl+V · Ctrl+S to save</span></footer>
-  </main>;
+  </section>;
 }

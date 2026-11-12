@@ -15,9 +15,9 @@
     "start:server": "node dist/apps/server/src/cli.js",
     "setup:desktop": "install-electron",
     "start": "npm run build && npm run setup:desktop && electron .",
-    "test:desktop": "npm run build && npm run setup:desktop && node apps/desktop/tests/smoke.mjs",
+    "test:desktop": "npm run build && npm run setup:desktop && node apps/desktop/tests/workspace.mjs && node apps/desktop/tests/smoke.mjs",
     "package:win": "npm run build && node scripts/package-windows.mjs",
-    "test:packaged": "node apps/desktop/tests/smoke.mjs --packaged",
+    "test:packaged": "node apps/desktop/tests/workspace.mjs --packaged && node apps/desktop/tests/smoke.mjs --packaged",
     "dataset": "node scripts/generate-dataset.mjs",
     "benchmark": "node apps/desktop/tests/benchmark.mjs",
     "benchmark:memory": "node apps/desktop/tests/memory-benchmark.mjs"
