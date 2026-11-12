@@ -2,9 +2,10 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { tableId, type BatchResult, type CellValue, type ConversionPreview, type DeleteResult, type Field, type QueryPage, type RecordDelete, type RecordPage, type RecordUpdate, type RowRecord, type Table } from '../../contracts/src/index.js';
+import { tableId, type BatchResult, type CellValue, type ConversionPreview, type DeleteResult, type Field, type GridView, type QueryPage, type RecordDelete, type RecordPage, type RecordUpdate, type RowRecord, type Table } from '../../contracts/src/index.js';
 import { ServiceError, type RecordStore } from '../../core/src/record-service.js';
 import type { CheckedQuery } from '../../core/src/record-query.js';
+import { defaultView, reconcileView } from '../../core/src/grid-views.js';
 import { migrate } from './migrations.js';
 import { querySql } from './query-sql.js';
 
@@ -27,6 +28,14 @@ interface StoredTable {
   revision: number;
   fields_json: string;
   total: number;
+}
+
+interface StoredView {
+  id: string;
+  table_id: string;
+  name: string;
+  version: number;
+  config_json: string;
 }
 
 const selectTables = `SELECT t.*,
@@ -83,6 +92,7 @@ export class SqliteRecordStore implements RecordStore {
         primaryFieldId: fields[0]!.id, fields, total: options.rows };
       this.db.prepare('INSERT INTO tables (id, name, version, primary_field_id) VALUES (?, ?, 1, ?)').run(table.id, table.name, table.primaryFieldId);
       this.insertFields(table);
+      this.writeView(defaultView(table));
       const insert = this.db.prepare('INSERT INTO records (id, table_id, position, values_json) VALUES (?, ?, ?, ?)');
       for (let row = 0; row < options.rows; row++) {
         const values = Object.fromEntries(fields.map((field, col) => {
@@ -118,6 +128,7 @@ export class SqliteRecordStore implements RecordStore {
     return this.transaction(() => {
       this.db.prepare('INSERT INTO tables (id, name, version, primary_field_id) VALUES (?, ?, 1, ?)').run(table.id, table.name, table.primaryFieldId);
       this.insertFields(table);
+      this.writeView(defaultView(table));
       return this.getTable(table.id);
     });
   }
@@ -150,6 +161,7 @@ export class SqliteRecordStore implements RecordStore {
           .run(`$."${field.id}"`, table.id, `$."${field.id}"`);
       }
       this.insertFields(table);
+      this.syncViews(table);
       this.db.prepare('UPDATE tables SET name = ?, primary_field_id = ?, version = version + 1, revision = revision + 1 WHERE id = ?')
         .run(table.name, table.primaryFieldId, table.id);
       return this.getTable(table.id);
@@ -191,7 +203,10 @@ export class SqliteRecordStore implements RecordStore {
   previewConversion(id: string, version: number, field: Field, convert: (value: CellValue) => CellValue): ConversionPreview {
     return this.transaction(() => {
       this.checkSchema(id, version);
-      return this.scanConversion(this.getTable(id), field, convert, false);
+      const table = this.getTable(id);
+      const next = { ...table, fields: table.fields.map(previous => previous.id === field.id ? field : previous) };
+      for (const view of this.listViews(id)) reconcileView(view, next);
+      return this.scanConversion(table, field, convert, false);
     }, 'DEFERRED');
   }
 
@@ -199,6 +214,7 @@ export class SqliteRecordStore implements RecordStore {
     return this.transaction(() => {
       this.checkSchema(id, version);
       const table = this.getTable(id);
+      this.syncViews({ ...table, fields: table.fields.map(previous => previous.id === field.id ? field : previous) });
       const result = this.scanConversion(table, field, convert, true);
       if (result.invalid) {
         throw new ServiceError('CONVERSION_FAILED', `${result.invalid} records could not be converted. Record ${result.issues[0]!.recordId}: ${result.issues[0]!.message}`);
@@ -216,9 +232,12 @@ export class SqliteRecordStore implements RecordStore {
     return { offset, records: rows.map(row => this.decode(row)) };
   }
 
-  queryRecords(table: Table, query: CheckedQuery): QueryPage {
+  queryRecords(table: Table, query: CheckedQuery, view?: GridView): QueryPage {
     return this.transaction(() => {
       this.checkSchema(table.id, table.version);
+      if (view && this.getView(table.id, view.id).version !== view.version) {
+        throw new ServiceError('VIEW_CONFLICT', 'This view changed. Refresh before continuing.', 409);
+      }
       const current = this.getTable(table.id);
       if (query.expectedRevision !== undefined && query.expectedRevision !== current.revision) {
         throw new ServiceError('DATA_CHANGED', 'The table changed between pages. Refresh the query before continuing.', 409);
@@ -236,6 +255,56 @@ export class SqliteRecordStore implements RecordStore {
       });
       return { offset: query.offset, records, total, revision: current.revision, schemaVersion: current.version };
     }, 'DEFERRED');
+  }
+
+  private decodeView(row: StoredView): GridView {
+    const config = JSON.parse(row.config_json) as Pick<GridView, 'query' | 'columns'>;
+    return { id: row.id, tableId: row.table_id, name: row.name, version: row.version, ...config };
+  }
+
+  listViews(id: string): GridView[] {
+    const rows = this.db.prepare('SELECT * FROM views WHERE table_id = ? ORDER BY rowid').all(id) as unknown as StoredView[];
+    return rows.map(row => this.decodeView(row));
+  }
+
+  getView(id: string, viewId: string): GridView {
+    const row = this.db.prepare('SELECT * FROM views WHERE table_id = ? AND id = ?').get(id, viewId) as unknown as StoredView | undefined;
+    if (!row) throw new ServiceError('VIEW_NOT_FOUND', 'This view does not exist.', 404);
+    return this.decodeView(row);
+  }
+
+  private writeView(view: GridView): void {
+    this.db.prepare(`INSERT INTO views VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name, version = excluded.version, config_json = excluded.config_json`)
+      .run(view.id, view.tableId, view.name, view.version, JSON.stringify({ query: view.query, columns: view.columns }));
+  }
+
+  private syncViews(table: Table): void {
+    for (const view of this.listViews(table.id)) {
+      const next = reconcileView(view, table);
+      if (JSON.stringify(next) !== JSON.stringify(view)) this.writeView({ ...next, version: view.version + 1 });
+    }
+  }
+
+  saveView(table: Table, view: GridView, expectedVersion?: number): GridView {
+    return this.transaction(() => {
+      this.checkSchema(table.id, table.version);
+      if (expectedVersion !== undefined && this.getView(table.id, view.id).version !== expectedVersion) {
+        throw new ServiceError('VIEW_CONFLICT', 'This view changed. Reload before saving again.', 409);
+      }
+      const saved = { ...view, version: expectedVersion === undefined ? 1 : expectedVersion + 1 };
+      this.writeView(saved);
+      return saved;
+    });
+  }
+
+  deleteView(id: string, viewId: string, expectedVersion: number): void {
+    this.transaction(() => {
+      const view = this.getView(id, viewId);
+      if (view.version !== expectedVersion) throw new ServiceError('VIEW_CONFLICT', 'This view changed. Reload before deleting again.', 409);
+      if (this.listViews(id).length === 1) throw new ServiceError('LAST_VIEW', 'Keep at least one view in the table.');
+      this.db.prepare('DELETE FROM views WHERE table_id = ? AND id = ?').run(id, viewId);
+    });
   }
 
   private decode(row: StoredRecord): RowRecord {

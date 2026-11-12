@@ -41,7 +41,7 @@ The service supports multiple tables with stable table, field, and record IDs. T
 
 Schema writes return the updated table and increment its schema version. A stale version returns HTTP 409 with `SCHEMA_CONFLICT`; reload schema before retrying. Names contain 1–200 characters and tables support up to 200 fields. A newly added text field has no stored values until edited; an absent field value means null. Renaming and reordering do not rewrite record identities or values.
 
-SQLite stores relational table/field metadata and JSON record values, with a table/position index. Format version 3 adds a persistent data revision for consistent paginated queries. Opening version-1 or version-2 databases migrates transactionally, preserving field IDs, record IDs, positions, values, and record/schema versions. A failed migration rolls back; unsupported newer formats fail without replacing their schema. Back up a working database before upgrading; do not copy a live database without its pending WAL state.
+SQLite stores relational table/field/view metadata and JSON record values, with a table/position index. Format version 3 added a persistent data revision; version 4 adds saved views. Opening older databases migrates transactionally, preserving field IDs, record IDs, positions, values, and record/schema versions. A failed migration rolls back; unsupported newer formats fail without replacing their schema. Back up a working database before upgrading; do not copy a live database without its pending WAL state.
 
 ### Typed values and record lifecycle
 
@@ -96,6 +96,19 @@ The response contains `offset`, `records`, the filtered `total`, `schemaVersion`
 Filters support nested `and`/`or` groups (four nested levels and 100 conditions), typed `eq`/`neq`, text `contains`, numeric/date/timestamp `gt`/`gte`/`lt`/`lte`, `isEmpty`/`isNotEmpty`, and multi-select `hasAny` with option IDs. Empty means null, an empty string, or an empty multi-select list; false and zero are values. `neq` includes null when comparing with a non-null value. Filter values and search strings are bound parameters, so SQL characters and `%` remain literal.
 
 Sort by multiple distinct fields, ascending or descending. Numbers sort numerically, select fields by display labels, and nulls last; original insertion position breaks ties. Search examines formatted scalar/option values across all fields, including Unicode text. Text matching and sorting use SQLite's ASCII case folding; other Unicode characters match as written. Output `fields` selects values by stable ID, while record IDs and versions are always returned. An empty field list returns record identities only. Pages remain bounded to 500 records; queries execute in the service without loading the entire dataset into the client.
+
+### Saved grid views
+
+Every table starts with an **All records** view. A view contains a stable `id`, `tableId`, `name`, independent `version`, saved `query` (`filter`, `sort`, `search`), and ordered `columns` (`fieldId`, `width`, `hidden`). At least one column and one view remain visible/available. Column widths range from 50 to 1,000 pixels.
+
+- `GET /tables/:tableId/views`: list saved views.
+- `POST /tables/:tableId/views`: create with `{ name, query?, columns? }`. Omitting columns shows all fields in schema order; a supplied column list includes every field once.
+- `GET /tables/:tableId/views/:viewId`: read one view.
+- `PATCH /tables/:tableId/views/:viewId`: pass its `expectedVersion` and changed `name`, `query`, or `columns`. Query/columns replace the corresponding configuration; use `query: {}` to clear saved conditions. A stale version returns `VIEW_CONFLICT`.
+- `DELETE /tables/:tableId/views/:viewId`: pass `expectedVersion`; the last view cannot be deleted.
+- `POST /tables/:tableId/views/:viewId/query`: apply the saved query. The request accepts `offset`, `limit`, `expectedRevision`, `expectedViewVersion`, optional output `fields`, and an optional temporary `search` override. By default only visible columns' values are returned. The response adds `viewId` and `viewVersion`; pass both revision/version checks when continuing pages.
+
+Adding a field appends a visible column to existing views. Deleting a field removes its column, filters, and sort rules; if that hides every remaining column, the primary field becomes visible. Affected views receive new versions. Field conversion or option removal that would make a remaining view's query invalid returns `VIEW_DEPENDENCY` with the view name; adjust that view before applying the schema change. These updates and schema writes share a transaction. Existing workspaces receive their initial view during migration without rewriting records.
 
 Tests create and remove isolated temporary databases. No test opens a working database.
 

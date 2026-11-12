@@ -52,6 +52,21 @@ export async function startServer({ service, token, port = 0 }: ServerOptions) {
       throw new ServiceError('UNAUTHORIZED', 'A valid access token is required.', 401);
     }
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+    const view = url.pathname.match(/^\/tables\/([^/]+)\/views(?:\/([^/]+)(?:\/(query))?)?$/);
+    if (view) {
+      const id = view[1]!;
+      const viewId = view[2];
+      if (!viewId && request.method === 'GET') send(response, 200, service.listViews(id));
+      else if (!viewId && request.method === 'POST') send(response, 201, service.createView(id, await readJson(request)));
+      else if (viewId && view[3] && request.method === 'POST') send(response, 200, service.queryView(id, viewId, await readJson(request)));
+      else if (viewId && !view[3] && request.method === 'GET') send(response, 200, service.getView(id, viewId));
+      else if (viewId && !view[3] && request.method === 'PATCH') send(response, 200, service.updateView(id, viewId, await readJson(request)));
+      else if (viewId && !view[3] && request.method === 'DELETE') {
+        service.deleteView(id, viewId, await readJson(request));
+        send(response, 200, { deleted: viewId });
+      } else throw new ServiceError('NOT_FOUND', 'This endpoint does not exist.', 404);
+      return;
+    }
     const query = url.pathname.match(/^\/tables\/([^/]+)\/query$/);
     if (query && request.method === 'POST') {
       send(response, 200, service.queryRecords(query[1]!, await readJson(request)));
