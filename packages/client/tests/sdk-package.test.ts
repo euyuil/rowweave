@@ -47,7 +47,7 @@ void api.exportCsv('table', { viewId: 'view', expectedViewVersion: 1 });
 // @ts-expect-error Record writes require numeric versions.
 void api.updateRecords('table', [{ id: 'record', expectedVersion: 'stale', values: {} }]);
 // @ts-expect-error Field types are a closed set.
-void api.createField('table', { expectedVersion: 1, name: 'Unknown', type: 'formula' });
+void api.createField('table', { expectedVersion: 1, name: 'Unknown', type: 'unsupported' });
 const code: string = new ApiFailure('VERSION_CONFLICT', 'Conflict', 409).code;
 void [tables, preview, code];
 `);

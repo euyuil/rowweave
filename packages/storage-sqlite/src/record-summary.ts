@@ -1,3 +1,4 @@
+import { valueField } from '../../contracts/src/index.js';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import type { CellValue, RecordSummary, SummaryValues, Table } from '../../contracts/src/index.js';
 import type { CheckedSummary } from '../../core/src/record-summary.js';
@@ -34,7 +35,7 @@ export function summarize(db: DatabaseSync, table: Table, summary: CheckedSummar
     .all({ ...aggregateParameters, ':summaryGroup': path, ':summaryLimit': limit, ':summaryOffset': offset,
       ...(field.type === 'singleSelect' ? { ':summaryOptions': JSON.stringify(Object.fromEntries(field.options!.map(option => [option.id, option.name]))) } : {}) });
   result.groups = rows.map(row => {
-    const key = field.type === 'checkbox' && row['key'] !== null ? Boolean(row['key']) : row['key'] as CellValue;
+    const key = valueField(field).type === 'checkbox' && row['key'] !== null ? Boolean(row['key']) : row['key'] as CellValue;
     return { key, label: fieldText(field, key), ...values(row) };
   });
   return result;

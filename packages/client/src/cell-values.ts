@@ -11,7 +11,7 @@ export function cellDisplay(field: Field, value: CellValue | undefined): string 
     const scalar = target.type === 'multiSelect' ? { ...target, type: 'singleSelect' as const } : target;
     return ((value ?? []) as CellValue[]).map(value => cellDisplay(scalar, value)).join(', ');
   }
-  if (field.type === 'number' && typeof value === 'number') {
+  if ((field.type === 'number' || field.formula?.resultType === 'number') && typeof value === 'number') {
     let formatter = numberFormats.get(field);
     if (!formatter) {
       const format = field.numberFormat;

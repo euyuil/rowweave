@@ -30,7 +30,9 @@ export interface TableHost {
 
 function gridCell(record: RowRecord | undefined, field: Field | undefined, readonly: boolean, row: number): GridCell {
   if (!record || !field) return { kind: GridCellKind.Loading, allowOverlay: false };
-  readonly ||= field.type === 'lookup';
+  readonly ||= field.type === 'lookup' || field.type === 'formula';
+  if (record.formulaErrors?.[field.id]) return { kind: GridCellKind.Text, data: '#ERROR: ' + record.formulaErrors[field.id],
+    displayData: '#ERROR: ' + record.formulaErrors[field.id], allowOverlay: false, readonly: true };
   const value = record.values[field.id] ?? null;
   const text = cellText(field, value);
   if (field.type === 'checkbox') return { kind: GridCellKind.Boolean, data: value as boolean | null, allowOverlay: false, readonly, copyData: text };
@@ -387,7 +389,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       // Excel collapses line breaks in the grid library's HTML representation.
       // Quoted TSV preserves literal cell contents without an HTML interpretation.
       await navigator.clipboard.writeText(serializeClipboard(records.map(record =>
-        columns.map(field => cellText(field, record.values[field.id] ?? null)))));
+        columns.map(field => record.formulaErrors?.[field.id] ? `#ERROR: ${record.formulaErrors[field.id]}` : cellText(field, record.values[field.id] ?? null)))));
     } catch (failure) { report(failure); }
   };
 

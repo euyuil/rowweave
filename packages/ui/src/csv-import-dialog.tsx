@@ -19,7 +19,7 @@ export function CsvImportDialog({ initial, api, setDirty, onClose, onImported }:
   const [schemaConflict, setSchemaConflict] = useState(false);
   const [uncertain, setUncertain] = useState(false);
   const [columnPage, setColumnPage] = useState(0);
-  const fields = table.fields.filter(field => field.type !== 'lookup');
+  const fields = table.fields.filter(field => field.type !== 'lookup' && field.type !== 'formula');
   useEffect(() => () => setDirty(false), [setDirty]);
   const resetPreview = () => { setPreview(undefined); setMapping(undefined); setChecked(false); setColumnPage(0); };
   const fail = (error: unknown) => {

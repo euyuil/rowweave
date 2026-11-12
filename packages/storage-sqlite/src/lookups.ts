@@ -14,6 +14,14 @@ export function lookupSql(field: Field, alias = 'r'): string {
     ORDER BY edge.position${multi ? ', CAST(choice.key AS INTEGER)' : ''}))`;
 }
 
+function lookupErrorSql(field: Field): string {
+  if (field.lookupResult!.type !== 'formula') return '0';
+  const literal = (text: string) => `'${text.replaceAll("'", "''")}'`;
+  return `EXISTS (SELECT 1 FROM relation_edges edge JOIN records target ON target.id = edge.target_record_id
+    WHERE edge.source_record_id = r.id AND edge.field_id = ${literal(field.lookup!.relationFieldId)}
+    AND json_extract(target.formula_errors_json, ${literal(`$.${JSON.stringify(field.lookup!.fieldId)}`)}) IS NOT NULL)`;
+}
+
 export class Lookups {
   constructor(private readonly db: DatabaseSync) {}
 
@@ -66,12 +74,18 @@ export class Lookups {
   hydrate(table: Table, records: RowRecord[], output?: string[]): RowRecord[] {
     const fields = table.fields.filter(field => field.type === 'lookup' && (!output || output.includes(field.id)));
     if (!fields.length || !records.length) return records;
-    const rows = this.db.prepare(`SELECT r.id, ${fields.map((field, index) => `${lookupSql(field)} AS value_${index}`).join(', ')}
+    const rows = this.db.prepare(`SELECT r.id, ${fields.map((field, index) => `${lookupSql(field)} AS value_${index}, ${lookupErrorSql(field)} AS error_${index}`).join(', ')}
       FROM records r WHERE r.id IN (SELECT value FROM json_each(?))`).all(JSON.stringify(records.map(record => record.id)));
     const byId = new Map(records.map(record => [record.id, record]));
     for (const row of rows) {
       const record = byId.get(row['id'] as string)!;
-      fields.forEach((field, index) => { record.values[field.id] = JSON.parse(row[`value_${index}`] as string) as CellValue; });
+      fields.forEach((field, index) => {
+        record.values[field.id] = JSON.parse(row[`value_${index}`] as string) as CellValue;
+        if (row[`error_${index}`]) {
+          record.formulaErrors ??= {};
+          record.formulaErrors[field.id] = 'A linked formula has an error.';
+        }
+      });
     }
     return records;
   }

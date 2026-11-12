@@ -123,7 +123,7 @@ test('version-four migration preserves schemas, records and saved views', t => {
   const views = store.listViews(table.id);
   store.close();
   const db = new DatabaseSync(data.path);
-  db.exec('DROP TABLE field_lookups; DROP TABLE relation_edges; DROP TABLE field_relations; PRAGMA user_version = 4;');
+  db.exec('DROP TABLE field_lookups; DROP TABLE relation_edges; DROP TABLE field_relations; ALTER TABLE records DROP COLUMN formula_errors_json; PRAGMA user_version = 4;');
   db.close();
   const migrated = data.open();
   assert.deepEqual(migrated.getTable(), table);

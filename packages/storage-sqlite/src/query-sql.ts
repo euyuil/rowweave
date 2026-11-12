@@ -2,6 +2,7 @@ import type { SQLInputValue } from 'node:sqlite';
 import type { CellValue, Field, FieldFilter, FilterGroup, Table } from '../../contracts/src/index.js';
 import type { CheckedQuery } from '../../core/src/record-query.js';
 import { lookupSql } from './lookups.js';
+import { valueField } from '../../contracts/src/index.js';
 
 function sqlLiteral(value: string | number | null): string {
   if (value === null) return 'NULL';
@@ -26,6 +27,7 @@ export function querySql(table: Pick<Table, 'id' | 'fields'>, query: CheckedQuer
     return `json_extract(${alias ? `${alias}.` : ''}values_json, '${path.replaceAll("'", "''")}')`;
   };
   function formatted(field: Field, value: string): string {
+    field = valueField(field);
     if (field.type === 'checkbox') return `(CASE ${value} WHEN 1 THEN 'true' WHEN 0 THEN 'false' END)`;
     if (field.type === 'singleSelect' || field.type === 'multiSelect') {
       if (!field.options!.length) return 'NULL';

@@ -106,9 +106,12 @@ export class TableModel {
     }
     const values = { ...record.values, ...draft.base.values, ...draft.values };
     for (const field of this.table!.fields) {
-      if (field.type === 'lookup' && Object.hasOwn(record.values, field.id)) values[field.id] = record.values[field.id]!;
+      if ((field.type === 'lookup' || field.type === 'formula') && Object.hasOwn(record.values, field.id)) values[field.id] = record.values[field.id]!;
     }
-    return { ...draft.base, ...(Object.keys(links).length ? { links } : {}), values };
+    const result = { ...draft.base, ...(Object.keys(links).length ? { links } : {}), values };
+    if (record.formulaErrors) result.formulaErrors = record.formulaErrors;
+    else delete result.formulaErrors;
+    return result;
   }
 
   getRecord(row: number): RowRecord | undefined {

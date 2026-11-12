@@ -13,11 +13,12 @@ export const tableCreate = z.strictObject({ name: z.string() });
 export const tableUpdate = z.strictObject({ ...expectedVersion, name: z.string().exactOptional(), primaryFieldId: id.exactOptional(), fieldOrder: z.array(id).exactOptional() });
 const field = z.strictObject({
   name: z.string(),
-  type: z.enum(['text', 'multiline', 'number', 'checkbox', 'date', 'datetime', 'singleSelect', 'multiSelect', 'relation', 'lookup']),
+  type: z.enum(['text', 'multiline', 'number', 'checkbox', 'date', 'datetime', 'singleSelect', 'multiSelect', 'relation', 'lookup', 'formula']),
   required: z.boolean().exactOptional(), defaultValue: value.exactOptional(),
   options: z.array(z.strictObject({ id: id.exactOptional(), name: z.string(), color: z.string().exactOptional() })).exactOptional(),
   numberFormat: z.enum(['decimal', 'currency', 'percent']).exactOptional(), precision: z.number().int().exactOptional(), currency: z.string().exactOptional(),
   relation: z.strictObject({ tableId: id, multiple: z.boolean() }).exactOptional(),
+  formula: z.strictObject({ expression: z.string().min(1).max(4096), resultType: z.enum(['number', 'text', 'checkbox']) }).exactOptional(),
   lookup: z.strictObject({ relationFieldId: id, fieldId: id }).exactOptional(),
 });
 export const fieldCreate = field.extend(expectedVersion);

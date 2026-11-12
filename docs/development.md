@@ -52,7 +52,7 @@ The service supports multiple tables with stable table, field, and record IDs. T
 
 Schema writes return the updated table and increment its schema version. A stale version returns HTTP 409 with `SCHEMA_CONFLICT`; reload schema before retrying. Names contain 1–200 characters and tables support up to 200 fields. A newly added text field has no stored values until edited; an absent field value means null. Renaming and reordering do not rewrite record identities or values. Set `precision: null` in a number-field update to restore automatic decimal formatting without changing stored values.
 
-SQLite stores relational table/field/view metadata and JSON record values, with a table/position index. Format 3 added persistent data revisions, 4 saved views, 5 relations, 6 lookup dependencies, 7 saved-query indexes, 8 persisted display settings, and 9 board layouts. Opening older databases migrates transactionally, preserving field IDs, record IDs, positions, values, and record/schema versions. Format 8 preserves existing view versions and adds the original 36-pixel row height and zero frozen columns; format 9 keeps existing views as grids, retaining their display settings and versions. A failed migration rolls back; unsupported newer formats fail without replacing their schema. Back up a working database before upgrading; do not copy a live database without its pending WAL state.
+SQLite stores relational table/field/view metadata and JSON record values, with a table/position index. Format 3 added persistent data revisions, 4 saved views, 5 relations, 6 lookup dependencies, 7 saved-query indexes, 8 persisted display settings, 9 board layouts, and 10 persisted formula errors. Opening older databases migrates transactionally, preserving field IDs, record IDs, positions, values, and record/schema versions. Format 8 preserves existing view versions and adds the original 36-pixel row height and zero frozen columns; format 9 keeps existing views as grids, retaining their display settings and versions. A failed migration rolls back; unsupported newer formats fail without replacing their schema. Back up a working database before upgrading; do not copy a live database without its pending WAL state.
 
 ### Typed values and record lifecycle
 
@@ -90,9 +90,13 @@ SQLite format 5 adds indexed relation edges and field-to-target dependencies. JS
 
 Deleting referenced records returns `RELATION_DEPENDENCY` until external links and linked-field defaults are removed. A single batch may delete a self-linked set when nothing outside that set refers to it. Deleting a source record/field removes its outgoing edges. Deleting a target table requires removing fields in other tables that point to it, even if those fields are empty. Deletion failures retain all data and edges.
 
+### Formula fields
+
+The [formula guide](formulas.md) defines the language, UI workflow and API contract. The core parses bounded expressions and orders dependencies; SQLite materializes results/errors transactionally on every supported write path. Schema changes recalculate records without loading them into the renderer. Database format 10 adds an empty error map to existing records without changing their versions or saved views.
+
 ### Read-only lookups
 
-Add a **Lookup** field, choose an existing linked-record field, and select an ordinary field in its target table. The service computes values from saved links in link order, preserving numbers, booleans, timestamps, text, select IDs, and nulls. Multiple-select values are flattened without deduplication; no links produce an empty array. A lookup cannot target another lookup or a linked-record field, become a primary display field, set defaults, or require values. This is a one-hop lookup, not a formula engine.
+Add a **Lookup** field, choose an existing linked-record field, and select an ordinary field in its target table. The service computes values from saved links in link order, preserving numbers, booleans, timestamps, text, select IDs, and nulls. Multiple-select values are flattened without deduplication; no links produce an empty array. A lookup cannot target another lookup or a linked-record field, become a primary display field, set defaults, or require values. This is a one-hop lookup; it can also read a saved scalar formula result.
 
 The grid and record details display target formatting and option labels. Save changed links to refresh their lookup values. Copy produces a JSON array, using option labels for select values; other values retain their JSON types. Paste/clear operations that include a lookup fail atomically instead of partially overwriting a selection. Record creation and duplication omit lookup values; explicit writes, including null, return `READ_ONLY_FIELD`.
 
