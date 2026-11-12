@@ -41,6 +41,13 @@ export function validateValue(field: Field, input: unknown): CellValue {
       }
       if (field.required && !input.length) return invalid('choose at least one option.');
       return input as string[];
+    case 'relation':
+      if (!Array.isArray(input) || input.length > (field.relation!.multiple ? 200 : 1) ||
+          new Set(input).size !== input.length || input.some(id => typeof id !== 'string' || !id || id.length > 100)) {
+        return invalid(`choose up to ${field.relation!.multiple ? 200 : 1} unique record IDs.`);
+      }
+      if (field.required && !input.length) return invalid('choose at least one record.');
+      return input as string[];
   }
 }
 
@@ -58,6 +65,9 @@ export function parseTextValue(field: Field, text: string): CellValue {
     value = text.trim().toLowerCase() === 'true';
   } else if (field.type === 'singleSelect') {
     value = field.options!.find(option => option.id === text || option.name === text)?.id;
+  } else if (field.type === 'relation') {
+    try { value = JSON.parse(text); }
+    catch { throw new ServiceError('INVALID_VALUE', `${field.name}: use a JSON array of record IDs.`); }
   } else if (field.type === 'multiSelect') {
     let items: unknown;
     try { items = JSON.parse(text); }

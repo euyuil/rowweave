@@ -1,6 +1,6 @@
 import {
   maxBatchCells, maxBatchRecords,
-  type CellValue, type Field, type QueryPage, type RowRecord, type Table,
+  type CellValue, type Field, type QueryPage, type RecordLink, type RowRecord, type Table,
 } from '../../contracts/src/index.js';
 import { parseTextValue, validateValue } from '../../core/src/field-values.js';
 import { ApiFailure, type TableApi, type TableQuery } from './http-client.js';
@@ -10,6 +10,7 @@ export interface CellEdit {
   row: number;
   fieldId: string;
   value: CellValue;
+  links?: RecordLink[];
 }
 
 interface Draft {
@@ -97,7 +98,13 @@ export class TableModel {
 
   private overlay(record: RowRecord): RowRecord {
     const draft = this.edits.drafts.get(record.id);
-    return draft ? { ...draft.base, values: { ...record.values, ...draft.base.values, ...draft.values } } : record;
+    if (!draft) return record;
+    const links = { ...draft.base.links };
+    for (const [fieldId, current] of Object.entries(record.links ?? {})) {
+      links[fieldId] = [...new Map([...(links[fieldId] ?? []), ...current].map(link => [link.id, link])).values()];
+    }
+    return { ...draft.base, ...(Object.keys(links).length ? { links } : {}),
+      values: { ...record.values, ...draft.base.values, ...draft.values } };
   }
 
   getRecord(row: number): RowRecord | undefined {
@@ -200,13 +207,14 @@ export class TableModel {
       const existing = drafts.get(record.id);
       const original = existing?.base ?? before.drafts.get(record.id)?.base;
       const base = original ? { ...original, values: { ...record.values, ...original.values } } : record;
+      const labeled = edit.links ? { ...base, links: { ...base.links, [edit.fieldId]: edit.links } } : base;
       const current = existing && Object.hasOwn(existing.values, edit.fieldId) ? existing.values[edit.fieldId]! : base.values[edit.fieldId] ?? null;
       if (sameValue(value, current)) continue;
       changedCells++;
       const values = { ...existing?.values, [edit.fieldId]: value };
       if (sameValue(value, base.values[edit.fieldId] ?? null)) delete values[edit.fieldId];
       if (Object.keys(values).length) {
-        drafts.set(record.id, { base, values });
+        drafts.set(record.id, { base: labeled, values });
         rows.set(edit.row, record.id);
       } else {
         drafts.delete(record.id);

@@ -11,7 +11,7 @@ export function toFormValue(field: Field, value: CellValue | undefined): FormVal
 }
 
 export function fromFormValue(field: Field, value: FormValue): CellValue {
-  if (value === null || field.type === 'multiSelect' || field.type === 'singleSelect') return validateValue(field, value);
+  if (value === null || field.type === 'multiSelect' || field.type === 'singleSelect' || field.type === 'relation') return validateValue(field, value);
   const text = value as string;
   if (field.type === 'datetime' && text) {
     return validateValue(field, `${text.length === 16 ? `${text}:00` : text}Z`);

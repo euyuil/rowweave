@@ -54,6 +54,7 @@ SQLite stores relational table/field/view metadata and JSON record values, with 
 | `datetime` | ISO timestamp with seconds and an explicit zone (`Z` or an offset), normalized to UTC. |
 | `singleSelect` | An existing option ID or null. |
 | `multiSelect` | Array of unique existing option IDs, or null. |
+| `relation` | Ordered array of unique record IDs from one target table, or null. Configure `relation: { tableId, multiple }`; allow one or up to 200 linked records. |
 
 Select fields have up to 200 `options`, each with `name`, optional `color` (`#RRGGBB`), and optional `id` on creation. The service generates missing IDs. Retain returned IDs when renaming options. IDs and names must be unique within the field. Removing an option still used by a record is rejected atomically.
 
@@ -66,6 +67,16 @@ All fields accept `required` and `defaultValue`. Defaults apply only when a new 
 The desktop's **New record**, **Open record**, and **Duplicate** actions use typed forms with defaults, select option labels, multiline text, and UTC date-time inputs. Optional values can be cleared to null; an empty text value remains a string. Details load the complete record, including fields outside the visible grid. A failed validation or version conflict retains the form. Save or discard grid drafts before managing records. Select cells or row checkboxes, then **Delete records** to preview and confirm a versioned batch deletion (up to 2,000 records); cancellation leaves data unchanged.
 
 The grid retains its text editor until the dedicated typed-editor workflow is introduced, but renders typed values and parses typed edits/paste. Select clipboard values use option names; multi-select uses a JSON array of names. Number input uses decimal notation, checkboxes use `true`/`false`, and blank non-text input means null. Invalid cells reject the complete pasted rectangle and preserve existing drafts. Service writes always validate again.
+
+### Linked records
+
+Create a **Linked records** field, choose its target table, and choose whether it allows multiple records. Defaults and required values work with linked IDs. Record forms, grid editors, and filters use a searchable picker with 50-record pages; selected records stay available outside the current search/page. Click a selected name to view the target's full record details. The primary display field must be a non-linked field, preventing circular labels.
+
+Record responses keep IDs in `values` and include `links: { fieldId: [{ id, label }] }` for display. The service resolves labels within the same read snapshot, without a request per cell. Changing target records or schema advances the source tables' data revisions, so continuation pages cannot combine old labels with new data. Search and sorting use the target's primary labels; `hasAny` filters use record IDs. Clipboard relation values use JSON arrays of IDs to avoid ambiguous duplicate names. Query `recordIds` accepts up to 2,000 distinct IDs and can be combined with filters/projection to resolve a picker selection in one request.
+
+SQLite format 5 adds indexed relation edges and field-to-target dependencies. JSON IDs and their edge index change in the same transaction. Foreign keys protect targets; input validation also checks table ownership, uniqueness, cardinality, and defaults. Invalid links or a late version conflict roll back the complete batch. Linked fields cannot be converted to/from ordinary fields; create the field and assign IDs explicitly. Unlink existing values before retargeting a field to another table.
+
+Deleting referenced records returns `RELATION_DEPENDENCY` until external links and linked-field defaults are removed. A single batch may delete a self-linked set when nothing outside that set refers to it. Deleting a source record/field removes its outgoing edges. Deleting a target table requires removing fields in other tables that point to it, even if those fields are empty. Deletion failures retain all data and edges. Lookups are the next delivery step and are not yet part of this implementation.
 
 ### Field conversion
 

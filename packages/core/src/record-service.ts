@@ -99,6 +99,7 @@ export class RecordService {
     }
     table.fields = table.fields.map(current => current.id === fieldId ? field : current);
     const changedConstraints = (field.required === true && previous.required !== true) ||
+      (field.type === 'relation' && !field.relation!.multiple && previous.relation!.multiple) ||
       previous.options?.some(option => !field.options!.some(next => next.id === option.id));
     return this.store.updateSchema(table, version, changedConstraints ? record => {
       try { validateValue(field, record.values[fieldId] ?? null); }
@@ -127,6 +128,9 @@ export class RecordService {
     if (!previous) throw new ServiceError('FIELD_NOT_FOUND', 'This field does not exist.', 404);
     const config = schemaObject(item['field']);
     const field = parseField(config, { id: previous.id, name: previous.name, type: previous.type });
+    if (previous.type === 'relation' || field.type === 'relation') {
+      throw new ServiceError('CONVERSION_REQUIRED', 'Create a linked-record field and assign record IDs explicitly; linked fields cannot be converted to another type.');
+    }
     return { version, field, convert: (value: CellValue) => convertValue(previous, field, value) };
   }
 

@@ -86,6 +86,25 @@ test('a query change during clearing leaves the new view and existing drafts unt
   assert.equal(model.pendingRecords[0]!.values[table.primaryFieldId], 'Keep draft');
 });
 
+test('relation drafts retain chosen labels and refresh replaces renamed target labels', async t => {
+  const { api, service, table, records } = await workspace(t);
+  const source = service.createTable({ name: 'Linked' });
+  const schema = service.createField(source.id, { expectedVersion: 1, name: 'Targets', type: 'relation', relation: { tableId: table.id, multiple: true } });
+  const field = schema.fields[1]!;
+  service.createRecords(source.id, [{ values: { [field.id]: [records[0]!.id] } }]);
+  const model = new TableModel(api.table(source.id));
+  await model.initialize();
+  model.applyEdits([{ row: 0, fieldId: field.id, value: [records[0]!.id, records[1]!.id],
+    links: [{ id: records[0]!.id, label: 'A' }, { id: records[1]!.id, label: 'B' }] }]);
+  assert.deepEqual(model.getRecord(0)!.links![field.id]!.map(link => link.label), ['A', 'B']);
+  await api.updateRecords(table.id, [{ id: records[0]!.id, expectedVersion: 1, values: { [table.primaryFieldId]: 'Renamed A' } }]);
+  await model.refresh();
+  assert.equal(model.pendingCells, 1);
+  assert.deepEqual(model.getRecord(0)!.links![field.id]!.map(link => link.label), ['Renamed A', 'B']);
+  await model.save();
+  assert.deepEqual(model.getRecord(0)!.values[field.id], [records[0]!.id, records[1]!.id]);
+});
+
 test('saved view paging detects configuration conflicts and refresh preserves drafts by identity', async t => {
   const { api, table, records } = await workspace(t);
   let view = await api.createView(table.id, { name: 'Descending', query: { sort: [{ fieldId: table.primaryFieldId, direction: 'desc' }] },

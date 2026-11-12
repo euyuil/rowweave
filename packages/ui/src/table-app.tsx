@@ -3,7 +3,7 @@ import DataEditor, {
   CompactSelection, GridCellKind, type DataEditorRef, type GridCell, type GridSelection, type Rectangle,
 } from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
-import { maxBatchCells, maxBatchRecords, type CellValue, type Field, type GridView, type RowRecord, type Table } from '../../contracts/src/index.js';
+import { maxBatchCells, maxBatchRecords, type CellValue, type Field, type GridView, type RecordLink, type RowRecord, type Table } from '../../contracts/src/index.js';
 import type { TableModel } from '../../client/src/table-model.js';
 import { queryForView, type WorkspaceApi } from '../../client/src/http-client.js';
 import { cellDisplay, cellText } from '../../client/src/cell-values.js';
@@ -26,7 +26,8 @@ function gridCell(record: RowRecord | undefined, field: Field | undefined, reado
   const value = record.values[field.id] ?? null;
   const text = cellText(field, value);
   if (field.type === 'checkbox') return { kind: GridCellKind.Boolean, data: value as boolean | null, allowOverlay: false, readonly, copyData: text };
-  return { kind: GridCellKind.Text, data: text, copyData: text, displayData: cellDisplay(field, value),
+  const display = field.type === 'relation' ? ((value ?? []) as string[]).map(id => record.links?.[field.id]?.find(link => link.id === id)?.label || id).join(', ') : cellDisplay(field, value);
+  return { kind: GridCellKind.Text, data: text, copyData: text, displayData: display,
     allowOverlay: !readonly, readonly, field, rawValue: value, row } as EditableCell;
 }
 
@@ -163,8 +164,8 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   const editorBridge = useMemo(() => ({
     save: () => { void save(); }, setDirty: setEditorDirty,
     register: (handle: EditorHandle | undefined) => { activeEditor.current = handle; },
-    commit: (row: number, field: Field, value: CellValue) => {
-      try { model.applyEdits([{ row, fieldId: field.id, value }]); return undefined; }
+    commit: (row: number, field: Field, value: CellValue, links?: RecordLink[]) => {
+      try { model.applyEdits([{ row, fieldId: field.id, value, ...(links ? { links } : {}) }]); return undefined; }
       catch (failure) { return failure instanceof Error ? failure.message : 'The cell could not be changed.'; }
     },
   }), [save, model]);

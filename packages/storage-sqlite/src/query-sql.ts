@@ -2,7 +2,7 @@ import type { SQLInputValue } from 'node:sqlite';
 import type { CellValue, Field, FieldFilter, FilterGroup, Table } from '../../contracts/src/index.js';
 import type { CheckedQuery } from '../../core/src/record-query.js';
 
-export function querySql(table: Table, query: CheckedQuery) {
+export function querySql(table: Table, query: CheckedQuery, targets: Map<string, Table>) {
   const fields = new Map(table.fields.map(field => [field.id, field]));
   const parameters: Record<string, SQLInputValue> = { ':table': table.id };
   let parameterIndex = 0;
@@ -11,12 +11,19 @@ export function querySql(table: Table, query: CheckedQuery) {
     parameters[name] = typeof value === 'boolean' ? Number(value) : Array.isArray(value) ? JSON.stringify(value) : value;
     return name;
   };
-  const raw = (field: Field) => {
+  const raw = (field: Field, alias = 'r') => {
     const path = `$.${JSON.stringify(field.id)}`;
-    return `json_extract(r.values_json, '${path.replaceAll("'", "''")}')`;
+    return `json_extract(${alias}.values_json, '${path.replaceAll("'", "''")}')`;
   };
-  function display(field: Field): string {
-    const value = raw(field);
+  function display(field: Field, alias = 'r'): string {
+    const value = raw(field, alias);
+    if (field.type === 'relation') {
+      const target = targets.get(field.relation!.tableId)!;
+      const primary = target.fields.find(item => item.id === target.primaryFieldId)!;
+      return `(SELECT group_concat(label, ', ') FROM (SELECT ${display(primary, 'linked')} AS label
+        FROM relation_edges edge JOIN records linked ON linked.id = edge.target_record_id
+        WHERE edge.source_record_id = ${alias}.id AND edge.field_id = ${bind(field.id)} ORDER BY edge.position))`;
+    }
     if (field.type === 'checkbox') return `(CASE ${value} WHEN 1 THEN 'true' WHEN 0 THEN 'false' END)`;
     if (field.type === 'singleSelect' || field.type === 'multiSelect') {
       if (!field.options!.length) return 'NULL';
@@ -35,7 +42,7 @@ export function querySql(table: Table, query: CheckedQuery) {
     const field = fields.get(filter.fieldId)!;
     const value = raw(field);
     if (filter.operator === 'isEmpty' || filter.operator === 'isNotEmpty') {
-      const empty = `(${value} IS NULL OR ${value} = ''${field.type === 'multiSelect' ? ` OR json_array_length(${value}) = 0` : ''})`;
+      const empty = `(${value} IS NULL OR ${value} = ''${['multiSelect', 'relation'].includes(field.type) ? ` OR json_array_length(${value}) = 0` : ''})`;
       return filter.operator === 'isEmpty' ? empty : `NOT ${empty}`;
     }
     if (filter.operator === 'contains') return `instr(lower(${value}), lower(${bind(filter.value!)})) > 0`;
@@ -47,6 +54,7 @@ export function querySql(table: Table, query: CheckedQuery) {
     return `${value} ${operators[filter.operator]} ${bind(filter.value!)}`;
   }
   const clauses = ['r.table_id = :table'];
+  if (query.recordIds) clauses.push(`r.id IN (SELECT value FROM json_each(${bind(query.recordIds)}))`);
   if (query.filter) clauses.push(condition(query.filter));
   if (query.search) {
     const search = bind(query.search);

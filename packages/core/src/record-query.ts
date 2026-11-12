@@ -22,6 +22,12 @@ export function parseQuery(table: Table, input: unknown): CheckedQuery {
     return invalid(`Use a non-negative offset and a limit between 1 and ${maxPageSize}.`);
   }
   const query: CheckedQuery = { offset: offset as number, limit: limit as number };
+  if (source['recordIds'] !== undefined) {
+    const ids = source['recordIds'];
+    if (!Array.isArray(ids) || ids.length > 2_000 || new Set(ids).size !== ids.length ||
+        ids.some(id => typeof id !== 'string' || !id || id.length > 100)) return invalid('Use up to 2,000 unique record IDs.');
+    query.recordIds = ids as string[];
+  }
   let conditionCount = 0;
   function group(value: unknown, depth: number): FilterGroup {
     if (depth > 4) return invalid('Filter groups may be nested up to four levels.');
@@ -43,18 +49,19 @@ export function parseQuery(table: Table, input: unknown): CheckedQuery {
         return { fieldId: selected.id, operator, value: item['value'] };
       }
       if (operator === 'hasAny') {
-        if (selected.type !== 'multiSelect' || !Array.isArray(item['value'])) return invalid('hasAny requires a multi-select field and option IDs.');
+        if (!['multiSelect', 'relation'].includes(selected.type) || !Array.isArray(item['value'])) return invalid('hasAny requires a select or linked-record field and IDs.');
       } else if (operator === 'gt' || operator === 'gte' || operator === 'lt' || operator === 'lte') {
         if (!['number', 'date', 'datetime'].includes(selected.type) || item['value'] === null) {
           return invalid('Ordered comparisons require a number, date or timestamp value.');
         }
       } else if (operator !== 'eq' && operator !== 'neq') {
         return invalid('Unknown filter operator.');
-      } else if (selected.type === 'multiSelect' && item['value'] !== null) {
-        return invalid('Use hasAny for multi-select option matching.');
+      } else if (['multiSelect', 'relation'].includes(selected.type) && item['value'] !== null) {
+        return invalid('Use hasAny for select or linked-record matching.');
       }
       return { fieldId: selected.id, operator,
-        value: validateValue({ ...selected, required: false }, item['value']) };
+        value: validateValue({ ...selected, required: false,
+          ...(selected.relation ? { relation: { ...selected.relation, multiple: true } } : {}) }, item['value']) };
     });
     return { conjunction: item['conjunction'], conditions };
   }

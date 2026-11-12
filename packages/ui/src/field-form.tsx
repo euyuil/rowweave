@@ -8,7 +8,7 @@ import { fromFormValue, toFormValue, type FormValue } from './field-input-values
 
 export const fieldTypeNames: Record<FieldType, string> = {
   text: 'Text', multiline: 'Multiline text', number: 'Number', checkbox: 'Checkbox', date: 'Date',
-  datetime: 'Date and time', singleSelect: 'Single select', multiSelect: 'Multiple select',
+  datetime: 'Date and time', singleSelect: 'Single select', multiSelect: 'Multiple select', relation: 'Linked records',
 };
 
 export function FieldForm({ table, field, api, setDirty, onClose, onSaved }: {
@@ -27,9 +27,16 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved }: {
   const [preview, setPreview] = useState<ConversionPreview>();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [targets, setTargets] = useState<Table[]>([]);
+  const [targetId, setTargetId] = useState(field?.relation?.tableId ?? table.id);
+  const [multiple, setMultiple] = useState(field?.relation?.multiple ?? true);
+  useEffect(() => {
+    if (type === 'relation') void api.listTables().then(setTargets).catch(error => setError(error.message));
+  }, [api, type]);
   const converting = !!field && type !== field.type;
   const selection = type === 'singleSelect' || type === 'multiSelect';
   const target: Field = { id: field?.id ?? 'new-field', name, type, required,
+    ...(type === 'relation' ? { relation: { tableId: targetId, multiple } } : {}),
     ...(selection ? { options } : {}),
     ...(type === 'number' ? { numberFormat: format, ...(precision ? { precision: Number(precision) } : {}),
       ...(format === 'currency' ? { currency } : {}) } : {}) };
@@ -70,7 +77,14 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved }: {
         <label className="form-field">Field name<input autoFocus required maxLength={200} value={name} onChange={event => setName(event.target.value)} /></label>
         <label className="form-field">Field type<select aria-label="Field type" value={type} onChange={event => {
           setType(event.target.value as FieldType); setHasDefault(false); setDefaultValue(null);
-        }}>{Object.entries(fieldTypeNames).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+        }}>{Object.entries(fieldTypeNames).map(([value, label]) => <option key={value} value={value}
+          disabled={!!field && (field.type === 'relation' ? value !== 'relation' : value === 'relation')}>{label}</option>)}</select></label>
+        {type === 'relation' && <>
+          <label className="form-field">Link to table<select required aria-label="Link to table" value={targetId} onChange={event => { setTargetId(event.target.value); setDefaultValue(null); }}>
+            {targets.map(target => <option key={target.id} value={target.id}>{target.name}</option>)}
+          </select></label>
+          <label className="check-field"><input type="checkbox" checked={multiple} onChange={event => setMultiple(event.target.checked)} />Allow multiple records</label>
+        </>}
         {type === 'number' && <div className="form-row">
           <label className="form-field">Number format<select aria-label="Number format" value={format} onChange={event => setFormat(event.target.value as typeof format)}>
             <option value="decimal">Decimal</option><option value="currency">Currency</option><option value="percent">Percent</option>

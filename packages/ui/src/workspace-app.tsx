@@ -4,6 +4,7 @@ import type { WorkspaceApi } from '../../client/src/http-client.js';
 import { TableModel } from '../../client/src/table-model.js';
 import { TableApp, type TableHost } from './table-app.js';
 import { Dialog } from './dialog.js';
+import { WorkspaceContext } from './workspace-context.js';
 
 type TableAction = { kind: 'create' } | { kind: 'rename' | 'delete'; table: Table };
 const message = (error: unknown) => error instanceof Error ? error.message : 'The operation failed.';
@@ -75,7 +76,7 @@ export function WorkspaceApp({ api, host }: { api: WorkspaceApi; host: TableHost
     }
   };
 
-  return <main className="rowweave-app">
+  return <WorkspaceContext.Provider value={api}><main className="rowweave-app">
     <header className="app-header">
       <div className="brand"><span className="brand-mark" aria-hidden="true">▦</span> RowWeave</div>
       <span className="workspace-label">Local workspace</span>
@@ -106,7 +107,7 @@ export function WorkspaceApp({ api, host }: { api: WorkspaceApi; host: TableHost
     </div>
     {action && <TableDialog action={action} api={api} setDirty={setFormDirty}
       onClose={() => setAction(undefined)} onComplete={completed} />}
-  </main>;
+  </main></WorkspaceContext.Provider>;
 }
 
 function TableDialog({ action, api, onClose, onComplete, setDirty }: {

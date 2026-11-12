@@ -4,8 +4,8 @@ import { defaultView } from '../../core/src/grid-views.js';
 
 export function migrate(db: DatabaseSync): boolean {
   const version = db.prepare('PRAGMA user_version').get()!['user_version'] as number;
-  if (version === 4) return false;
-  if (version < 0 || version > 4) throw new Error(`Unsupported database version: ${version}.`);
+  if (version === 5) return false;
+  if (version < 0 || version > 5) throw new Error(`Unsupported database version: ${version}.`);
   db.exec('BEGIN IMMEDIATE');
   try {
     if (version < 2) {
@@ -39,19 +39,35 @@ export function migrate(db: DatabaseSync): boolean {
       }
     }
     if (version < 3) db.exec('ALTER TABLE tables ADD COLUMN revision INTEGER NOT NULL DEFAULT 1;');
-    db.exec(`CREATE TABLE views (
-      id TEXT PRIMARY KEY, table_id TEXT NOT NULL REFERENCES tables(id) ON DELETE CASCADE,
-      name TEXT NOT NULL, version INTEGER NOT NULL, config_json TEXT NOT NULL
-    ); CREATE INDEX views_by_table ON views(table_id);`);
-    const insertView = db.prepare('INSERT INTO views VALUES (?, ?, ?, ?, ?)');
-    for (const row of db.prepare('SELECT id FROM tables').all()) {
-      const id = row['id'] as string;
-      const fields = db.prepare('SELECT definition_json FROM fields WHERE table_id = ? ORDER BY position').all(id)
-        .map(row => JSON.parse(row['definition_json'] as string) as Field);
-      const view = defaultView({ id, fields });
-      insertView.run(view.id, id, view.name, view.version, JSON.stringify({ query: view.query, columns: view.columns }));
+    if (version < 4) {
+      db.exec(`CREATE TABLE views (
+        id TEXT PRIMARY KEY, table_id TEXT NOT NULL REFERENCES tables(id) ON DELETE CASCADE,
+        name TEXT NOT NULL, version INTEGER NOT NULL, config_json TEXT NOT NULL
+      ); CREATE INDEX views_by_table ON views(table_id);`);
+      const insertView = db.prepare('INSERT INTO views VALUES (?, ?, ?, ?, ?)');
+      for (const row of db.prepare('SELECT id FROM tables').all()) {
+        const id = row['id'] as string;
+        const fields = db.prepare('SELECT definition_json FROM fields WHERE table_id = ? ORDER BY position').all(id)
+          .map(row => JSON.parse(row['definition_json'] as string) as Field);
+        const view = defaultView({ id, fields });
+        insertView.run(view.id, id, view.name, view.version, JSON.stringify({ query: view.query, columns: view.columns }));
+      }
     }
-    db.exec('PRAGMA user_version = 4; COMMIT;');
+    db.exec(`CREATE TABLE field_relations (
+      field_id TEXT PRIMARY KEY REFERENCES fields(id) ON DELETE CASCADE,
+      target_table_id TEXT NOT NULL REFERENCES tables(id) ON DELETE RESTRICT
+    );
+    CREATE INDEX relations_by_target_table ON field_relations(target_table_id);
+    CREATE TABLE relation_edges (
+      source_record_id TEXT NOT NULL REFERENCES records(id) ON DELETE CASCADE,
+      field_id TEXT NOT NULL REFERENCES field_relations(field_id) ON DELETE CASCADE,
+      target_record_id TEXT NOT NULL REFERENCES records(id) ON DELETE RESTRICT,
+      position INTEGER NOT NULL,
+      PRIMARY KEY(source_record_id, field_id, target_record_id),
+      UNIQUE(source_record_id, field_id, position)
+    );
+    CREATE INDEX relations_by_target_record ON relation_edges(target_record_id);
+    PRAGMA user_version = 5; COMMIT;`);
     return version === 0;
   } catch (error) {
     db.exec('ROLLBACK');

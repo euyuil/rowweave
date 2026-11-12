@@ -4,7 +4,7 @@ import { ServiceError } from './errors.js';
 import { schemaName, schemaObject } from './schema-validation.js';
 import { validateValue } from './field-values.js';
 
-const fieldTypes: FieldType[] = ['text', 'multiline', 'number', 'checkbox', 'date', 'datetime', 'singleSelect', 'multiSelect'];
+const fieldTypes: FieldType[] = ['text', 'multiline', 'number', 'checkbox', 'date', 'datetime', 'singleSelect', 'multiSelect', 'relation'];
 
 export function parseField(input: Record<string, unknown>, previous?: Field): Field {
   const config = { ...previous, ...input };
@@ -57,6 +57,14 @@ export function parseField(input: Record<string, unknown>, previous?: Field): Fi
       }
       field.currency = config['currency'];
     }
+  }
+  if (field.type === 'relation') {
+    const relation = schemaObject(config['relation']);
+    if (typeof relation['tableId'] !== 'string' || !relation['tableId'] || relation['tableId'].length > 100 ||
+        typeof relation['multiple'] !== 'boolean') {
+      throw new ServiceError('INVALID_SCHEMA', 'A linked-record field requires a target table ID and a multiple flag.');
+    }
+    field.relation = { tableId: relation['tableId'], multiple: relation['multiple'] };
   }
   if (config['defaultValue'] !== undefined && config['defaultValue'] !== null) {
     field.defaultValue = validateValue(field, config['defaultValue']);
