@@ -58,9 +58,10 @@ const view = {
   columns: z.array(z.strictObject({ fieldId: id, width: z.number(), hidden: z.boolean() })).exactOptional(),
   rowHeight: z.union([z.literal(36), z.literal(48), z.literal(64)]).exactOptional(),
   frozenColumns: z.int().min(0).exactOptional(),
+  type: z.enum(['grid', 'board']).exactOptional(), groupBy: id.exactOptional(),
 };
 export const viewCreate = z.strictObject(view);
 export const viewUpdate = z.strictObject({ ...view, ...expectedVersion, name: z.string().exactOptional() });
-export const viewPage = z.strictObject({ ...page, search: z.string().exactOptional(), expectedViewVersion: version.exactOptional() });
+export const viewPage = z.strictObject({ ...page, search: z.string().exactOptional(), expectedViewVersion: version.exactOptional(), lane: id.nullable().exactOptional() });
 export const csvImport = z.strictObject({ ...expectedVersion, csv: z.string(), hasHeader: z.boolean(), mapping: z.array(id.nullable()).exactOptional() });
 export const csvExport = z.strictObject({ viewId: id.exactOptional(), expectedViewVersion: version.exactOptional(), search: z.string().exactOptional() });

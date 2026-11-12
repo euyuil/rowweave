@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import type { RowRecord, Table } from '../../contracts/src/index.js';
+import type { CellValue, RowRecord, Table } from '../../contracts/src/index.js';
 import type { WorkspaceApi } from '../../client/src/http-client.js';
 import { sameValue } from '../../client/src/cell-values.js';
 import { Dialog } from './dialog.js';
@@ -9,6 +9,7 @@ import { fromFormValue, toFormValue, type FormValue } from './field-input-values
 export interface RecordAction {
   kind: 'create' | 'edit' | 'duplicate' | 'delete';
   records: RowRecord[];
+  initialValues?: Record<string, CellValue>;
 }
 
 export function RecordDialog({ action, table, api, setDirty, onClose, onSaved }: {
@@ -17,7 +18,8 @@ export function RecordDialog({ action, table, api, setDirty, onClose, onSaved }:
 }) {
   const original = action.records[0];
   const [values, setValues] = useState<Record<string, FormValue>>(() => Object.fromEntries(table.fields.map(field =>
-    [field.id, toFormValue(field, original ? original.values[field.id] : field.defaultValue)])));
+    [field.id, toFormValue(field, original ? original.values[field.id]
+      : action.initialValues && Object.hasOwn(action.initialValues, field.id) ? action.initialValues[field.id] : field.defaultValue)])));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const deleting = action.kind === 'delete';

@@ -307,7 +307,7 @@ export class SqliteRecordStore implements RecordStore {
   }
 
   private decodeView(row: StoredView): GridView {
-    const config = JSON.parse(row.config_json) as Pick<GridView, 'query' | 'columns' | 'rowHeight' | 'frozenColumns'>;
+    const config = JSON.parse(row.config_json) as Pick<GridView, 'query' | 'columns' | 'rowHeight' | 'frozenColumns' | 'type' | 'groupBy'>;
     return { id: row.id, tableId: row.table_id, name: row.name, version: row.version, ...config };
   }
 
@@ -326,7 +326,7 @@ export class SqliteRecordStore implements RecordStore {
     this.db.prepare(`INSERT INTO views VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET
       name = excluded.name, version = excluded.version, config_json = excluded.config_json`)
       .run(view.id, view.tableId, view.name, view.version, JSON.stringify({ query: view.query, columns: view.columns,
-        rowHeight: view.rowHeight, frozenColumns: view.frozenColumns }));
+        rowHeight: view.rowHeight, frozenColumns: view.frozenColumns, type: view.type, groupBy: view.groupBy }));
   }
 
   private syncViews(table: Table): void {

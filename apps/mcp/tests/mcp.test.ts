@@ -61,6 +61,20 @@ async function setup(t: Context) {
   return { service, server, token, environment };
 }
 
+test('MCP creates board views, queries empty lanes and moves records using their versions', async t => {
+  const { environment } = await setup(t);
+  const { json, call } = await connect(t, environment);
+  let table = await json<Table>('tables_create', { name: 'Board tasks' });
+  table = await json<Table>('fields_create', { tableId: table.id, input: { expectedVersion: table.version, name: 'Status', type: 'singleSelect', options: [{ id: 'ready', name: 'Ready' }] } });
+  const status = table.fields[1]!.id;
+  const view = await json<GridView>('views_create', { tableId: table.id, input: { name: 'Status', type: 'board', groupBy: status } });
+  const record = (await json<BatchResult>('records_create', { tableId: table.id, records: [{ values: { [table.primaryFieldId]: 'Task' } }] })).records[0]!;
+  assert.equal((await json<QueryPage>('views_query', { tableId: table.id, viewId: view.id, query: { lane: null } })).total, 1);
+  await json('records_update', { tableId: table.id, records: [{ id: record.id, expectedVersion: record.version, values: { [status]: 'ready' } }] });
+  assert.equal((await json<QueryPage>('views_query', { tableId: table.id, viewId: view.id, query: { lane: 'ready' } })).total, 1);
+  assert.equal((await call('views_query', { tableId: table.id, viewId: view.id, query: { lane: 'missing' } })).isError, true);
+});
+
 test('MCP discovers all operations and runs versioned schema, records, views and CSV workflows over stdio', async t => {
   const { service, environment } = await setup(t);
   const { client, call, json, used, stderr } = await connect(t, environment);
