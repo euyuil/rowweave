@@ -2,35 +2,28 @@
 
 English | [简体中文](README.zh-CN.md)
 
-**Structured tables for your team, your apps, and your AI agents.**
+**Tables that fit your work. Data your apps and agents can use.**
 
-RowWeave is being built to give people and software a shared place to work with business data. Define the structure your team needs, manage records in a desktop table interface, and let applications and AI agents work with the same data through clear interfaces.
+Build a project tracker, customer list, or inventory without writing a schema in code. RowWeave combines customizable tables, a responsive desktop grid, and open interfaces for the software you already use.
 
-> **Project status:** The first Windows desktop prototype is available. It demonstrates local table editing and reliable saves with a fixed sample table. Custom schemas, team hosting, and agent integrations are still planned.
+- **Make the structure your own.** Create tables with text, numbers, dates, checkboxes, and choices. Link related records and bring their values into your view with lookups.
+- **Find the view that matters.** Save filters, sorting, search, and column layouts for different tasks.
+- **Move through work quickly.** Edit with the keyboard, paste a block of cells, undo drafts, and save changes together. Bring data in and out with CSV.
+- **Connect your tools.** Use the HTTP API, TypeScript SDK, CLI, MCP, or agent Skills. A DeepSeek Harness panel provides the same table workspace inside your host.
+- **Choose where your data lives.** Start locally on Windows or connect to a service you operate. People and software share validation and version checks.
 
-## Why RowWeave?
+## Try RowWeave
 
-- **Shape your data around your work.** Organize customer lists, project records, inventories, and other business data with tables and fields you define.
-- **Work in a familiar table interface.** Browse, edit, select, and paste data in a desktop app.
-- **Give people and agents the same foundation.** Planned APIs and tools let applications and AI agents discover table structures, query records, and make validated updates.
-- **Start on your own machine.** Run locally, with a path toward hosting one shared data service for your team.
-- **Keep data operations dependable.** Shared validation, atomic batch updates, and version checks are design priorities, so automation and manual edits follow the same rules.
+The first product candidate is ready for evaluation. Download **rowweave-windows** from a successful [CI run](https://github.com/euyuil/rowweave/actions), extract the application ZIP, and open `RowWeave.exe`. No separate Node.js installation is needed for the desktop.
 
-## Built for teams that work in tables
+Start with an empty workspace: create a table, add fields, and enter or import records. Save explicitly with **Save changes** or **Ctrl+S**.
 
-RowWeave is aimed at teams that want the flexibility of custom tables, the convenience of a desktop app, and a clear way to connect their data to other software.
+[Desktop connections](docs/connections.md) · [CSV guide](docs/data-exchange.md) · [Acceptance walkthrough](docs/acceptance.md)
 
-Its focus is structured records and reliable operations. Excel-style formulas, built-in AI chat, and offline synchronization are outside the initial scope.
+## Connect your software
 
-## Try the desktop prototype
+[Run a service](docs/service.md) · [TypeScript SDK](packages/client/README.md) · [CLI](apps/cli/README.md) · [MCP](docs/mcp.md) · [Agent Skills](docs/agent-skills.md) · [Harness](docs/harness.md)
 
-Open 10,000 sample records, edit cells, paste a block from a spreadsheet, and save your changes locally. Saved values survive a restart. Version checks prevent a conflicting update from silently overwriting your work.
+This release focuses on flexible structured tables and reliable data operations. Excel-style formulas, built-in AI chat, enterprise permissions, and real-time collaborative editing are outside its current scope.
 
-Download the Windows prototype artifact from a successful [CI run](https://github.com/euyuil/rowweave/actions), extract the application ZIP, and open `RowWeave.exe`. You can also [run from source](docs/development.md#desktop). This is an early prototype with text fields and a fixed table, intended for evaluating the workflow. See the [validation notes](docs/validation.md) for measured results and current limits.
-
-Custom table structures, field types, filtering, sorting, and CSV import/export will follow. Team hosting, SDKs, MCP, CLI, and agent skills remain part of the broader direction.
-
-## Follow the project
-
-- Browse [issues](https://github.com/euyuil/rowweave/issues) or open one to share your use case and the workflows that matter to you.
-- For architecture, prototype scope, and development plans, read the [design document](docs/design.md).
+For measured performance and current limits, see the [verification report](docs/product-performance.md). For source builds and architecture, see [development](docs/development.md) and [design](docs/design.md). Share your workflows and feedback in [Issues](https://github.com/euyuil/rowweave/issues).

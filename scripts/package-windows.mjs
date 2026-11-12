@@ -40,7 +40,7 @@ try {
     dir: stage, out: output, name: 'RowWeave', executableName: 'RowWeave',
     platform: 'win32', arch: 'x64', electronVersion, asar: true, prune: false,
     ...(hasLocalZip ? { electronZipDir: artifacts } : {}),
-    win32metadata: { CompanyName: 'RowWeave', FileDescription: 'RowWeave desktop prototype' },
+    win32metadata: { CompanyName: 'RowWeave', FileDescription: 'RowWeave desktop' },
   });
   if (!directory) throw new Error('Packaging did not produce an application.');
   const zip = join(output, `rowweave-${manifest.version}-win32-x64.zip`);

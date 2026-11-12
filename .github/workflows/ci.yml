@@ -83,7 +83,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: success() && runner.os == 'Windows'
         with:
-          name: rowweave-windows-prototype
+          name: rowweave-windows
           path: |
             release/**/*.zip
             release/**/*.sha256

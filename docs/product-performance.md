@@ -1,6 +1,6 @@
 # Product performance verification
 
-The [completion plan](completion-plan.md#performance-gate) defines the acceptance targets. This report records progress toward them; the first baseline below is not a completed acceptance result. Native IME, external spreadsheet interoperability, final scrolling/memory measurements, and the user's end-to-end acceptance remain pending.
+The [completion plan](completion-plan.md#performance-gate) defines the acceptance targets. The complete production run below meets every timing and memory target on the reference machine. Earlier baselines are retained to show the fixes and their measured effects. Native IME, external spreadsheet interoperability, and the user's end-to-end acceptance remain pending.
 
 ## Reproduce
 
@@ -9,6 +9,37 @@ Use the pinned toolchain, `npm run package:win`, and `npm run benchmark`. `--tim
 The datasets have 10,000 × 20 and 100,000 × 100 cells, including nullable/empty text, long Unicode text, numbers with currency/percent presentation, booleans, dates/timestamps, and single/multiple selections. The first ten columns accept a 1,000 × 10 text paste. Stable schema IDs come from normal service operations. Query cases use the primary `Name`, numeric `Amount >= 9900`, `Amount >= 9900 AND Done = true`, ascending `Name`, and descending `Amount`. Views retain all columns. Creation time, first query, and steady-state queries are reported separately.
 
 Input sampling measures 100 keyboard inputs in a text editor after ten warm-up inputs on each of three launches. The input event to animation-frame callback is a paint proxy, not physical display latency. Paste timing includes parser, missing-page reads, draft staging, and the next frame showing the pending-cell count; wall time is retained as well. Save timing ends at successful UI feedback. Startup includes automation attachment and two frames after the grid loads, not a cold OS boot.
+
+## Complete production run
+
+Measured on 2026-11-12 from clean revision `3929ce1af88eb63ae508859081a5be07e7ef3b44` (merged through PR #36). Package SHA-256: `604336a5859215423c77d3636964e6de0ae7973e8f934d58137bdf06de02261a`. No dependency downloads, other regression suites, or other application benchmarks overlapped the measurements. The full timing run was followed by a separate memory run without a renderer debugger or forced garbage collection.
+
+Environment: Windows 11 x64 10.0.22631, Intel Core i7-8700K (12 logical CPUs), 31.95 GiB RAM, NVIDIA GeForce GTX 1080, 1920 × 1080 at 100% scaling/60 Hz. Electron 45.3.0, Chromium 156.0.8078.96, embedded Node 24.22.2, React 18.3.1, and Glide Data Grid 6.0.3. Generation used Node 24.22.1 and the repository's typed generator: 2.9 seconds for 10,000 × 20 and 193.3 seconds for 100,000 × 100.
+
+| Measurement | 10,000 × 20 | 100,000 × 100 | Target |
+| --- | ---: | ---: | ---: |
+| Startup, median of three launches | 1,042 ms | 1,033 ms | ≤2,000 ms |
+| Input p95, range across three 100-sample trials | 14.3–14.9 ms | 14.8–15.0 ms | ≤50 ms |
+| Maximum measured input delay | 15.9 ms | 16.3 ms | Report outliers |
+| Paste 1,000 × 10, range of three trials | 86–113 ms | 351–368 ms | ≤500 ms |
+| Atomic save, range of three trials | 310–328 ms | 927–951 ms | ≤2,000 ms |
+| First-page query p95 | 12 ms | 68 ms | ≤500 ms |
+| Numeric-range query p95 | 12 ms | 68 ms | ≤500 ms |
+| Compound-filter query p95 | 8 ms | 61 ms | ≤500 ms |
+| Primary-text sort p95 | 11 ms | 67 ms | ≤500 ms |
+| Numeric sort p95 | 11 ms | 61 ms | ≤500 ms |
+| Scrolling frame interval p95, five traversals | 16.8 ms | 16.8 ms | ≤25 ms |
+| Long frames over 25 / 50 ms | 0 / 0 of 4,143 | 0 / 0 of 4,123 | Report separately |
+| Summed working sets, five separate memory circuits | 471–480 MiB | 508–533 MiB | <650 MiB |
+| Spread across the last three memory circuits | 7.3 MiB | 6.5 MiB | ≤50 MiB |
+
+Four saved-query indexes cover the measured range/filter/sort cases; the first-page case uses the existing table/position index. Creating a new indexed view took 78–124 ms on the small dataset and 1.53–1.95 seconds on the large one. Those preparation costs are excluded from repeated-query latency and reported explicitly. The second and third paste/save trials ran with these indexes already present, so their maintenance cost is included in the write results. Queries return 100 records with all fields; twenty requests are measured after two warm-ups. No claim is made for arbitrary unindexed queries or a cold OS boot.
+
+The separate memory run summed Electron's main, renderer, GPU, network and RowWeave service working sets. Shared pages may be counted in more than one process, so these sums are not unique physical RAM consumption. Service working sets were 69–76 MiB for 10,000 × 20 and 111–120 MiB for 100,000 × 100; corresponding private bytes were 36–43 MiB and 78–86 MiB. Last-three-circuit totals were 472.2/479.6/478.1 MiB and 532.5/529.9/526.1 MiB. The renderer cache remains bounded by the client regression tests. This establishes the stated five-circuit workload, not an indefinite-session memory guarantee.
+
+The instrumented timing run also retains per-process snapshots and a forced-GC diagnostic, which include renderer-debugger overhead and are not substituted for the separate memory gate. Input/frame metrics remain animation-frame proxies rather than physical display latency. None of these automated results establishes native IME or external spreadsheet compatibility.
+
+Raw local reports: `.artifacts/benchmarks/2026-11-12T12-33-52-773Z/results.json` and the adjacent `memory-without-renderer-debugger.json`. The directory also contains both generated databases and screenshots. The package manifest, runtime/display details, raw input/query/frame samples and per-process memory circuits identify the exact measured workload.
 
 ## Initial mixed-type baseline
 

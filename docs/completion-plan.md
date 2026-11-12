@@ -69,11 +69,12 @@ Each item may need more than one focused PR. Do not batch completed PRs while wa
   - [x] Stdio MCP adapter with 24 discoverable tools, live schema/view resources, versioned writes, protocol-client workflows and an offline-installable bundle.
   - [x] Portable RowWeave usage Skill with concrete MCP/CLI recipes, bounded reads, conflict/uncertain-write recovery, installation guidance and validated metadata.
 - [x] Harness adapter and host integration verification (installable Web-profile bundle, official module/slot/layout/renderer integration, typed workspace editing, draft-safe navigation, browser CSV download, failed-connection retention, and disposal/reload tests).
-- [ ] Complete cross-interface regression, migration/backup verification, production performance, and packaging.
+- [x] Complete cross-interface regression, migration/backup verification, production performance, and packaging.
   - [x] Mixed-type pressure datasets and expanded production benchmarks (100 input samples per launch, reproducible view queries, raw outliers; [initial baseline](product-performance.md) identifies large-table paste/query work still required).
   - [x] Bounded batch reads for large paste/clear operations, with atomic staging and cancellation regression tests; packaged 100,000 × 100 paste retiming is 412–448 ms. The final complete run remains pending.
   - [x] Transactional saved-query indexes and format-7 migration, with lifecycle/conversion/rollback tests; the five packaged 100,000 × 100 benchmark queries now measure 72–109 ms p95. Initial index construction is recorded separately; the final complete run remains pending.
   - [x] Shared-service acceptance across desktop, SDK, CLI, MCP and Harness, including schema discovery, saved views, versioned edits and rejected stale writes. The extracted Windows package and source desktop both run this scenario. The full official Harness Web host was also installed and exercised separately ([evidence](harness.md#integration-and-verification)).
+  - [x] Clean production package measured at both required scales: all startup/input/paste/save/query/scrolling targets passed. Separate five-circuit memory measurements remained below 533 MiB, with last-three spreads below 8 MiB ([complete results](product-performance.md#complete-production-run)).
 - [ ] Final native-input checks and invitation for user end-to-end acceptance.
 
 ## Acceptance scenarios
