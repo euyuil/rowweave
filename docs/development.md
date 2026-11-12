@@ -25,6 +25,8 @@ Write limits are 2,000 distinct records, 20,000 changed cells, 10,000 UTF-16 cod
 
 A new database starts empty. Create a table from the desktop sidebar or `POST /tables`; deterministic datasets are only created explicitly by tests and `npm run dataset`. Opening an existing database never reseeds deleted tables. Node's built-in SQLite driver runs only in the service.
 
+Use `npm run workspace:file -- backup SOURCE NEW_DESTINATION` for a consistent online workspace snapshot, and `npm run workspace:file -- restore BACKUP NEW_DESTINATION` to validate and migrate a copy. Neither operation replaces an existing destination. See [backup, restore, and upgrades](backup.md) before switching a working service or desktop to the restored file.
+
 ### Dynamic tables and schema
 
 The service supports multiple tables with stable table, field, and record IDs. The desktop supports creating, switching, renaming, and deleting tables, with unsaved-edit navigation guards and explicit deletion confirmation. **Manage fields** adds/configures fields, selects the primary display field, changes field order, and confirms deletion. Forms expose the supported types, number formatting, options, required values, and defaults. Save or discard grid drafts before changing schema; changes use the displayed schema version and reject stale writes.
