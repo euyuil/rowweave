@@ -9,7 +9,7 @@ export interface LocalService {
 
 export async function startLocalService(entry: string, database: string, onExit: (service: LocalService) => void): Promise<LocalService> {
   const token = randomBytes(32).toString('hex');
-  const child = utilityProcess.fork(entry, [], { serviceName: 'RowWeave data service',
+  const child = utilityProcess.fork(entry, [], { serviceName: 'rowweave-data-service',
     env: { ...process.env, ROWWEAVE_DB: database, ROWWEAVE_TOKEN: token }, stdio: 'pipe' });
   child.stderr?.on('data', (data: Buffer) => process.stderr.write(data));
   let exited = false;

@@ -23,8 +23,10 @@ External agents handle AI inference, context management, task orchestration, and
 
 ## Naming
 
-- Use **RowWeave** in documentation, the interface, and branding.
-- Use `rowweave` for the repository, packages, and commands.
+- Use **RowWeave** as the brand in prose, the interface, window titles, and product display metadata.
+- Use `rowweave` as the codename for the repository, packages, commands, executable/artifact filenames, protocol identifiers, and process identifiers. For example, the portable archive contains `rowweave-win32-x64/rowweave.exe`. Environment variables follow the `ROWWEAVE_*` convention; user-provided names and historical artifact references retain their spelling.
+- Platform presentation conventions allow branded Windows installation/profile directories and shortcuts (`Program Files\RowWeave\rowweave.exe`, `%APPDATA%\RowWeave`, `RowWeave.lnk`), and macOS application bundles (`RowWeave.app` with an executable named `rowweave`). Linux desktop entry filenames use `rowweave.desktop`, with `Name=RowWeave` for display. These examples define naming, not additional platform deliverables.
+- A service registered with Windows Service Control Manager may also use a branded service name. The current local service is an application-managed Electron utility process, not a registered Windows service, so its identifier is `rowweave-data-service`.
 
 ## Design principles
 

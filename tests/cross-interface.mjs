@@ -90,7 +90,7 @@ export async function verifyCrossInterfaceWorkflow(connection, harnessPage, tabl
       const target = join(directory, 'application');
       await mkdir(target);
       await extract(manifest.zip, { dir: target });
-      executablePath = join(target, 'RowWeave-win32-x64', 'RowWeave.exe');
+      executablePath = join(target, 'rowweave-win32-x64', 'rowweave.exe');
     }
     desktop = await electron.launch({ executablePath, args: packaged ? [] : [resolve('.')], cwd: directory,
       env: { ...process.env, ROWWEAVE_DATA_DIR: join(directory, 'profile'), ROWWEAVE_HEADLESS: '1' }, timeout: 40_000 });

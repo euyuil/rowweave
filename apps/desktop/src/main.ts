@@ -147,7 +147,7 @@ void app.whenReady().then(async () => {
       if (!trusted(event) || typeof name !== 'string' || name.length > 500 || typeof csv !== 'string' || Buffer.byteLength(csv, 'utf8') > maxCsvBytes) {
         throw new Error('Invalid CSV export.');
       }
-      const filename = 'RowWeave-' + name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').slice(0, 100).replace(/[. ]+$/, '') + '.csv';
+      const filename = 'rowweave-' + name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').slice(0, 100).replace(/[. ]+$/, '') + '.csv';
       const result = await dialog.showSaveDialog(window!, { title: 'Export CSV', defaultPath: filename,
         filters: [{ name: 'CSV files', extensions: ['csv'] }] });
       if (result.canceled) return false;

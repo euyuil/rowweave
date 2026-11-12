@@ -53,7 +53,7 @@ async function stopRemote() {
   await running.close();
 }
 async function localProcesses() {
-  return application.evaluate(({ app }) => app.getAppMetrics().filter(item => item.name === 'RowWeave data service').length);
+  return application.evaluate(({ app }) => app.getAppMetrics().filter(item => item.name === 'rowweave-data-service').length);
 }
 async function createRecord(name) {
   await page.getByRole('button', { name: '+ New record', exact: true }).click();
@@ -71,7 +71,7 @@ try {
     const extracted = join(directory, 'application');
     await mkdir(extracted);
     await extract(manifest.zip, { dir: extracted });
-    executablePath = join(extracted, 'RowWeave-win32-x64', 'RowWeave.exe');
+    executablePath = join(extracted, 'rowweave-win32-x64', 'rowweave.exe');
   }
   await launch('Make room for your ideas');
   const slowService = join(directory, 'slow-service.cjs');
@@ -234,5 +234,5 @@ try {
   store.close();
   const target = resolve(directory);
   if (dirname(target) !== resolve(tmpdir()) || !basename(target).startsWith('rowweave-connections-')) throw new Error('Unexpected cleanup path.');
-  await rm(target, { recursive: true, force: true });
+  await rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }

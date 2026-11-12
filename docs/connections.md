@@ -6,7 +6,7 @@ RowWeave can open the workspace on your device or connect to an independently op
 
 Choose **On this device**, then **Connect and save**. RowWeave starts its bundled data service in a separate process and opens the existing local workspace. The first launch uses this mode automatically. Closing RowWeave stops that bundled service.
 
-The local database is `prototype.sqlite` in the RowWeave user-data directory. `ROWWEAVE_DATA_DIR` selects another profile and local workspace directory. The historical filename is retained for existing users; new workspaces start empty. See [backup and restore](backup.md) to move or recover a workspace without mixing database journal files.
+The local database is `prototype.sqlite` in `%APPDATA%\RowWeave` on Windows. Windows installation and user-data directories may use the brand, while the executable uses the codename `rowweave.exe`. `ROWWEAVE_DATA_DIR` selects another profile and local workspace directory. The existing profile path and historical database filename are retained; new workspaces start empty. See [backup and restore](backup.md) to move or recover a workspace without mixing database journal files.
 
 ## Independent service
 

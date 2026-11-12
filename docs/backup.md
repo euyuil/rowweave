@@ -41,7 +41,7 @@ For example, on PowerShell, after restoring into a new local-workspace directory
 
 ```powershell
 $env:ROWWEAVE_DATA_DIR = 'C:\RowWeave\RestoredWorkspace'
-& 'C:\Apps\RowWeave\RowWeave.exe'
+& 'C:\Program Files\RowWeave\rowweave.exe'
 ```
 
 Use your actual paths. Do not rename or overwrite a live database, and do not mix journal sidecars from the old workspace with the restored file. Restoring to a fresh directory avoids that ambiguity. Remote clients need no local database copy; they reconnect to the independently operated service after its workspace switch.

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { _electron as electron } from 'playwright';
@@ -169,7 +169,9 @@ try {
     const directory = join(dataDirectory, 'application');
     await mkdir(directory);
     await extract(manifest.zip, { dir: directory });
-    executablePath = join(directory, 'RowWeave-win32-x64', 'RowWeave.exe');
+    assert.ok((await readdir(directory)).includes('rowweave-win32-x64'));
+    assert.ok((await readdir(join(directory, 'rowweave-win32-x64'))).includes('rowweave.exe'));
+    executablePath = join(directory, 'rowweave-win32-x64', 'rowweave.exe');
   }
   await launch();
   assert.deepEqual(await tables(), []);

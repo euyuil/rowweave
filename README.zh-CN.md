@@ -14,7 +14,7 @@
 
 ## 体验 RowWeave
 
-首个产品候选版本已可供评估。从成功的 [CI 运行记录](https://github.com/euyuil/rowweave/actions)下载 **rowweave-windows**，解压其中的应用 ZIP，打开 `RowWeave.exe`。桌面版无需额外安装 Node.js。
+首个产品候选版本已可供评估。从成功的 [CI 运行记录](https://github.com/euyuil/rowweave/actions)下载 **rowweave-windows**，解压其中的应用 ZIP，打开 `rowweave.exe`。桌面版无需额外安装 Node.js。
 
 从空白工作区开始：创建表，添加字段，再录入或导入记录。点击 **Save changes** 或按 **Ctrl+S** 保存修改。
 

@@ -14,7 +14,7 @@ Build a project tracker, customer list, or inventory without writing a schema in
 
 ## Try RowWeave
 
-The first product candidate is ready for evaluation. Download **rowweave-windows** from a successful [CI run](https://github.com/euyuil/rowweave/actions), extract the application ZIP, and open `RowWeave.exe`. No separate Node.js installation is needed for the desktop.
+The first product candidate is ready for evaluation. Download **rowweave-windows** from a successful [CI run](https://github.com/euyuil/rowweave/actions), extract the application ZIP, and open `rowweave.exe`. No separate Node.js installation is needed for the desktop.
 
 Start with an empty workspace: create a table, add fields, and enter or import records. Save explicitly with **Save changes** or **Ctrl+S**.
 
