@@ -75,6 +75,31 @@ test('paste stages a whole 1000 by 10 rectangle even when larger than the cache'
   assert.equal(records[4]?.values['field_10'], '粘贴 🌱 999/9');
 });
 
+test('clear loads the entire selection, supports one-step undo, and bounds work before reading', async t => {
+  const api = apiFor(t, 1_100);
+  let reads = 0;
+  const model = new TableModel({ ...api, readPage: async (...args) => { reads++; return api.readPage(...args); } }, 100, 2);
+  await model.initialize();
+  const rows = Array.from({ length: 1_000 }, (_, index) => index);
+  const fields = model.fields.slice(0, 10).map(field => field.id);
+  await model.clearCells(rows, fields);
+  assert.equal(model.pendingCells, 10_000);
+  assert.ok(model.cacheStats.rows <= 200);
+  assert.equal(model.getRecord(999)!.values['field_10'], '');
+  model.undo();
+  assert.equal(model.pendingCells, 0);
+  model.redo();
+  assert.equal(model.pendingCells, 10_000);
+  const previousReads = reads;
+  await assert.rejects(model.clearCells(Array.from({ length: 2_001 }, (_, i) => i), fields), /2,000 rows/);
+  await assert.rejects(model.clearCells(rows, [...fields, ...fields, ...fields]), /20,000 cells/);
+  assert.equal(reads, previousReads);
+  assert.equal(model.pendingCells, 10_000);
+  await model.save();
+  assert.equal((await model.readRange(999, 1))[0]!.values['field_10'], '');
+  assert.notEqual((await model.readRange(1_000, 1))[0]!.values['field_10'], '');
+});
+
 test('a late page response cannot overwrite the result of a successful save', async t => {
   const api = apiFor(t);
   let release: (() => void) | undefined;

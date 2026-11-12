@@ -3,12 +3,12 @@ import DataEditor, {
   CompactSelection, GridCellKind, type DataEditorRef, type GridCell, type GridSelection, type Rectangle,
 } from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
-import { maxBatchCells, maxBatchRecords, type Field, type GridView, type RowRecord, type Table } from '../../contracts/src/index.js';
+import { maxBatchCells, maxBatchRecords, type CellValue, type Field, type GridView, type RowRecord, type Table } from '../../contracts/src/index.js';
 import type { TableModel } from '../../client/src/table-model.js';
 import { queryForView, type WorkspaceApi } from '../../client/src/http-client.js';
 import { cellDisplay, cellText } from '../../client/src/cell-values.js';
 import { parseTextValue } from '../../core/src/field-values.js';
-import { EditorContext, TextCellEditor, type FinishEditor } from './text-cell-editor.js';
+import { CellEditor, EditorContext, type EditableCell, type EditorHandle } from './cell-editor.js';
 import { parseClipboard } from './clipboard.js';
 import { RecordDialog, type RecordAction } from './record-dialog.js';
 import { FieldsDialog } from './fields-dialog.js';
@@ -21,12 +21,13 @@ export interface TableHost {
   onServiceExit(listener: () => void): () => void;
 }
 
-function textCell(record: RowRecord | undefined, field: Field | undefined, readonly: boolean): GridCell {
+function gridCell(record: RowRecord | undefined, field: Field | undefined, readonly: boolean, row: number): GridCell {
   if (!record || !field) return { kind: GridCellKind.Loading, allowOverlay: false };
-  const value = record.values[field.id];
+  const value = record.values[field.id] ?? null;
   const text = cellText(field, value);
+  if (field.type === 'checkbox') return { kind: GridCellKind.Boolean, data: value as boolean | null, allowOverlay: false, readonly, copyData: text };
   return { kind: GridCellKind.Text, data: text, copyData: text, displayData: cellDisplay(field, value),
-    allowOverlay: !readonly, readonly };
+    allowOverlay: !readonly, readonly, field, rawValue: value, row } as EditableCell;
 }
 
 export function TableApp({ tableId, model, api, host, onManage }: {
@@ -55,7 +56,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   const [formDirty, setFormDirty] = useState(false);
   const [recordAction, setRecordAction] = useState<RecordAction>();
   const [managingFields, setManagingFields] = useState(false);
-  const activeEditor = useRef<FinishEditor>();
+  const activeEditor = useRef<EditorHandle>();
   const [size, setSize] = useState({ width: 900, height: 500 });
   const [visible, setVisible] = useState({ y: 0, height: 50 });
   const [selection, setSelection] = useState<GridSelection>({
@@ -91,7 +92,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   const applyView = useCallback(async (selected: GridView, text = selected.query.search ?? '') => {
     if (model.saving) return;
     if (activeEditor.current) {
-      if (!activeEditor.current(true)) return;
+      if (!activeEditor.current.finish(true)) return;
       await new Promise(resolve => setTimeout(resolve, 0));
     }
     const request = ++viewRequest.current;
@@ -153,7 +154,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     setError(undefined);
     try {
       if (activeEditor.current) {
-        if (!activeEditor.current(true)) return;
+        if (!activeEditor.current.finish(true)) return;
         await new Promise(resolve => setTimeout(resolve, 0));
       }
       await model.save();
@@ -161,8 +162,12 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   }, [model, offline, report]);
   const editorBridge = useMemo(() => ({
     save: () => { void save(); }, setDirty: setEditorDirty,
-    register: (finish: FinishEditor | undefined) => { activeEditor.current = finish; },
-  }), [save]);
+    register: (handle: EditorHandle | undefined) => { activeEditor.current = handle; },
+    commit: (row: number, field: Field, value: CellValue) => {
+      try { model.applyEdits([{ row, fieldId: field.id, value }]); return undefined; }
+      catch (failure) { return failure instanceof Error ? failure.message : 'The cell could not be changed.'; }
+    },
+  }), [save, model]);
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
@@ -193,9 +198,33 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     finally { busyRef.current = false; setBusy(false); }
   }, [model, offline, report]);
 
+  const clearSelection = async (selected: GridSelection) => {
+    if (busyRef.current || model.saving || offline || model.stale) return;
+    const range = selected.current?.range;
+    const rowCount = selected.rows.length || (selected.columns.length ? model.rowCount : range?.height ?? 0);
+    const columnCount = selected.rows.length ? fields.length : selected.columns.length || range?.width || 0;
+    if (!rowCount || !columnCount) return;
+    if (rowCount > maxBatchRecords || rowCount * columnCount > maxBatchCells) {
+      setError('Clear up to 20,000 cells and 2,000 rows at a time.');
+      return;
+    }
+    busyRef.current = true;
+    setBusy(true);
+    setError(undefined);
+    try {
+      const rows = selected.rows.length ? selected.rows.toArray()
+        : Array.from({ length: rowCount }, (_, index) => (selected.columns.length ? 0 : range!.y) + index);
+      const columns = selected.rows.length ? fields.map(field => field.id)
+        : selected.columns.length ? selected.columns.toArray().map(index => fields[index]!.id)
+          : fields.slice(range!.x, range!.x + columnCount).map(field => field.id);
+      await model.clearCells(rows, columns);
+    } catch (failure) { report(failure); }
+    finally { busyRef.current = false; setBusy(false); }
+  };
+
   const reload = async (discardDrafts = true) => {
     if (locked || (!discardDrafts && editorDirty) || (discardDrafts && (pending > 0 || editorDirty) && !await host.confirmDiscard())) return;
-    activeEditor.current?.(false);
+    activeEditor.current?.finish(false);
     busyRef.current = true;
     setBusy(true);
     setError(undefined);
@@ -246,7 +275,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   };
   const getCellContent = useCallback(([column, row]: readonly [number, number]): GridCell => {
     const field = fields[column];
-    return textCell(model.getRecord(row), field, locked || model.stale);
+    return gridCell(model.getRecord(row), field, locked || model.stale, row);
   }, [model, fields, locked, revision]);
 
   const getCellsForSelection = (rectangle: Rectangle, signal: AbortSignal) => async () => {
@@ -257,8 +286,8 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     try {
       const records = await model.readRange(rectangle.y, rectangle.height);
       if (signal.aborted) return [];
-      return records.map(record => Array.from({ length: rectangle.width }, (_, x) =>
-        textCell(record, fields[rectangle.x + x], locked)));
+      return records.map((record, index) => Array.from({ length: rectangle.width }, (_, x) =>
+        gridCell(record, fields[rectangle.x + x], locked, rectangle.y + index)));
     } catch (failure) { report(failure); return []; }
   };
 
@@ -323,20 +352,28 @@ export function TableApp({ tableId, model, api, host, onManage }: {
           width={size.width} height={size.height} rows={model.rowCount}
           columns={columns}
           getCellContent={getCellContent} getCellsForSelection={getCellsForSelection}
-          provideEditor={cell => cell.kind === GridCellKind.Text ? TextCellEditor : undefined}
+          provideEditor={cell => cell.kind === GridCellKind.Text ? CellEditor : undefined}
+          isOutsideClick={event => {
+            const editor = activeEditor.current;
+            if (!editor || !(event.target instanceof Node) || editor.contains(event.target)) return false;
+            if (!editor.finish(true)) { event.preventDefault(); event.stopImmediatePropagation(); }
+            return false;
+          }}
           onVisibleRegionChanged={region => setVisible(previous =>
             previous.y === region.y && previous.height === region.height ? previous : { y: region.y, height: region.height })}
           gridSelection={selection} onGridSelectionChange={setSelection}
           rowMarkers="both" rowHeight={36} headerHeight={40} rangeSelect="rect" rowSelectionMode="multi"
           cellActivationBehavior="double-click"
           keybindings={{ paste: false }}
+          onDelete={selected => { void clearSelection(selected); return false; }}
           smoothScrollX smoothScrollY
           onCellsEdited={edits => {
             if (locked) return true;
             try {
-              model.applyEdits(edits.filter(edit => edit.value.kind === GridCellKind.Text).map(edit => ({
+              model.applyEdits(edits.filter(edit => edit.value.kind === GridCellKind.Text || edit.value.kind === GridCellKind.Boolean).map(edit => ({
                 row: edit.location[1], fieldId: fields[edit.location[0]]!.id,
-                value: parseTextValue(fields[edit.location[0]]!, edit.value.kind === GridCellKind.Text ? edit.value.data : ''),
+                value: edit.value.kind === GridCellKind.Boolean ? edit.value.data ?? null
+                  : parseTextValue(fields[edit.location[0]]!, edit.value.kind === GridCellKind.Text ? edit.value.data : ''),
               })));
             } catch (failure) { report(failure); }
             return true;

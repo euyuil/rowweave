@@ -89,3 +89,15 @@
 .rowweave-app .filter-actions, .rowweave-app .sort-rule { display: flex; gap: 8px; flex-wrap: wrap; }
 .rowweave-app .sort-rule { margin: 8px 0; }
 .rowweave-app .sort-rule select { min-width: 0; flex: 1; }
+.rowweave-cell-editor { box-sizing: border-box; min-width: 120px; }
+.rowweave-cell-editor > textarea { width: 100%; resize: vertical; border: 0; outline: 0; font: inherit; color: inherit; background: transparent; box-sizing: border-box; }
+.rowweave-cell-editor .cell-error { padding: 8px 0; color: #9a382a; font-size: 12px; white-space: normal; }
+.typed-cell-editor { min-width: 240px; padding: 8px; }
+.typed-cell-editor .form-field { display: flex; flex-direction: column; gap: 8px; margin: 0; }
+.typed-cell-editor .field-label { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; }
+.typed-cell-editor input, .typed-cell-editor select { font: inherit; padding: 8px; color: inherit; background: #fff; border: 1px solid #c6d0e0; border-radius: 4px; }
+.typed-cell-editor small { font-size: 11px; color: #738098; }
+.typed-cell-editor button { font: inherit; font-size: 12px; padding: 4px 8px; color: #315cbe; background: #fff; border: 1px solid #d7dfec; border-radius: 4px; cursor: pointer; }
+.typed-cell-editor .clear-value { border: 0; padding: 0; }
+.typed-cell-editor button:disabled { opacity: .5; }
+.cell-editor-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }

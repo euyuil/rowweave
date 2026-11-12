@@ -8,6 +8,7 @@ import extract from '@electron-internal/extract-zip';
 import { verifySchemaWorkflow } from './schema-workflow.mjs';
 import { verifyViewWorkflow } from './view-workflow.mjs';
 import { verifyQueryWorkflow } from './query-workflow.mjs';
+import { verifyGridWorkflow } from './grid-workflow.mjs';
 
 const dataDirectory = await mkdtemp(join(tmpdir(), 'rowweave-workspace-'));
 await mkdir('.artifacts', { recursive: true });
@@ -229,6 +230,7 @@ try {
   await recordLifecycle();
   await verifyViewWorkflow(page);
   await verifyQueryWorkflow(page);
+  await verifyGridWorkflow(page);
   await application.close();
   application = undefined;
   application = await electron.launch({ executablePath, args: packaged ? [] : ['.'],
@@ -254,7 +256,7 @@ try {
   await launch();
   assert.deepEqual(await tables(), []);
   assert.deepEqual(errors, []);
-  console.log('Workspace lifecycle passed: tables, typed records, schema configuration/conversion, saved views/columns/search, conflicts, draft/form guards, confirmations, and persistence.');
+  console.log('Workspace lifecycle passed: tables, typed records and grid editors, atomic clearing, schema configuration/conversion, saved views/queries, conflicts, draft/form guards, confirmations, and persistence.');
 } catch (error) {
   console.error('Renderer errors:', errors);
   if (page && !page.isClosed()) await page.screenshot({ path: '.artifacts/desktop-workspace-failure.png' });

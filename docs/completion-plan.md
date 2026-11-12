@@ -49,9 +49,10 @@ Each item may need more than one focused PR. Do not batch completed PRs while wa
   - [x] Empty first workspace, table navigation/create/rename/delete, and draft-safe switching (automated desktop lifecycle tests).
   - [x] Typed record forms, details, duplication, and versioned batch deletion (automated desktop validation/conflict/lifecycle tests).
   - [x] Typed field configuration, options/defaults/constraints, primary field/order, deletion, and conversion preview/application (automated desktop schema and concurrent conversion tests).
-- [ ] Typed grid editors, draft undo/redo, views, and clipboard workflows.
+- [x] Typed grid editors, draft undo/redo, views, and clipboard workflows (automated verification; final native-input and external spreadsheet checks remain below).
   - [x] Desktop saved-view lifecycle, persisted column visibility/order/width, debounced composition-aware search, selected-view restoration, and version-aware paging (client and offscreen desktop tests).
   - [x] Desktop nested AND/OR filter builder with typed operands and ordered multi-field sorting (round-trip and offscreen combined-query tests).
+  - [x] Typed cell editors, invalid-input retention, keyboard commit/cancel/save, null preservation, and atomic selection clearing beyond the cache (offscreen desktop and client regression tests).
 - [ ] Relations, lookups, record picker, and record details/navigation.
 - [ ] CSV import/export through service and desktop.
 - [ ] SDK, CLI, HTTP reference, and standalone/remote connection workflow.

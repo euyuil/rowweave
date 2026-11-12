@@ -40,6 +40,52 @@ test('drafts follow record IDs through sorting and filtering and save while hidd
   assert.equal(model.pendingCells, 0);
 });
 
+test('clearing typed fields is atomic and uses stable IDs after view reordering', async t => {
+  const { api, table: original, records } = await workspace(t);
+  let table = await api.createField(original.id, { expectedVersion: original.version, name: 'Required', type: 'number' });
+  table = await api.createField(table.id, { expectedVersion: table.version, name: 'Done', type: 'checkbox' });
+  const required = table.fields.find(field => field.name === 'Required')!.id;
+  const checkbox = table.fields.find(field => field.name === 'Done')!.id;
+  await api.updateRecords(table.id, records.map(record => ({ id: record.id, expectedVersion: record.version,
+    values: { [required]: 1, [checkbox]: false } })));
+  table = await api.updateField(table.id, required, { expectedVersion: table.version, required: true });
+  const model = new TableModel(api.table(table.id), 1, 1);
+  await model.initialize();
+  await model.setQuery({ fields: [checkbox, table.primaryFieldId, required], sort: [{ fieldId: table.primaryFieldId, direction: 'desc' }] });
+  await assert.rejects(model.clearCells([0, 2], [table.primaryFieldId, required]), /required/);
+  assert.equal(model.pendingCells, 0);
+  await model.clearCells([0, 2], [checkbox, table.primaryFieldId]);
+  assert.equal(model.pendingCells, 4);
+  assert.equal(model.getRecord(0)!.values[checkbox], null);
+  model.undo();
+  assert.equal(model.pendingCells, 0);
+  model.redo();
+  await model.save();
+  assert.equal((await api.getRecord(table.id, records[0]!.id)).values[table.primaryFieldId], '');
+  assert.equal((await api.getRecord(table.id, records[1]!.id)).values[table.primaryFieldId], 'B');
+  assert.equal((await api.getRecord(table.id, records[2]!.id)).values[checkbox], null);
+});
+
+test('a query change during clearing leaves the new view and existing drafts untouched', async t => {
+  const { api, table } = await workspace(t);
+  const base = api.table(table.id);
+  let release: (() => void) | undefined;
+  const model = new TableModel({ ...base, readPage: async (offset, limit, query, signal) => {
+    if (offset === 1 && !release) await new Promise<void>(resolve => { release = resolve; });
+    return base.readPage(offset, limit, query, signal);
+  } }, 1, 1);
+  await model.initialize();
+  model.applyEdits([{ row: 0, fieldId: table.primaryFieldId, value: 'Keep draft' }]);
+  const clearing = model.clearCells([1], [table.primaryFieldId]);
+  const rejected = assert.rejects(clearing, /query changed/);
+  await new Promise(resolve => setImmediate(resolve));
+  await model.setQuery({ sort: [{ fieldId: table.primaryFieldId, direction: 'desc' }] });
+  release!();
+  await rejected;
+  assert.equal(model.pendingCells, 1);
+  assert.equal(model.pendingRecords[0]!.values[table.primaryFieldId], 'Keep draft');
+});
+
 test('saved view paging detects configuration conflicts and refresh preserves drafts by identity', async t => {
   const { api, table, records } = await workspace(t);
   let view = await api.createView(table.id, { name: 'Descending', query: { sort: [{ fieldId: table.primaryFieldId, direction: 'desc' }] },
