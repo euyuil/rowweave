@@ -115,6 +115,8 @@ async function recordLifecycle() {
   assert.deepEqual(created.values[field('Tags').id], field('Tags').options.map(option => option.id));
   await selectRow(0);
   await page.getByRole('button', { name: 'Open record', exact: true }).click();
+  await page.getByText('Record identity', { exact: true }).click();
+  await page.getByRole('dialog').getByText(created.id, { exact: true }).waitFor();
   assert.equal(await page.getByLabel('Notes', { exact: true }).inputValue(), 'Line one\n中文第二行');
   await page.getByLabel('Cost *', { exact: true }).fill('not a number');
   await page.getByRole('button', { name: 'Save record', exact: true }).click();

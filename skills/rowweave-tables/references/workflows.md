@@ -7,7 +7,7 @@ Read only the recipe relevant to the user's request. The IDs below are placehold
 For a request such as "Mark the overdue open tasks Done":
 
 1. Read Tasks schema; resolve the status and due-date fields, and the Open/Done option IDs. Determine the cutoff date from the user's intended timezone/date. Do not silently use a machine-local day for an ambiguous relative date.
-2. Query the target set with status and due-date predicates. Project the primary field, status and due date so the affected records remain understandable. Collect stable IDs and versions across consistent pages before changing the queried values.
+2. Query the target set with status and due-date predicates. Project the primary display field, status and due date so the affected records remain understandable. Collect stable IDs and versions across consistent pages before changing the queried values.
 
 ```json
 {

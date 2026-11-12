@@ -60,6 +60,10 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved }: {
   const changed = () => { setDirty(true); setPreview(undefined); };
   useEffect(() => () => setDirty(false), [setDirty]);
   return <Dialog title={field ? 'Configure field' : 'Add field'} onClose={onClose} busy={busy} wide>
+    {field && <details className="form-note"><summary>Field identity</summary>
+      <p>Field ID: <code>{field.id}</code></p>
+      <p>This UUID identifies the column, not a record. Renaming or reordering keeps this ID.</p>
+    </details>}
     <form onChange={changed} onKeyDown={event => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's' && !event.nativeEvent.isComposing) {
         event.preventDefault();

@@ -59,7 +59,7 @@ export class RecordService {
     if (item['name'] !== undefined) table.name = schemaName(item['name']);
     if (item['primaryFieldId'] !== undefined) {
       if (!table.fields.some(field => field.id === item['primaryFieldId'])) {
-        throw new ServiceError('INVALID_SCHEMA', 'The primary field must belong to this table.');
+        throw new ServiceError('INVALID_SCHEMA', 'The primary display field must belong to this table.');
       }
       table.primaryFieldId = item['primaryFieldId'] as string;
     }
@@ -118,7 +118,7 @@ export class RecordService {
     const version = schemaVersion(schemaObject(input)['expectedVersion']);
     const table = this.store.getTable(id);
     if (!table.fields.some(field => field.id === fieldId)) throw new ServiceError('FIELD_NOT_FOUND', 'This field does not exist.', 404);
-    if (table.primaryFieldId === fieldId) throw new ServiceError('INVALID_SCHEMA', 'Choose another primary field before deleting this field.');
+    if (table.primaryFieldId === fieldId) throw new ServiceError('INVALID_SCHEMA', 'Choose another primary display field before deleting this field.');
     table.fields = table.fields.filter(field => field.id !== fieldId);
     return this.store.updateSchema(table, version);
   }
