@@ -51,3 +51,20 @@
 .rowweave-app .field-label { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .rowweave-app button.clear-value { background: none; border: 0; color: #315cbe; padding: 0; font-size: 12px; font-weight: 400; }
 .rowweave-app .form-field small { font-weight: 400; font-size: 11px; color: #738098; }
+.rowweave-app .wide-dialog { width: 720px; }
+.rowweave-app fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.rowweave-app .form-row { display: flex; gap: 14px; }
+.rowweave-app .form-row > * { flex: 1; min-width: 0; }
+.rowweave-app .check-field { display: flex; align-items: center; gap: 9px; margin: 18px 0; }
+.rowweave-app .form-note { color: #69768b; font-size: 13px; }
+.rowweave-app .option-row { display: flex; gap: 8px; margin-bottom: 9px; }
+.rowweave-app .option-row > input:first-child { flex: 1; min-width: 0; }
+.rowweave-app .option-row input[type="color"] { width: 42px; height: 40px; padding: 3px; }
+.rowweave-app .schema-field { padding: 14px 0; border-bottom: 1px solid #e5eaf1; }
+.rowweave-app .schema-field-name { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; overflow-wrap: anywhere; }
+.rowweave-app .schema-field-name small { color: #738098; flex-shrink: 0; }
+.rowweave-app .schema-field-actions { display: flex; gap: 7px; }
+.rowweave-app .schema-field-actions button { font-size: 12px; padding: 6px 10px; }
+.rowweave-app .conversion-preview { padding: 14px; background: #f0f4fb; border-radius: 8px; font-size: 12px; overflow-wrap: anywhere; }
+.rowweave-app .conversion-preview table { table-layout: fixed; width: 100%; border-collapse: collapse; }
+.rowweave-app .conversion-preview th, .rowweave-app .conversion-preview td { text-align: left; vertical-align: top; padding: 8px; border-bottom: 1px solid #d7dfec; white-space: pre-wrap; }

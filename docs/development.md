@@ -27,7 +27,7 @@ A new database starts empty. Create a table from the desktop sidebar or `POST /t
 
 ### Dynamic tables and schema
 
-The service supports multiple tables with stable table, field, and record IDs. The desktop supports creating, switching, renaming, and deleting tables, with unsaved-edit navigation guards and explicit deletion confirmation. Field management follows the [completion plan](completion-plan.md).
+The service supports multiple tables with stable table, field, and record IDs. The desktop supports creating, switching, renaming, and deleting tables, with unsaved-edit navigation guards and explicit deletion confirmation. **Manage fields** adds/configures fields, selects the primary display field, changes field order, and confirms deletion. Forms expose the supported types, number formatting, options, required values, and defaults. Save or discard grid drafts before changing schema; changes use the displayed schema version and reject stale writes.
 
 - `GET /tables`: list table definitions and counts.
 - `POST /tables`: create an empty table with `{ "name": "Projects" }` and an initial **Name** field.
@@ -39,7 +39,7 @@ The service supports multiple tables with stable table, field, and record IDs. T
 - `DELETE /tables/:tableId/fields/:fieldId`: pass `expectedVersion`. Choose another primary field before deleting the primary field. Existing cell values are removed and affected record versions increment atomically.
 - The existing paginated record reads and atomic updates work at `/tables/:tableId/records` for any table.
 
-Schema writes return the updated table and increment its schema version. A stale version returns HTTP 409 with `SCHEMA_CONFLICT`; reload schema before retrying. Names contain 1–200 characters and tables support up to 200 fields. A newly added text field has no stored values until edited; an absent field value means null. Renaming and reordering do not rewrite record identities or values.
+Schema writes return the updated table and increment its schema version. A stale version returns HTTP 409 with `SCHEMA_CONFLICT`; reload schema before retrying. Names contain 1–200 characters and tables support up to 200 fields. A newly added text field has no stored values until edited; an absent field value means null. Renaming and reordering do not rewrite record identities or values. Set `precision: null` in a number-field update to restore automatic decimal formatting without changing stored values.
 
 SQLite stores relational table/field/view metadata and JSON record values, with a table/position index. Format version 3 added a persistent data revision; version 4 adds saved views. Opening older databases migrates transactionally, preserving field IDs, record IDs, positions, values, and record/schema versions. A failed migration rolls back; unsupported newer formats fail without replacing their schema. Back up a working database before upgrading; do not copy a live database without its pending WAL state.
 
@@ -70,6 +70,8 @@ The grid retains its text editor until the dedicated typed-editor workflow is in
 ### Field conversion
 
 Use `POST /tables/:tableId/fields/:fieldId/conversion/preview` with `{ expectedVersion, field }`, where `field` is the complete target field configuration (name, type, and any options/default/format settings). The field ID stays unchanged. Preview returns the resolved target `field` (including generated option IDs), total/changed/invalid record counts, at most 10 before/after samples, and at most 20 failing record IDs/messages. Preview makes no changes.
+
+In the desktop, choose another type in **Manage fields → Configure**, then **Preview conversion**. Inspect the affected records, correct any invalid data, and **Apply conversion**. Editing the target configuration invalidates the old preview. Failed application preserves the field configuration form and rolls back the entire conversion, including when another client introduced an invalid value after preview.
 
 Submit `{ expectedVersion: preview.schemaVersion, field: preview.field }` to `.../conversion/apply` to retain previewed option IDs, recheck current records, and apply the conversion in one transaction. The table schema version increments; only records whose stored value changes receive a new record version. Any invalid value returns `CONVERSION_FAILED` and rolls back the entire operation, including earlier records. A schema change since preview returns `SCHEMA_CONFLICT`. Preview is informational: successful preview does not skip validation during apply.
 

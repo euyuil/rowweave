@@ -11,6 +11,7 @@ import { parseTextValue } from '../../core/src/field-values.js';
 import { EditorContext, TextCellEditor, type FinishEditor } from './text-cell-editor.js';
 import { parseClipboard } from './clipboard.js';
 import { RecordDialog, type RecordAction } from './record-dialog.js';
+import { FieldsDialog } from './fields-dialog.js';
 import './table-app.css';
 
 export interface TableHost {
@@ -41,6 +42,7 @@ export function TableApp({ model, api, host, onManage }: {
   const [editorDirty, setEditorDirty] = useState(false);
   const [formDirty, setFormDirty] = useState(false);
   const [recordAction, setRecordAction] = useState<RecordAction>();
+  const [managingFields, setManagingFields] = useState(false);
   const activeEditor = useRef<FinishEditor>();
   const [size, setSize] = useState({ width: 900, height: 500 });
   const [visible, setVisible] = useState({ y: 0, height: 50 });
@@ -177,13 +179,13 @@ export function TableApp({ model, api, host, onManage }: {
     } catch (failure) { report(failure); }
     finally { busyRef.current = false; setBusy(false); }
   };
-  const recordsSaved = () => {
-    setRecordAction(undefined);
+  const refreshAfterWrite = async (kind: string) => {
     setSelection({ columns: CompactSelection.empty(), rows: CompactSelection.empty() });
     setBusy(true);
     busyRef.current = true;
-    void model.refresh().catch(failure => report(new Error(`Records saved, but refreshing failed: ${failure instanceof Error ? failure.message : 'connection unavailable'}`)))
-      .finally(() => { busyRef.current = false; setBusy(false); });
+    try { await model.refresh(); }
+    catch (failure) { report(new Error(`${kind} saved, but refreshing failed: ${failure instanceof Error ? failure.message : 'connection unavailable'}`)); }
+    finally { busyRef.current = false; setBusy(false); }
   };
   const getCellContent = useCallback(([column, row]: readonly [number, number]): GridCell => {
     const field = fields[column];
@@ -210,7 +212,8 @@ export function TableApp({ model, api, host, onManage }: {
   return <section className="table-workspace" ref={rootHost}>
     <section className="table-heading">
       <div className="table-title"><h1>{table?.name ?? 'Loading table…'}</h1>
-        <div className="table-management"><button disabled={!table || locked} onClick={() => onManage('rename', table!)}>Rename table</button>
+        <div className="table-management"><button disabled={recordActionsLocked} onClick={() => setManagingFields(true)}>Manage fields</button>
+          <button disabled={!table || locked} onClick={() => onManage('rename', table!)}>Rename table</button>
           <button disabled={!table || locked || pending > 0 || editorDirty} onClick={() => onManage('delete', table!)}>Delete table</button></div></div>
       <div className="actions">
         <button onClick={() => model.undo()} disabled={locked || !model.canUndo}>Undo</button>
@@ -277,6 +280,8 @@ export function TableApp({ model, api, host, onManage }: {
     <footer><span role="status" className={pending ? 'pending-status' : ''}>{status}</span>
       <span>Enter to edit · Esc to cancel · Ctrl+C / Ctrl+V · Ctrl+S to save</span></footer>
     {recordAction && table && <RecordDialog action={recordAction} table={table} api={api} setDirty={setFormDirty}
-      onClose={() => setRecordAction(undefined)} onSaved={recordsSaved} />}
+      onClose={() => setRecordAction(undefined)} onSaved={() => { setRecordAction(undefined); void refreshAfterWrite('Records'); }} />}
+    {managingFields && table && <FieldsDialog initial={table} api={api} setDirty={setFormDirty}
+      onClose={() => setManagingFields(false)} onSaved={() => refreshAfterWrite('Schema')} />}
   </section>;
 }

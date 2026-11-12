@@ -45,7 +45,7 @@ export function parseField(input: Record<string, unknown>, previous?: Field): Fi
       }
       field.numberFormat = config['numberFormat'] as NonNullable<Field['numberFormat']>;
     }
-    if (config['precision'] !== undefined) {
+    if (config['precision'] !== undefined && config['precision'] !== null) {
       if (!Number.isInteger(config['precision']) || (config['precision'] as number) < 0 || (config['precision'] as number) > 10) {
         throw new ServiceError('INVALID_SCHEMA', 'Number precision must be between 0 and 10.');
       }

@@ -5,6 +5,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { _electron as electron } from 'playwright';
 import electronPath from 'electron';
 import extract from '@electron-internal/extract-zip';
+import { verifySchemaWorkflow } from './schema-workflow.mjs';
 
 const dataDirectory = await mkdtemp(join(tmpdir(), 'rowweave-workspace-'));
 await mkdir('.artifacts', { recursive: true });
@@ -115,6 +116,7 @@ async function recordLifecycle() {
   assert.equal((await records())[0].values[field('Cost').id], 0);
   await page.getByLabel('Cost *', { exact: true }).fill('12.5');
   await page.getByRole('button', { name: 'Clear Notes', exact: true }).click();
+  assert.equal(await page.getByLabel('Notes', { exact: true }).evaluate(element => element === document.activeElement), true);
   await page.keyboard.press('Control+s');
   await page.getByRole('dialog').waitFor({ state: 'detached' });
   assert.equal((await records())[0].values[field('Notes').id], null);
@@ -221,6 +223,7 @@ try {
   await page.getByRole('button', { name: 'Delete table', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
   assert.equal((await tables()).length, 2);
+  await verifySchemaWorkflow(page);
   await recordLifecycle();
   await application.close();
   application = undefined;

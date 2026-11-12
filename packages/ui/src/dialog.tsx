@@ -1,7 +1,7 @@
 import React, { useEffect, useId, useRef, type ReactNode } from 'react';
 
-export function Dialog({ title, onClose, busy = false, children }: {
-  title: string; onClose(): void; busy?: boolean; children: ReactNode;
+export function Dialog({ title, onClose, busy = false, wide = false, children }: {
+  title: string; onClose(): void; busy?: boolean; wide?: boolean; children: ReactNode;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -10,7 +10,7 @@ export function Dialog({ title, onClose, busy = false, children }: {
     element.showModal();
     return () => element.close();
   }, []);
-  return <dialog ref={dialog} className="workspace-dialog" aria-labelledby={titleId}
+  return <dialog ref={dialog} className={`workspace-dialog${wide ? ' wide-dialog' : ''}`} aria-labelledby={titleId}
     onCancel={event => { event.preventDefault(); if (!busy) onClose(); }}>
     <h2 id={titleId}>{title}</h2>
     {children}

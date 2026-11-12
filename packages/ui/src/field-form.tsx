@@ -1,0 +1,114 @@
+import React, { useEffect, useState } from 'react';
+import type { ConversionPreview, Field, FieldCreate, FieldType, SelectOption, Table } from '../../contracts/src/index.js';
+import type { WorkspaceApi } from '../../client/src/http-client.js';
+import { cellText } from '../../client/src/cell-values.js';
+import { Dialog } from './dialog.js';
+import { FieldInput } from './field-input.js';
+import { fromFormValue, toFormValue, type FormValue } from './field-input-values.js';
+
+export const fieldTypeNames: Record<FieldType, string> = {
+  text: 'Text', multiline: 'Multiline text', number: 'Number', checkbox: 'Checkbox', date: 'Date',
+  datetime: 'Date and time', singleSelect: 'Single select', multiSelect: 'Multiple select',
+};
+
+export function FieldForm({ table, field, api, setDirty, onClose, onSaved }: {
+  table: Table; field: Field | undefined; api: WorkspaceApi; setDirty(value: boolean): void;
+  onClose(): void; onSaved(table: Table): Promise<void>;
+}) {
+  const [name, setName] = useState(field?.name ?? '');
+  const [type, setType] = useState<FieldType>(field?.type ?? 'text');
+  const [required, setRequired] = useState(field?.required ?? false);
+  const [options, setOptions] = useState<SelectOption[]>(field?.options ?? []);
+  const [format, setFormat] = useState<NonNullable<Field['numberFormat']>>(field?.numberFormat ?? 'decimal');
+  const [precision, setPrecision] = useState(field?.precision?.toString() ?? '');
+  const [currency, setCurrency] = useState(field?.currency ?? 'USD');
+  const [hasDefault, setHasDefault] = useState(field?.defaultValue !== undefined);
+  const [defaultValue, setDefaultValue] = useState<FormValue>(field ? toFormValue(field, field.defaultValue) : null);
+  const [preview, setPreview] = useState<ConversionPreview>();
+  const [error, setError] = useState<string>();
+  const [busy, setBusy] = useState(false);
+  const converting = !!field && type !== field.type;
+  const selection = type === 'singleSelect' || type === 'multiSelect';
+  const target: Field = { id: field?.id ?? 'new-field', name, type, required,
+    ...(selection ? { options } : {}),
+    ...(type === 'number' ? { numberFormat: format, ...(precision ? { precision: Number(precision) } : {}),
+      ...(format === 'currency' ? { currency } : {}) } : {}) };
+  const changed = () => { setDirty(true); setPreview(undefined); };
+  useEffect(() => () => setDirty(false), [setDirty]);
+  return <Dialog title={field ? 'Configure field' : 'Add field'} onClose={onClose} busy={busy} wide>
+    <form onChange={changed} onSubmit={event => {
+      event.preventDefault();
+      if (busy) return;
+      setBusy(true);
+      setError(undefined);
+      void (async () => {
+        const { id: _id, ...definition } = target;
+        const config: Omit<FieldCreate, 'expectedVersion'> = {
+          ...definition, defaultValue: hasDefault ? fromFormValue(target, defaultValue) : null,
+        };
+        if (converting && !preview) {
+          setPreview(await api.previewConversion(table.id, field.id, { expectedVersion: table.version, field: config }));
+        } else {
+          const result = converting
+            ? await api.applyConversion(table.id, field.id, { expectedVersion: preview!.schemaVersion, field: preview!.field })
+            : field ? await api.updateField(table.id, field.id, { ...config, expectedVersion: table.version,
+              ...(type === 'number' && !precision ? { precision: null } : {}) })
+            : await api.createField(table.id, { ...config, expectedVersion: table.version });
+          setDirty(false);
+          await onSaved(result);
+        }
+      })().catch(error => setError(error instanceof Error ? error.message : 'The field could not be saved.'))
+        .finally(() => setBusy(false));
+    }}>
+      <fieldset disabled={busy}>
+        <label className="form-field">Field name<input autoFocus required maxLength={200} value={name} onChange={event => setName(event.target.value)} /></label>
+        <label className="form-field">Field type<select aria-label="Field type" value={type} onChange={event => {
+          setType(event.target.value as FieldType); setHasDefault(false); setDefaultValue(null);
+        }}>{Object.entries(fieldTypeNames).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+        {type === 'number' && <div className="form-row">
+          <label className="form-field">Number format<select aria-label="Number format" value={format} onChange={event => setFormat(event.target.value as typeof format)}>
+            <option value="decimal">Decimal</option><option value="currency">Currency</option><option value="percent">Percent</option>
+          </select></label>
+          <label className="form-field">Decimal places<select aria-label="Decimal places" value={precision} onChange={event => setPrecision(event.target.value)}>
+            <option value="">Automatic</option>{Array.from({ length: 11 }, (_, index) => <option key={index} value={index}>{index}</option>)}
+          </select></label>
+          {format === 'currency' && <label className="form-field">Currency code<input required pattern="[A-Z]{3}" maxLength={3} value={currency}
+            onChange={event => setCurrency(event.target.value.toUpperCase())} /></label>}
+        </div>}
+        {selection && <div className="field-options"><h3>Options</h3>
+          {options.map((option, index) => <div className="option-row" key={option.id}>
+            <input aria-label={`Option ${index + 1} name`} required maxLength={200} value={option.name}
+              onChange={event => setOptions(current => current.map(item => item.id === option.id ? { ...item, name: event.target.value } : item))} />
+            <input type="color" aria-label={`Option ${index + 1} color`} value={option.color ?? '#315cbe'}
+              onChange={event => setOptions(current => current.map(item => item.id === option.id ? { ...item, color: event.target.value } : item))} />
+            <button type="button" aria-label={`Remove option ${index + 1}`} onClick={() => {
+              setOptions(current => current.filter(item => item.id !== option.id)); changed();
+            }}>Remove</button>
+          </div>)}
+          <button type="button" disabled={options.length >= 200} onClick={() => {
+            setOptions(current => [...current, { id: crypto.randomUUID(), name: `Option ${current.length + 1}` }]); changed();
+          }}>Add option</button>
+        </div>}
+        <label className="check-field"><input type="checkbox" checked={required} onChange={event => setRequired(event.target.checked)} />Require a value</label>
+        <label className="check-field"><input type="checkbox" checked={hasDefault} onChange={event => setHasDefault(event.target.checked)} />Use a default for new records</label>
+        {hasDefault && <FieldInput field={{ ...target, name: 'Default value', required: false }} value={defaultValue}
+          onChange={value => { setDefaultValue(value); changed(); }} />}
+      </fieldset>
+      {converting && <p className="form-note">Changing the field type converts existing values. Preview the result before applying it. Defaults only affect new records.</p>}
+      {preview && <section className="conversion-preview" aria-label="Conversion preview">
+        <p><strong>{preview.changed.toLocaleString()} changed · {preview.invalid.toLocaleString()} invalid</strong> of {preview.total.toLocaleString()} records.</p>
+        {preview.issues.length > 0 && <ul>{preview.issues.map(issue => <li key={issue.recordId}><code>{issue.recordId}</code>: {issue.message}</li>)}</ul>}
+        {preview.samples.length > 0 && <table><thead><tr><th>Record</th><th>Before</th><th>After</th></tr></thead><tbody>
+          {preview.samples.map(sample => <tr key={sample.recordId}><td><code>{sample.recordId}</code></td>
+            <td>{sample.before === null ? '(No value)' : cellText(field!, sample.before)}</td>
+            <td>{sample.after === null ? '(No value)' : cellText(preview.field, sample.after)}</td></tr>)}
+        </tbody></table>}
+        <small>Showing up to 10 changes and 20 errors. Nothing changes unless every record can be converted.</small>
+      </section>}
+      {error && <p className="form-error" role="alert">{error}</p>}
+      <div className="dialog-actions"><button type="button" disabled={busy} onClick={onClose}>Cancel</button>
+        <button className="primary" disabled={busy || (preview !== undefined && preview.invalid > 0)}>
+          {busy ? 'Working…' : converting ? preview ? 'Apply conversion' : 'Preview conversion' : 'Save field'}</button></div>
+    </form>
+  </Dialog>;
+}
