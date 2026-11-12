@@ -12,8 +12,17 @@ export interface Connection {
 
 export interface TableApi {
   getTable(): Promise<Table>;
-  readPage(offset: number, limit: number, query?: RecordQuery, signal?: AbortSignal): Promise<QueryPage>;
+  readPage(offset: number, limit: number, query?: TableQuery, signal?: AbortSignal): Promise<QueryPage>;
   save(updates: RecordUpdate[]): Promise<BatchResult>;
+}
+
+export interface TableQuery extends RecordQuery {
+  view?: Pick<GridView, 'id' | 'version'>;
+}
+
+export function queryForView(view: GridView, search = view.query.search ?? ''): TableQuery {
+  return { view: { id: view.id, version: view.version }, search,
+    fields: view.columns.filter(column => !column.hidden).map(column => column.fieldId) };
 }
 
 export class ApiFailure extends Error {
@@ -66,7 +75,11 @@ export function createWorkspaceClient(connection: Connection, request: typeof fe
     table(id: string): TableApi {
       return {
         getTable: () => api.getTable(id),
-        readPage: (offset, limit, query = {}, signal) => api.queryRecords(id, { ...query, offset, limit }, signal),
+        readPage: (offset, limit, query = {}, signal) => {
+          if (!query.view) return api.queryRecords(id, { ...query, offset, limit }, signal);
+          const { view, filter: _filter, sort: _sort, ...page } = query;
+          return api.queryView(id, view.id, { ...page, offset, limit, expectedViewVersion: view.version }, signal);
+        },
         save: updates => api.updateRecords(id, updates),
       };
     },

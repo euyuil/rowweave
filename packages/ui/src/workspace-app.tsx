@@ -95,7 +95,7 @@ export function WorkspaceApp({ api, host }: { api: WorkspaceApi; host: TableHost
         {error && <div className="error-banner" role="alert">{error}
           {!loaded && <button onClick={() => void load().catch(error => setError(message(error)))}>Retry</button>}
         </div>}
-        {model ? <TableApp key={selected} model={model} api={api} host={tableHost}
+        {model ? <TableApp key={selected} tableId={selected!} model={model} api={api} host={tableHost}
           onManage={(kind, table) => setAction({ kind, table })} /> : <section className="empty-workspace">
           <span className="empty-mark" aria-hidden="true">▦</span>
           <h1>{loaded ? 'Make room for your ideas' : 'Opening your workspace…'}</h1>

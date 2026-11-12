@@ -50,6 +50,7 @@ Each item may need more than one focused PR. Do not batch completed PRs while wa
   - [x] Typed record forms, details, duplication, and versioned batch deletion (automated desktop validation/conflict/lifecycle tests).
   - [x] Typed field configuration, options/defaults/constraints, primary field/order, deletion, and conversion preview/application (automated desktop schema and concurrent conversion tests).
 - [ ] Typed grid editors, draft undo/redo, views, and clipboard workflows.
+  - [x] Desktop saved-view lifecycle, persisted column visibility/order/width, debounced composition-aware search, selected-view restoration, and version-aware paging (client and offscreen desktop tests).
 - [ ] Relations, lookups, record picker, and record details/navigation.
 - [ ] CSV import/export through service and desktop.
 - [ ] SDK, CLI, HTTP reference, and standalone/remote connection workflow.

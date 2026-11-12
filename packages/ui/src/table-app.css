@@ -68,3 +68,11 @@
 .rowweave-app .conversion-preview { padding: 14px; background: #f0f4fb; border-radius: 8px; font-size: 12px; overflow-wrap: anywhere; }
 .rowweave-app .conversion-preview table { table-layout: fixed; width: 100%; border-collapse: collapse; }
 .rowweave-app .conversion-preview th, .rowweave-app .conversion-preview td { text-align: left; vertical-align: top; padding: 8px; border-bottom: 1px solid #d7dfec; white-space: pre-wrap; }
+.rowweave-app .view-toolbar { display: flex; align-items: center; gap: 8px; padding: 10px 12px; flex-wrap: wrap; border-bottom: 1px solid #dde4ef; }
+.rowweave-app .view-toolbar button, .rowweave-app .view-toolbar input, .rowweave-app .view-toolbar select { font-size: 12px; padding: 7px 9px; }
+.rowweave-app .view-toolbar select { max-width: 200px; }
+.rowweave-app .view-toolbar input { margin-left: auto; min-width: 130px; flex: 1; max-width: 240px; }
+.rowweave-app .view-column { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #e5eaf1; }
+.rowweave-app .view-column .check-field { flex: 1; margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.rowweave-app .column-width { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #69768b; }
+.rowweave-app .column-width input { width: 80px; }

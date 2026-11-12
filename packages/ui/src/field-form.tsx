@@ -36,7 +36,13 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved }: {
   const changed = () => { setDirty(true); setPreview(undefined); };
   useEffect(() => () => setDirty(false), [setDirty]);
   return <Dialog title={field ? 'Configure field' : 'Add field'} onClose={onClose} busy={busy} wide>
-    <form onChange={changed} onSubmit={event => {
+    <form onChange={changed} onKeyDown={event => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's' && !event.nativeEvent.isComposing) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!busy && !preview?.invalid) event.currentTarget.requestSubmit();
+      }
+    }} onSubmit={event => {
       event.preventDefault();
       if (busy) return;
       setBusy(true);
