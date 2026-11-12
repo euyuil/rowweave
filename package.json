@@ -22,6 +22,7 @@
     "build:harness": "node scripts/build-harness.mjs",
     "package:harness": "npm run build:harness && node scripts/package-harness.mjs",
     "test:harness": "npm run build && npm run setup:desktop && node integrations/harness/tests/browser.mjs",
+    "test:interfaces": "node integrations/harness/tests/browser.mjs --packaged",
     "test": "npm run build && node --test \"dist/**/tests/*.test.js\"",
     "start:server": "node dist/apps/server/src/cli.js",
     "workspace:file": "node dist/apps/server/src/workspace-file.js",

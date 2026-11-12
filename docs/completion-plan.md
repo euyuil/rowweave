@@ -73,6 +73,7 @@ Each item may need more than one focused PR. Do not batch completed PRs while wa
   - [x] Mixed-type pressure datasets and expanded production benchmarks (100 input samples per launch, reproducible view queries, raw outliers; [initial baseline](product-performance.md) identifies large-table paste/query work still required).
   - [x] Bounded batch reads for large paste/clear operations, with atomic staging and cancellation regression tests; packaged 100,000 × 100 paste retiming is 412–448 ms. The final complete run remains pending.
   - [x] Transactional saved-query indexes and format-7 migration, with lifecycle/conversion/rollback tests; the five packaged 100,000 × 100 benchmark queries now measure 72–109 ms p95. Initial index construction is recorded separately; the final complete run remains pending.
+  - [x] Shared-service acceptance across desktop, SDK, CLI, MCP and Harness, including schema discovery, saved views, versioned edits and rejected stale writes. The extracted Windows package and source desktop both run this scenario. The full official Harness Web host was also installed and exercised separately ([evidence](harness.md#integration-and-verification)).
 - [ ] Final native-input checks and invitation for user end-to-end acceptance.
 
 ## Acceptance scenarios
