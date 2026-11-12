@@ -144,6 +144,8 @@ Tests create and remove isolated temporary databases. No test opens a working da
 
 ## Shared client
 
+CSV service endpoints and client methods provide preview, mapped atomic import, and table/view export. See [data-exchange.md](data-exchange.md) for the request format, value semantics, limits, and regression evidence. Desktop file selection and export controls follow in a separate change.
+
 `packages/client` exposes `createWorkspaceClient(connection)` for table, field, conversion, record, query, and saved-view operations. Its `table(id)` adapter supplies the host-independent `TableModel`; `createHttpClient` still selects the existing prototype table for the current desktop entry point. Requests support cancellation and never retry writes automatically.
 
 The model uses query pages with data revisions. Its default page size is 100 records, its LRU cache holds at most 12 pages, and it permits at most four page requests in flight. Drafts are keyed by record ID and retained separately within the service's batch limits, so scrolling, sorting, filtering, or hiding a field cannot silently discard or redirect them. `setQuery` changes filters/sorting/projection, `rowCount` reflects the result count, and `fields` follows the selected field order. Paste follows this visible order. `pendingRecords` exposes retained drafts, including records hidden by the current query.

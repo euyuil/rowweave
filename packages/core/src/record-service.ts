@@ -8,6 +8,8 @@ import { convertValue } from './field-conversion.js';
 import { parseQuery, type CheckedQuery } from './record-query.js';
 import { parseView } from './grid-views.js';
 import { ServiceError } from './errors.js';
+import { prepareCsvImport, type CheckedCsvImport } from './csv.js';
+import type { CsvImportResult, CsvPreview } from '../../contracts/src/index.js';
 export { ServiceError } from './errors.js';
 
 export interface RecordStore {
@@ -28,6 +30,8 @@ export interface RecordStore {
   getView(tableId: string, viewId: string): GridView;
   saveView(table: Table, view: GridView, expectedVersion?: number): GridView;
   deleteView(tableId: string, viewId: string, expectedVersion: number): void;
+  importCsv(table: Table, plan: CheckedCsvImport, apply: boolean): CsvPreview;
+  exportCsv(table: Table, query: CheckedQuery, view?: GridView): string;
 }
 
 export class RecordService {
@@ -156,6 +160,34 @@ export class RecordService {
   queryRecords(id: string, input: unknown): QueryPage {
     const table = this.store.getTable(id);
     return this.store.queryRecords(table, parseQuery(table, input));
+  }
+
+  previewCsv(id: string, input: unknown): CsvPreview {
+    const table = this.store.getTable(id);
+    return this.store.importCsv(table, prepareCsvImport(table, input), false);
+  }
+
+  importCsv(id: string, input: unknown): CsvImportResult {
+    const table = this.store.getTable(id);
+    const plan = prepareCsvImport(table, input);
+    if (!plan.validated) throw new ServiceError('INVALID_CSV', 'Map at least one column to a writable field before importing.');
+    return { imported: this.store.importCsv(table, plan, true).total };
+  }
+
+  exportCsv(id: string, input: unknown): string {
+    const table = this.store.getTable(id);
+    const item = schemaObject(input);
+    if (item['viewId'] !== undefined && (typeof item['viewId'] !== 'string' || !item['viewId'])) {
+      throw new ServiceError('INVALID_QUERY', 'viewId must be a non-empty string.');
+    }
+    const view = item['viewId'] === undefined ? undefined : this.store.getView(id, item['viewId'] as string);
+    if (item['expectedViewVersion'] !== undefined && (!view || schemaVersion(item['expectedViewVersion']) !== view.version)) {
+      throw new ServiceError('VIEW_CONFLICT', 'The view changed. Refresh before exporting.', 409);
+    }
+    const query = parseQuery(table, { ...view?.query,
+      fields: view?.columns.filter(column => !column.hidden).map(column => column.fieldId),
+      search: item['search'] === undefined ? view?.query.search : item['search'] });
+    return this.store.exportCsv(table, query, view);
   }
 
   listViews(id: string): GridView[] {

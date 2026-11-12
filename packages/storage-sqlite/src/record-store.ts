@@ -10,6 +10,8 @@ import { migrate } from './migrations.js';
 import { querySql } from './query-sql.js';
 import { Relations } from './relations.js';
 import { Lookups } from './lookups.js';
+import { maxCsvBytes, maxCsvCells, maxCsvRows, type CsvPreview } from '../../contracts/src/index.js';
+import { csvCell, csvLimit, csvRecord, csvRecordValues, type CheckedCsvImport } from '../../core/src/csv.js';
 
 export interface SeedOptions {
   rows: number;
@@ -256,21 +258,25 @@ export class SqliteRecordStore implements RecordStore {
     }, 'DEFERRED');
   }
 
+  private prepareQuery(table: Table, query: CheckedQuery, view?: GridView) {
+    this.checkSchema(table.id, table.version);
+    if (view && this.getView(table.id, view.id).version !== view.version) {
+      throw new ServiceError('VIEW_CONFLICT', 'This view changed. Refresh before continuing.', 409);
+    }
+    const current = this.getTable(table.id);
+    if (query.expectedRevision !== undefined && query.expectedRevision !== current.revision) {
+      throw new ServiceError('DATA_CHANGED', 'The table changed between pages. Refresh the query before continuing.', 409);
+    }
+    const targets = new Map(current.fields.filter(field => field.type === 'relation').map(field => {
+      const target = this.getTable(field.relation!.tableId);
+      return [target.id, target];
+    }));
+    return { current, sql: querySql(current, query, targets) };
+  }
+
   queryRecords(table: Table, query: CheckedQuery, view?: GridView): QueryPage {
     return this.transaction(() => {
-      this.checkSchema(table.id, table.version);
-      if (view && this.getView(table.id, view.id).version !== view.version) {
-        throw new ServiceError('VIEW_CONFLICT', 'This view changed. Refresh before continuing.', 409);
-      }
-      const current = this.getTable(table.id);
-      if (query.expectedRevision !== undefined && query.expectedRevision !== current.revision) {
-        throw new ServiceError('DATA_CHANGED', 'The table changed between pages. Refresh the query before continuing.', 409);
-      }
-      const targets = new Map(current.fields.filter(field => field.type === 'relation').map(field => {
-        const target = this.getTable(field.relation!.tableId);
-        return [target.id, target];
-      }));
-      const sql = querySql(current, query, targets);
+      const { current, sql } = this.prepareQuery(table, query, view);
       const total = this.db.prepare(`SELECT COUNT(*) AS total FROM records r WHERE ${sql.where}`)
         .get(sql.countParameters)!['total'] as number;
       const rows = this.db.prepare(`SELECT r.id, r.version, r.values_json FROM records r WHERE ${sql.where}
@@ -360,6 +366,73 @@ export class SqliteRecordStore implements RecordStore {
     return this.transaction(() => {
       const table = this.getTable(id);
       return this.lookups.hydrate(table, this.relations.hydrate(table, [this.readRecord(id, recordId)]))[0]!;
+    }, 'DEFERRED');
+  }
+
+  importCsv(table: Table, plan: CheckedCsvImport, apply: boolean): CsvPreview {
+    return this.transaction(() => {
+      this.checkSchema(table.id, table.version);
+      const result: CsvPreview = { tableId: table.id, schemaVersion: table.version, columns: plan.columns,
+        mapping: plan.mapping, validated: plan.validated, total: 0, invalid: 0, samples: [], issues: [] };
+      let position = (this.db.prepare('SELECT COALESCE(MAX(position), -1) AS last FROM records WHERE table_id = ?')
+        .get(table.id)!['last'] as number) + 1;
+      const insert = this.db.prepare('INSERT INTO records (id, table_id, position, values_json) VALUES (?, ?, ?, ?)');
+      for (const row of plan.rows) {
+        result.total++;
+        if (result.samples.length < 10) result.samples.push({ row: row.row, cells: row.cells.map(cell =>
+          cell.text === '' && !cell.quoted ? null : cell.text.length > 200 ? cell.text.slice(0, 200) + '…' : cell.text) });
+        if (!plan.validated) continue;
+        try {
+          const values = csvRecordValues(table, plan, row);
+          if (apply) {
+            const id = randomUUID();
+            insert.run(id, table.id, position++, JSON.stringify(values));
+            this.relations.write(table, id, values);
+          } else {
+            for (const field of table.fields.filter(field => field.type === 'relation')) this.relations.validateTargets(field, values[field.id]!);
+          }
+        } catch (error) {
+          if (!(error instanceof ServiceError)) throw error;
+          if (apply) throw new ServiceError(error.code, `Row ${row.row}: ${error.message}`, error.status);
+          result.invalid++;
+          if (result.issues.length < 20) result.issues.push({ row: row.row, code: error.code, message: error.message });
+        }
+      }
+      if (apply && result.total) this.relations.bumpRevision(table.id);
+      return result;
+    }, apply ? 'IMMEDIATE' : 'DEFERRED');
+  }
+
+  exportCsv(table: Table, query: CheckedQuery, view?: GridView): string {
+    return this.transaction(() => {
+      const { current, sql } = this.prepareQuery(table, query, view);
+      const fields = query.fields ? query.fields.map(id => current.fields.find(field => field.id === id)!) : current.fields;
+      const total = this.db.prepare(`SELECT COUNT(*) AS total FROM records r WHERE ${sql.where}`)
+        .get(sql.countParameters)!['total'] as number;
+      if (total > maxCsvRows || total * fields.length > maxCsvCells) csvLimit(`Export up to ${maxCsvRows} rows and ${maxCsvCells} cells; use a filtered view or fewer visible columns.`);
+      const chunks: string[] = [];
+      let bytes = 0;
+      const append = (text: string) => {
+        bytes += Buffer.byteLength(text, 'utf8');
+        if (bytes > maxCsvBytes) csvLimit('The CSV exceeds 32 MiB; export a smaller filtered view.');
+        chunks.push(text);
+      };
+      append('\uFEFF' + fields.map(field => csvCell(field.name)).join(',') + '\r\n');
+      let batch: RowRecord[] = [];
+      let batchSize = 0;
+      const flush = () => {
+        this.lookups.hydrate(current, batch, fields.map(field => field.id));
+        for (const record of batch) append(csvRecord(fields, record.values));
+        batch = [];
+        batchSize = 0;
+      };
+      for (const row of this.db.prepare(`SELECT r.id, r.version, r.values_json FROM records r WHERE ${sql.where} ORDER BY ${sql.order}`).iterate(sql.parameters)) {
+        batch.push(this.decode(row as unknown as StoredRecord));
+        batchSize += (row['values_json'] as string).length;
+        if (batch.length === 500 || batchSize >= 1024 * 1024) flush();
+      }
+      if (batch.length) flush();
+      return chunks.join('');
     }, 'DEFERRED');
   }
 

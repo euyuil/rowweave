@@ -65,7 +65,7 @@ export function parseTextValue(field: Field, text: string): CellValue {
     if (!/^(true|false)$/i.test(text.trim())) throw new ServiceError('INVALID_VALUE', `${field.name}: enter true or false.`);
     value = text.trim().toLowerCase() === 'true';
   } else if (field.type === 'singleSelect') {
-    value = field.options!.find(option => option.id === text || option.name === text)?.id;
+    value = (field.options!.find(option => option.name === text) ?? field.options!.find(option => option.id === text))?.id;
   } else if (field.type === 'relation') {
     try { value = JSON.parse(text); }
     catch { throw new ServiceError('INVALID_VALUE', `${field.name}: use a JSON array of record IDs.`); }
@@ -74,7 +74,7 @@ export function parseTextValue(field: Field, text: string): CellValue {
     try { items = JSON.parse(text); }
     catch { throw new ServiceError('INVALID_VALUE', `${field.name}: use a JSON array of option names or IDs.`); }
     if (!Array.isArray(items)) throw new ServiceError('INVALID_VALUE', `${field.name}: use a JSON array of option names or IDs.`);
-    value = items.map(item => field.options!.find(option => option.id === item || option.name === item)?.id);
+    value = items.map(item => (field.options!.find(option => option.name === item) ?? field.options!.find(option => option.id === item))?.id);
   }
   return validateValue(field, value);
 }

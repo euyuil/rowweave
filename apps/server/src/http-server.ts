@@ -72,6 +72,21 @@ export async function startServer({ service, token, port = 0 }: ServerOptions) {
       send(response, 200, service.queryRecords(query[1]!, await readJson(request)));
       return;
     }
+    const csvImport = url.pathname.match(/^\/tables\/([^/]+)\/import(?:\/(preview))?$/);
+    if (csvImport && request.method === 'POST') {
+      const body = await readJson(request, 64 * 1024 * 1024);
+      send(response, csvImport[2] ? 200 : 201, csvImport[2]
+        ? service.previewCsv(csvImport[1]!, body) : service.importCsv(csvImport[1]!, body));
+      return;
+    }
+    const csvExport = url.pathname.match(/^\/tables\/([^/]+)\/export$/);
+    if (csvExport && request.method === 'POST') {
+      const csv = service.exportCsv(csvExport[1]!, await readJson(request));
+      response.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'no-store',
+        'Content-Disposition': 'attachment; filename="rowweave.csv"' });
+      response.end(csv);
+      return;
+    }
     const conversion = url.pathname.match(/^\/tables\/([^/]+)\/fields\/([^/]+)\/conversion\/(preview|apply)$/);
     if (conversion && request.method === 'POST') {
       const operation = conversion[3] === 'preview' ? service.previewConversion.bind(service) : service.applyConversion.bind(service);
@@ -132,11 +147,10 @@ export async function startServer({ service, token, port = 0 }: ServerOptions) {
   };
 }
 
-async function readJson(request: IncomingMessage): Promise<unknown> {
+async function readJson(request: IncomingMessage, maxBytes = 8 * 1024 * 1024): Promise<unknown> {
   if (request.headers['content-type']?.split(';')[0]?.trim().toLowerCase() !== 'application/json') {
     throw new ServiceError('INVALID_CONTENT_TYPE', 'Send JSON with Content-Type: application/json.', 415);
   }
-  const maxBytes = 8 * 1024 * 1024;
   const body = await new Promise<Buffer>((resolve, reject) => {
     const chunks: Buffer[] = [];
     let size = 0;
@@ -144,7 +158,7 @@ async function readJson(request: IncomingMessage): Promise<unknown> {
       size += chunk.length;
       if (size > maxBytes) {
         chunks.length = 0;
-        reject(new ServiceError('PAYLOAD_TOO_LARGE', 'The request body exceeds 8 MiB.', 413));
+        reject(new ServiceError('PAYLOAD_TOO_LARGE', `The request body exceeds ${maxBytes / 1024 / 1024} MiB.`, 413));
       } else {
         chunks.push(chunk);
       }

@@ -3,6 +3,7 @@ import {
   type FieldCreate, type FieldUpdate, type GridView, type QueryPage, type RecordCreate, type RecordDelete,
   type RecordQuery, type RecordUpdate, type RowRecord, type Table, type TableCreate, type TableUpdate,
   type ViewCreate, type ViewPage, type ViewPageRequest, type ViewUpdate,
+  type CsvImportRequest, type CsvPreview, type CsvImportResult, type CsvExportRequest,
 } from '../../contracts/src/index.js';
 
 export interface Connection {
@@ -33,17 +34,20 @@ export class ApiFailure extends Error {
 
 export function createWorkspaceClient(connection: Connection, request: typeof fetch = fetch) {
   const base = connection.url.replace(/\/$/, '');
-  async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
+  async function responseFor(path: string, init: RequestInit = {}): Promise<Response> {
     const timeout = AbortSignal.timeout(15_000);
     const response = await request(`${base}${path}`, {
       ...init, signal: init.signal ? AbortSignal.any([init.signal, timeout]) : timeout,
       headers: { Authorization: `Bearer ${connection.token}`, 'Content-Type': 'application/json' },
     });
-    const body = await response.json();
     if (!response.ok) {
+      const body = await response.json();
       throw new ApiFailure(body.error?.code ?? 'REQUEST_FAILED', body.error?.message ?? 'Request failed.', response.status);
     }
-    return body as T;
+    return response;
+  }
+  async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
+    return (await responseFor(path, init)).json() as Promise<T>;
   }
   const root = (id: string) => `/tables/${encodeURIComponent(id)}`;
   const field = (id: string, fieldId: string) => `${root(id)}/fields/${encodeURIComponent(fieldId)}`;
@@ -63,6 +67,11 @@ export function createWorkspaceClient(connection: Connection, request: typeof fe
     applyConversion: (id: string, fieldId: string, input: FieldConversion) => write<Table>(`${field(id, fieldId)}/conversion/apply`, 'POST', input),
     getRecord: (id: string, recordId: string) => call<RowRecord>(`${root(id)}/records/${encodeURIComponent(recordId)}`),
     queryRecords: (id: string, input: RecordQuery, signal?: AbortSignal) => write<QueryPage>(`${root(id)}/query`, 'POST', input, signal),
+    previewCsv: (id: string, input: CsvImportRequest, signal?: AbortSignal) => write<CsvPreview>(`${root(id)}/import/preview`, 'POST', input, signal),
+    importCsv: (id: string, input: CsvImportRequest) => write<CsvImportResult>(`${root(id)}/import`, 'POST', input),
+    exportCsv: async (id: string, input: CsvExportRequest = {}, signal?: AbortSignal): Promise<string> =>
+      new TextDecoder('utf-8', { ignoreBOM: true }).decode(await (await responseFor(`${root(id)}/export`,
+        { method: 'POST', body: JSON.stringify(input), ...(signal ? { signal } : {}) })).arrayBuffer()),
     createRecords: (id: string, input: RecordCreate[]) => write<BatchResult>(`${root(id)}/records`, 'POST', input),
     updateRecords: (id: string, input: RecordUpdate[]) => write<BatchResult>(`${root(id)}/records`, 'PATCH', input),
     deleteRecords: (id: string, input: RecordDelete[]) => write<DeleteResult>(`${root(id)}/records`, 'DELETE', input),
