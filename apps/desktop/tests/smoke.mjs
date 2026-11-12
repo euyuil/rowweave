@@ -169,6 +169,22 @@ try {
   await clearClipboard();
   assert.equal(await copyCell(), beforeNonTextPaste);
 
+  const literalCells = '中文🌱\t"第一行\n第二行"\t"quoted ""value"""\n<b>literal & text</b>\t\t';
+  await selectCell();
+  await application.evaluate(({ clipboard }, text) => clipboard.writeText(text), literalCells);
+  await page.keyboard.press('Control+v');
+  await page.getByText('6 unsaved cells', { exact: true }).waitFor();
+  await selectCell(0, 3);
+  await selectCell();
+  await page.keyboard.press('Shift+ArrowRight');
+  await page.keyboard.press('Shift+ArrowRight');
+  await page.keyboard.press('Shift+ArrowDown');
+  await clearClipboard();
+  assert.equal((await copyCell()).replace(/\r\n/g, '\n'), literalCells);
+  assert.equal(await application.evaluate(({ clipboard }) => clipboard.has('text/html')), false);
+  await page.keyboard.press('Control+z');
+  await page.getByText('All changes saved', { exact: true }).waitFor();
+
   const pasted = Array.from({ length: 1_000 }, (_, row) =>
     Array.from({ length: 10 }, (_, col) => `Paste ${row}/${col} 🌱`).join('\t')).join('\n');
   await application.evaluate(({ clipboard }, text) => clipboard.writeText(text), pasted);

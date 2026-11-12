@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseClipboard } from '../src/clipboard.js';
+import { parseClipboard, serializeClipboard } from '../src/clipboard.js';
+
+test('copied TSV round trips literal text, multiline cells and blank columns', () => {
+  const rows = [['中文🌱', '第一行\n第二行', 'quoted "value"'], ['<b>literal & text</b>', '\t\r\n', ''], ['', '', '']];
+  assert.deepEqual(parseClipboard(serializeClipboard(rows)), rows);
+  assert.equal(serializeClipboard([['a\rb', '"quote"']]), '"a\rb"\t"""quote"""');
+  assert.deepEqual(parseClipboard(serializeClipboard([['value'], [''], ['']])), [['value'], [''], ['']]);
+});
 
 test('clipboard preserves Unicode, quoted delimiters, multiline values and trailing empty cells', () => {
   assert.deepEqual(parseClipboard('中文 🌱\t第二列\r\n"a\tb\n""quoted"""\t\r\n'),

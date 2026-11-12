@@ -9,7 +9,7 @@ import { queryForView, type WorkspaceApi } from '../../client/src/http-client.js
 import { cellDisplay, cellText } from '../../client/src/cell-values.js';
 import { parseTextValue } from '../../core/src/field-values.js';
 import { CellEditor, EditorContext, type EditableCell, type EditorHandle } from './cell-editor.js';
-import { parseClipboard } from './clipboard.js';
+import { parseClipboard, serializeClipboard } from './clipboard.js';
 import { RecordDialog, type RecordAction } from './record-dialog.js';
 import { FieldsDialog } from './fields-dialog.js';
 import { ViewDialog } from './view-dialog.js';
@@ -303,6 +303,38 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     } catch (failure) { report(failure); return []; }
   };
 
+  const copySelection = async () => {
+    const range = selection.current?.range;
+    const rowCount = selection.rows.length || (selection.columns.length ? model.rowCount : range?.height ?? 0);
+    const columnCount = selection.rows.length ? fields.length : selection.columns.length || range?.width || 0;
+    if (!rowCount || !columnCount) return;
+    if (rowCount > maxBatchRecords || rowCount * columnCount > maxBatchCells) {
+      setError('Copy up to 20,000 cells and 2,000 rows at a time.');
+      return;
+    }
+    try {
+      const generation = model.queryVersion;
+      const rows = selection.rows.length ? selection.rows.toArray()
+        : Array.from({ length: rowCount }, (_, index) => (selection.columns.length ? 0 : range!.y) + index);
+      const columns = selection.rows.length ? fields
+        : selection.columns.length ? selection.columns.toArray().map(index => fields[index]!)
+          : fields.slice(range!.x, range!.x + columnCount);
+      const records: RowRecord[] = [];
+      for (let index = 0; index < rows.length;) {
+        const start = rows[index]!;
+        let count = 1;
+        while (rows[index + count] === start + count) count++;
+        records.push(...await model.readRange(start, count));
+        if (generation !== model.queryVersion) return;
+        index += count;
+      }
+      // Excel collapses line breaks in the grid library's HTML representation.
+      // Quoted TSV preserves literal cell contents without an HTML interpretation.
+      await navigator.clipboard.writeText(serializeClipboard(records.map(record =>
+        columns.map(field => cellText(field, record.values[field.id] ?? null)))));
+    } catch (failure) { report(failure); }
+  };
+
   const status = offline ? 'Service unavailable' : !ready ? 'Loading table…' : model.saving ? 'Saving…' : busy ? 'Loading rows…'
     : editorDirty ? 'Editing cell…'
     : pending ? `${pending.toLocaleString()} unsaved ${pending === 1 ? 'cell' : 'cells'}` : 'All changes saved';
@@ -351,7 +383,12 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       </div>
       <div className="table-toolbar"><strong>▦ &nbsp; {view?.name ?? 'Loading view…'}</strong>
         <span>{table ? `${model.rowCount.toLocaleString()} ${model.rowCount === 1 ? 'record' : 'records'} · ${fields.length} ${fields.length === 1 ? 'field' : 'fields'}` : 'Loading records…'}</span></div>
-      <div className="grid-host" aria-busy={locked || !ready} ref={gridHost} onPasteCapture={event => {
+      <div className="grid-host" aria-busy={locked || !ready} ref={gridHost} onCopyCapture={event => {
+        if (!gridHost.current?.querySelector('canvas')?.contains(document.activeElement)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        void copySelection();
+      }} onPasteCapture={event => {
         if (!gridHost.current?.querySelector('canvas')?.contains(document.activeElement) || !selection.current) return;
         event.preventDefault();
         event.stopPropagation();
@@ -379,7 +416,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
           gridSelection={selection} onGridSelectionChange={setSelection}
           rowMarkers="both" rowHeight={36} headerHeight={40} rangeSelect="rect" rowSelectionMode="multi"
           cellActivationBehavior="double-click"
-          keybindings={{ paste: false }}
+          keybindings={{ paste: false, copy: false }}
           onDelete={selected => { void clearSelection(selected); return false; }}
           smoothScrollX smoothScrollY
           onCellsEdited={edits => {
