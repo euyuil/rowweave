@@ -75,7 +75,8 @@ export async function verifyColumnWorkflow(page) {
     document.activeElement.dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true }));
   });
   await page.getByText('1 unsaved cell', { exact: true }).waitFor();
-  await page.mouse.click(bounds.x + 100, bounds.y + 20, { button: 'right' });
+  const pendingBounds = await page.locator('canvas').first().boundingBox();
+  await page.mouse.click(pendingBounds.x + 100, pendingBounds.y + 20, { button: 'right' });
   assert.equal(await page.getByRole('dialog').count(), 0);
   await page.getByText('Save or discard grid edits before changing columns.', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
