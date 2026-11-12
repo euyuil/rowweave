@@ -8,6 +8,7 @@ import type { CheckedQuery } from '../../core/src/record-query.js';
 import { defaultView, reconcileView } from '../../core/src/grid-views.js';
 import { migrate } from './migrations.js';
 import { querySql } from './query-sql.js';
+import { syncQueryIndexes } from './query-indexes.js';
 import { Relations } from './relations.js';
 import { Lookups } from './lookups.js';
 import { maxCsvBytes, maxCsvCells, maxCsvRows, type CsvPreview } from '../../contracts/src/index.js';
@@ -188,6 +189,7 @@ export class SqliteRecordStore implements RecordStore {
       this.checkSchema(id, expectedVersion);
       this.lookups.deleteTable(id);
       this.relations.deleteTable(id);
+      syncQueryIndexes(this.db, { id, fields: [] }, []);
       this.db.prepare('DELETE FROM tables WHERE id = ?').run(id);
     });
   }
@@ -321,6 +323,7 @@ export class SqliteRecordStore implements RecordStore {
       const next = reconcileView(view, table);
       if (JSON.stringify(next) !== JSON.stringify(view)) this.writeView({ ...next, version: view.version + 1 });
     }
+    syncQueryIndexes(this.db, table, this.listViews(table.id).map(view => view.query));
   }
 
   private syncLookupViews(changed: Table, write: boolean): void {
@@ -345,6 +348,7 @@ export class SqliteRecordStore implements RecordStore {
       }
       const saved = { ...view, version: expectedVersion === undefined ? 1 : expectedVersion + 1 };
       this.writeView(saved);
+      syncQueryIndexes(this.db, table, this.listViews(table.id).map(view => view.query));
       return saved;
     });
   }
@@ -355,6 +359,7 @@ export class SqliteRecordStore implements RecordStore {
       if (view.version !== expectedVersion) throw new ServiceError('VIEW_CONFLICT', 'This view changed. Reload before deleting again.', 409);
       if (this.listViews(id).length === 1) throw new ServiceError('LAST_VIEW', 'Keep at least one view in the table.');
       this.db.prepare('DELETE FROM views WHERE table_id = ? AND id = ?').run(id, viewId);
+      syncQueryIndexes(this.db, this.getTable(id), this.listViews(id).map(view => view.query));
     });
   }
 

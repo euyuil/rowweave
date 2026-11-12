@@ -1,11 +1,12 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { tableId, type Field } from '../../contracts/src/index.js';
+import { tableId, type Field, type ViewQuery } from '../../contracts/src/index.js';
 import { defaultView } from '../../core/src/grid-views.js';
+import { syncQueryIndexes } from './query-indexes.js';
 
 export function migrate(db: DatabaseSync): boolean {
   const version = db.prepare('PRAGMA user_version').get()!['user_version'] as number;
-  if (version === 6) return false;
-  if (version < 0 || version > 6) throw new Error(`Unsupported database version: ${version}.`);
+  if (version === 7) return false;
+  if (version < 0 || version > 7) throw new Error(`Unsupported database version: ${version}.`);
   db.exec('BEGIN IMMEDIATE');
   try {
     if (version < 2) {
@@ -67,14 +68,22 @@ export function migrate(db: DatabaseSync): boolean {
       UNIQUE(source_record_id, field_id, position)
     );
     CREATE INDEX relations_by_target_record ON relation_edges(target_record_id);`);
-    db.exec(`CREATE TABLE field_lookups (
+    if (version < 6) db.exec(`CREATE TABLE field_lookups (
       field_id TEXT PRIMARY KEY REFERENCES fields(id) ON DELETE CASCADE,
       relation_field_id TEXT NOT NULL REFERENCES field_relations(field_id) ON DELETE RESTRICT,
       target_field_id TEXT NOT NULL REFERENCES fields(id) ON DELETE RESTRICT
     );
     CREATE INDEX lookups_by_relation ON field_lookups(relation_field_id);
-    CREATE INDEX lookups_by_target ON field_lookups(target_field_id);
-    PRAGMA user_version = 6; COMMIT;`);
+    CREATE INDEX lookups_by_target ON field_lookups(target_field_id);`);
+    for (const row of db.prepare('SELECT id FROM tables').all()) {
+      const id = row['id'] as string;
+      const fields = db.prepare('SELECT definition_json FROM fields WHERE table_id = ? ORDER BY position').all(id)
+        .map(row => JSON.parse(row['definition_json'] as string) as Field);
+      const queries = db.prepare('SELECT config_json FROM views WHERE table_id = ?').all(id)
+        .map(row => (JSON.parse(row['config_json'] as string) as { query: ViewQuery }).query);
+      syncQueryIndexes(db, { id, fields }, queries);
+    }
+    db.exec('PRAGMA user_version = 7; COMMIT;');
     return version === 0;
   } catch (error) {
     db.exec('ROLLBACK');
