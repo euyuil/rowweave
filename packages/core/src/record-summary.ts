@@ -12,7 +12,7 @@ export function parseSummary(table: Table, input: Record<string, unknown>): Chec
   const fields = new Map(table.fields.map(field => [field.id, field]));
   const groupBy = input['groupBy'];
   if (groupBy !== undefined && (typeof groupBy !== 'string' || !fields.has(groupBy) ||
-      ['multiSelect', 'relation', 'lookup'].includes(fields.get(groupBy)!.type))) {
+      ['multiSelect', 'relation', 'lookup'].includes(valueField(fields.get(groupBy)!).type))) {
     throw new ServiceError('INVALID_SUMMARY', 'Group by a text, number, checkbox, date, timestamp or single-select field.');
   }
   const measures = input['measures'] ?? [];

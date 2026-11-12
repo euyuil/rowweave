@@ -2,7 +2,7 @@ import type { SQLInputValue } from 'node:sqlite';
 import type { CellValue, Field, FieldFilter, FilterGroup, Table } from '../../contracts/src/index.js';
 import type { CheckedQuery } from '../../core/src/record-query.js';
 import { lookupSql } from './lookups.js';
-import { valueField } from '../../contracts/src/index.js';
+import { valueField, isLookupSummary } from '../../contracts/src/index.js';
 
 function sqlLiteral(value: string | number | null): string {
   if (value === null) return 'NULL';
@@ -48,7 +48,7 @@ export function querySql(table: Pick<Table, 'id' | 'fields'>, query: CheckedQuer
         FROM relation_edges edge JOIN records linked ON linked.id = edge.target_record_id
         WHERE edge.source_record_id = ${alias}.id AND edge.field_id = ${bind(field.id)} ORDER BY edge.position))`;
     }
-    if (field.type === 'lookup') {
+    if (field.type === 'lookup' && !isLookupSummary(field)) {
       const target = field.lookupResult!;
       const scalar = target.type === 'multiSelect' ? { ...target, type: 'singleSelect' as const } : target;
       if (sorting) return formatted(scalar, `json_extract(${value}, '$[0]')`);
@@ -63,7 +63,7 @@ export function querySql(table: Pick<Table, 'id' | 'fields'>, query: CheckedQuer
     }
     const field = fields.get(filter.fieldId)!;
     const value = raw(field);
-    if (field.type === 'lookup') {
+    if (field.type === 'lookup' && !isLookupSummary(field)) {
       if (filter.operator === 'isEmpty' || filter.operator === 'isNotEmpty') {
         const hasValue = `EXISTS (SELECT 1 FROM json_each(${value}) entry WHERE entry.value IS NOT NULL AND entry.value <> '')`;
         return filter.operator === 'isEmpty' ? `NOT ${hasValue}` : hasValue;

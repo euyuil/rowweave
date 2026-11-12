@@ -20,7 +20,7 @@ export interface Field {
   precision?: number;
   currency?: string;
   relation?: { tableId: string; multiple: boolean };
-  lookup?: { relationFieldId: string; fieldId: string };
+  lookup?: { relationFieldId: string; fieldId: string; operation?: 'values' | 'count' | 'sum' | 'average' | 'min' | 'max' };
   formula?: { expression: string; resultType: 'number' | 'text' | 'checkbox' };
   // Resolved from the current target schema; not writable field configuration.
   lookupResult?: Field;
@@ -93,9 +93,14 @@ export interface RowRecord {
 }
 
 export function valueField(field: Field): Field {
+  if (isLookupSummary(field)) return field.lookup!.operation === 'count' ? { id: field.id, name: field.name, type: 'number' }
+    : { ...valueField(field.lookupResult!), id: field.id, name: field.name, required: false };
   return field.type === 'formula' ? { ...field, type: field.formula!.resultType } : field;
 }
 
+export function isLookupSummary(field: Field): boolean {
+  return field.type === 'lookup' && field.lookup!.operation !== undefined && field.lookup!.operation !== 'values';
+}
 
 export interface RecordPage {
   offset: number;

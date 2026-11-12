@@ -1,4 +1,4 @@
-import type { CellValue, Field } from '../../contracts/src/index.js';
+import { isLookupSummary, type CellValue, type Field } from '../../contracts/src/index.js';
 import { fieldText } from '../../core/src/field-display.js';
 
 const numberFormats = new WeakMap<Field, Intl.NumberFormat>();
@@ -6,6 +6,7 @@ const numberFormats = new WeakMap<Field, Intl.NumberFormat>();
 export const cellText = fieldText;
 
 export function cellDisplay(field: Field, value: CellValue | undefined): string {
+  if (isLookupSummary(field)) return field.lookup!.operation === 'count' ? String(value ?? '') : cellDisplay(field.lookupResult!, value);
   if (field.type === 'lookup') {
     const target = field.lookupResult!;
     const scalar = target.type === 'multiSelect' ? { ...target, type: 'singleSelect' as const } : target;

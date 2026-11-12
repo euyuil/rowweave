@@ -98,3 +98,5 @@ Service limits still apply: 500 records per page, 2,000 records/20,000 cells per
 `npm test` includes real MCP subprocess/client tests against isolated SQLite/HTTP services. They exercise all 25 tools, protocol discovery and legacy negotiation, live schema/view resources, typed links/lookups, summaries, schema/record/view conflicts, atomic batch rollback, CSV, input rejection, authentication, uncertain-write recovery without retries, secret-free diagnostics, and offline archive installation outside the repository. These tests do not assert that any particular agent will choose the correct workflow without user review.
 
 Formula fields use the existing field and record tools. Configure `formula: { expression, resultType }` with stable field-ID references; read computed values and optional `formulaErrors` from record responses. See the [formula language](formulas.md). Computed fields reject direct writes.
+
+Lookup configuration also accepts `operation: "values" | "count" | "sum" | "average" | "min" | "max"`. Numeric summaries return scalar values; omitted operation retains array values. See [linked summaries](linked-summaries.md).

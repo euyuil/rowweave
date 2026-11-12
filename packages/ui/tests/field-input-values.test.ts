@@ -27,10 +27,18 @@ test('UTC date-time form values retain milliseconds and accept minute-resolution
 
 test('lookups display target formatting and copy type-preserving values or select labels', () => {
   const field: Field = { id: 'lookup', name: 'Budget', type: 'lookup',
+    lookup: { relationFieldId: 'relation', fieldId: 'target' },
     lookupResult: { id: 'target', name: 'Amount', type: 'number', numberFormat: 'currency', currency: 'USD' } };
   assert.equal(cellDisplay(field, [0, 25]), '$0.00, $25.00');
   assert.equal(cellText(field, [0, 25]), '[0,25]');
   assert.equal(toFormValue(field, [0, 25]), '[0,25]');
+  field.lookup!.operation = 'sum';
+  assert.equal(cellDisplay(field, 25), '$25.00');
+  assert.equal(cellText(field, 25), '25');
+  assert.equal(toFormValue(field, 25), '25');
+  field.lookup!.operation = 'count';
+  assert.equal(cellDisplay(field, 2), '2');
+  field.lookup!.operation = 'values';
   field.lookupResult = { id: 'target', name: 'Tags', type: 'multiSelect', options: [{ id: 'blue', name: '蓝色' }] };
   assert.equal(cellDisplay(field, ['blue', 'blue']), '蓝色, 蓝色');
   assert.equal(cellText(field, ['blue', 'blue']), '["蓝色","蓝色"]');

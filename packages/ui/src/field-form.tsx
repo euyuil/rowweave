@@ -6,6 +6,7 @@ import { Dialog } from './dialog.js';
 import { FieldInput } from './field-input.js';
 import { fromFormValue, toFormValue, type FormValue } from './field-input-values.js';
 import { rewriteFormulaReferences } from '../../core/src/formulas.js';
+import { valueField } from '../../contracts/src/index.js';
 
 export const fieldTypeNames: Record<FieldType, string> = {
   text: 'Text', multiline: 'Multiline text', number: 'Number', checkbox: 'Checkbox', date: 'Date',
@@ -34,6 +35,13 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved }: {
   const [lookupRelation, setLookupRelation] = useState(field?.lookup?.relationFieldId ?? table.fields.find(field => field.type === 'relation')?.id ?? '');
   const [lookupField, setLookupField] = useState(field?.lookup?.fieldId ?? '');
   const [lookupTarget, setLookupTarget] = useState<Table>();
+  const [lookupOperation, setLookupOperation] = useState<NonNullable<NonNullable<Field['lookup']>['operation']>>(field?.lookup?.operation ?? 'values');
+  const lookupFields = lookupTarget?.fields.filter(candidate => !['relation', 'lookup'].includes(candidate.type) &&
+    (lookupOperation === 'values' || valueField(candidate).type === 'number')) ?? [];
+  useEffect(() => {
+    if (!lookupTarget) return;
+    setLookupField(current => lookupFields.some(candidate => candidate.id === current) ? current : lookupFields[0]?.id ?? '');
+  }, [lookupTarget, lookupOperation]);
   const formulaFields = table.fields.filter(candidate => candidate.id !== field?.id && !['relation', 'lookup', 'multiSelect'].includes(candidate.type));
   const referenceName = (candidate: Field) => table.fields.filter(other => other.name === candidate.name).length > 1
     ? `${candidate.name} (${candidate.id})` : candidate.name;
@@ -52,8 +60,6 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved }: {
     void api.getTable(relation.relation!.tableId).then(target => {
       if (!active) return;
       setLookupTarget(target);
-      const available = target.fields.filter(field => !['relation', 'lookup'].includes(field.type));
-      setLookupField(current => available.some(field => field.id === current) ? current : available[0]!.id);
     }).catch(error => { if (active) setError(error.message); });
     return () => { active = false; };
   }, [api, type, relation]);
@@ -61,7 +67,7 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved }: {
   const selection = type === 'singleSelect' || type === 'multiSelect';
   const target: Field = { id: field?.id ?? 'new-field', name, type, required: type !== 'lookup' && type !== 'formula' && required,
     ...(type === 'relation' ? { relation: { tableId: targetId, multiple } } : {}),
-    ...(type === 'lookup' ? { lookup: { relationFieldId: lookupRelation, fieldId: lookupField } } : {}),
+    ...(type === 'lookup' ? { lookup: { relationFieldId: lookupRelation, fieldId: lookupField, operation: lookupOperation } } : {}),
     ...(type === 'formula' ? { formula: { expression, resultType } } : {}),
     ...(selection ? { options } : {}),
     ...((type === 'number' || (type === 'formula' && resultType === 'number')) ? { numberFormat: format, ...(precision ? { precision: Number(precision) } : {}),
@@ -139,13 +145,19 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved }: {
           </details>
         </>}
         {type === 'lookup' && <>
+          <label className="form-field">Show<select aria-label="Lookup operation" value={lookupOperation} onChange={event => setLookupOperation(event.target.value as typeof lookupOperation)}>
+            <option value="values">Linked values</option><option value="sum">Sum</option><option value="average">Average</option>
+            <option value="count">Count numeric values</option><option value="min">Minimum</option><option value="max">Maximum</option>
+          </select></label>
           <label className="form-field">Linked field<select required aria-label="Linked field" value={lookupRelation} onChange={event => setLookupRelation(event.target.value)}>
             {table.fields.filter(field => field.type === 'relation').map(field => <option key={field.id} value={field.id}>{field.name}</option>)}
           </select></label>
           <label className="form-field">Look up field<select required aria-label="Look up field" value={lookupField} disabled={!lookupTarget} onChange={event => setLookupField(event.target.value)}>
-            {lookupTarget?.fields.filter(field => !['relation', 'lookup'].includes(field.type)).map(field => <option key={field.id} value={field.id}>{field.name}</option>)}
+            {!lookupFields.length && <option value="">No compatible fields</option>}
+            {lookupFields.map(field => <option key={field.id} value={field.id}>{field.name}</option>)}
           </select></label>
           <p className="form-note">Values follow the linked records and cannot be edited here. Add a linked-record field first to use a lookup.</p>
+          {lookupOperation !== 'values' && <p className="form-note">Uses numeric values, including numeric formulas. Empty values are skipped; count returns 0 when none exist, while other summaries stay empty.</p>}
         </>}
         {type === 'relation' && <>
           <label className="form-field">Link to table<select required aria-label="Link to table" value={targetId} onChange={event => { setTargetId(event.target.value); setDefaultValue(null); }}>
@@ -195,7 +207,7 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved }: {
       </section>}
       {error && <p className="form-error" role="alert">{error}</p>}
       <div className="dialog-actions"><button type="button" disabled={busy} onClick={onClose}>Cancel</button>
-        <button className="primary" disabled={busy || (type === 'lookup' && !lookupTarget) || (preview !== undefined && preview.invalid > 0)}>
+        <button className="primary" disabled={busy || (type === 'lookup' && !lookupFields.some(field => field.id === lookupField)) || (preview !== undefined && preview.invalid > 0)}>
           {busy ? 'Working…' : converting ? preview ? 'Apply conversion' : 'Preview conversion' : 'Save field'}</button></div>
     </form>
   </Dialog>;

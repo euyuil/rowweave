@@ -59,7 +59,7 @@ test('formula errors are explicit, dependencies propagate errors, null is distin
   assert.equal(rows[1]!.values[ratio.id], null);
   assert.equal(rows[1]!.formulaErrors, undefined);
   assert.equal(service.queryRecords(table.id, { fields: [quantity] }).records[0]!.formulaErrors, undefined);
-  assert.throws(() => service.exportCsv(table.id, {}), /formula error/);
+  assert.throws(() => service.exportCsv(table.id, {}), /calculation error/);
   const changed = service.updateBatch([{ id: rows[0]!.id, expectedVersion: 1, values: { [quantity]: 2 } }], table.id).records[0]!;
   assert.equal(changed.values[child.id], 6);
   assert.equal(changed.formulaErrors, undefined);
@@ -142,7 +142,7 @@ test('linked formula errors remain visible, exports reject them, and failed batc
   const row = service.createRecords(source.id, [{ values: { [link]: [rows[0]!.id] } }]).records[0]!;
   assert.match(row.formulaErrors![lookup]!, /linked formula/);
   assert.match(row.links![link]![0]!.label, /zero/);
-  assert.throws(() => service.exportCsv(source.id, {}), /formula error/);
+  assert.throws(() => service.exportCsv(source.id, {}), /calculation error/);
   const before = service.queryRecords(table.id, {});
   assert.throws(() => service.updateBatch([
     { id: rows[0]!.id, expectedVersion: 1, values: { [quantity]: 5 } },

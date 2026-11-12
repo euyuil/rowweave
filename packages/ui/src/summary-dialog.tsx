@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import type { GridView, RecordSummary, SummaryMeasure, Table } from '../../contracts/src/index.js';
+import { valueField, type GridView, type RecordSummary, type SummaryMeasure, type Table } from '../../contracts/src/index.js';
 import { ApiFailure, type WorkspaceApi } from '../../client/src/http-client.js';
 import { cellDisplay } from '../../client/src/cell-values.js';
 import { Dialog } from './dialog.js';
@@ -8,7 +8,7 @@ export function SummaryDialog({ table, view, search, api, onClose }: {
   table: Table; view: GridView; search: string; api: WorkspaceApi; onClose(): void;
 }) {
   const [groupBy, setGroupBy] = useState('');
-  const [fieldId, setFieldId] = useState(table.fields.find(field => (field.type === 'number' || field.formula?.resultType === 'number'))?.id ?? '');
+  const [fieldId, setFieldId] = useState(table.fields.find(field => valueField(field).type === 'number')?.id ?? '');
   const [operation, setOperation] = useState<SummaryMeasure['operation']>('sum');
   const [page, setPage] = useState<{ offset: number; revision?: number }>({ offset: 0 });
   const [refresh, setRefresh] = useState(0);
@@ -41,12 +41,12 @@ export function SummaryDialog({ table, view, search, api, onClose }: {
     <div className="form-row">
       <label className="form-field">Group by<select aria-label="Group by" value={groupBy} onChange={event => { setGroupBy(event.target.value); setPage({ offset: 0 }); }}>
         <option value="">No grouping</option>
-        {table.fields.filter(field => !['multiSelect', 'relation', 'lookup'].includes(field.type)).map(field =>
+        {table.fields.filter(field => !['multiSelect', 'relation', 'lookup'].includes(valueField(field).type)).map(field =>
           <option key={field.id} value={field.id}>{field.name}</option>)}
       </select></label>
       <label className="form-field">Measure field<select aria-label="Measure field" value={fieldId} onChange={event => { setFieldId(event.target.value); setPage({ offset: 0 }); }}>
         <option value="">Record count only</option>
-        {table.fields.filter(field => field.type === 'number').map(field => <option key={field.id} value={field.id}>{field.name}</option>)}
+        {table.fields.filter(field => valueField(field).type === 'number').map(field => <option key={field.id} value={field.id}>{field.name}</option>)}
       </select></label>
       <label className="form-field">Calculation<select aria-label="Calculation" value={operation} disabled={!fieldId} onChange={event => { setOperation(event.target.value as SummaryMeasure['operation']); setPage({ offset: 0 }); }}>
         <option value="sum">Sum</option><option value="average">Average</option><option value="min">Minimum</option><option value="max">Maximum</option>

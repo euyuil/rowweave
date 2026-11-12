@@ -40,7 +40,7 @@ Tables support up to 200 fields. Field definitions use `{ name, type, required?,
 | `multiSelect` | Array of unique option IDs | Same options configuration; required values need at least one option. |
 | `relation` | Array of unique record IDs | `relation: { tableId, multiple }`; one target if false, up to 200 if true. Targets must exist in that table. |
 | `formula` | Read-only number, text or boolean (or null) | `formula: { expression, resultType }`; references use field UUIDs. See [formulas](formulas.md) for syntax, errors and transactional recalculation. |
-| `lookup` | Read-only array of computed scalars | `lookup: { relationFieldId, fieldId }`; use a local relation and an ordinary target field. No defaults, required constraint, direct writes, or chained lookups. |
+| `lookup` | Read-only array, or number/null for numeric summaries | `lookup: { relationFieldId, fieldId, operation? }`; omitted/`values` returns the original array. Numeric targets support `count`, `sum`, `average`, `min`, `max`. See [linked summaries](linked-summaries.md). No defaults, required constraint, direct writes, or chained lookups. |
 
 Optional writable fields allow null. New-record defaults apply only to omitted fields; explicit null does not use a default. Existing records do not receive a newly added default. Add a required field to a non-empty table as optional, fill it, then enable its constraint. Tightening constraints validates existing values atomically. A field's ID and option IDs survive rename and reorder. Returned lookup fields include the current resolved `lookupResult` metadata; that property is not writable configuration.
 

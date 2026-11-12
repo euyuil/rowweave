@@ -78,6 +78,25 @@ test('MCP creates formulas and returns recalculated values and explicit errors',
   assert.match(read.records[0]!.formulaErrors![field.id]!, /zero/);
 });
 
+test('MCP configures linked numeric summaries and exposes scalar query results', async t => {
+  const { environment } = await setup(t);
+  const { json } = await connect(t, environment);
+  let target = await json<Table>('tables_create', { name: 'Amounts' });
+  target = await json<Table>('fields_create', { tableId: target.id, input: { expectedVersion: target.version, name: 'Amount', type: 'number' } });
+  const amount = target.fields[1]!.id;
+  const rows = (await json<BatchResult>('records_create', { tableId: target.id, records: [0, 10, null].map(value => ({ values: { [amount]: value } })) })).records;
+  let source = await json<Table>('tables_create', { name: 'Totals' });
+  source = await json<Table>('fields_create', { tableId: source.id, input: { expectedVersion: source.version, name: 'Items', type: 'relation', relation: { tableId: target.id, multiple: true } } });
+  const link = source.fields[1]!.id;
+  source = await json<Table>('fields_create', { tableId: source.id, input: { expectedVersion: source.version, name: 'Total', type: 'lookup', lookup: { relationFieldId: link, fieldId: amount, operation: 'sum' } } });
+  const sum = source.fields[2]!.id;
+  const record = (await json<BatchResult>('records_create', { tableId: source.id, records: [{ values: { [link]: rows.map(row => row.id) } }] })).records[0]!;
+  assert.equal(record.values[sum], 10);
+  assert.equal((await json<QueryPage>('records_query', { tableId: source.id, query: { filter: { conjunction: 'and', conditions: [{ fieldId: sum, operator: 'gt', value: 5 }] } } })).total, 1);
+  source = await json<Table>('fields_update', { tableId: source.id, fieldId: sum, input: { expectedVersion: source.version, lookup: { relationFieldId: link, fieldId: amount, operation: 'count' } } });
+  assert.equal((await json<QueryPage>('records_query', { tableId: source.id, query: {} })).records[0]!.values[sum], 2);
+});
+
 test('MCP creates board views, queries empty lanes and moves records using their versions', async t => {
   const { environment } = await setup(t);
   const { json, call } = await connect(t, environment);

@@ -1,7 +1,8 @@
-import type { CellValue, Field } from '../../contracts/src/index.js';
+import { valueField, type CellValue, type Field } from '../../contracts/src/index.js';
 
 export function fieldText(field: Field, value: CellValue | undefined): string {
   if (value === null || value === undefined) return '';
+  field = valueField(field);
   if (field.type === 'lookup') {
     const target = field.lookupResult!;
     if (target.type === 'singleSelect' || target.type === 'multiSelect') {
