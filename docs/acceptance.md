@@ -8,6 +8,8 @@ The Windows ZIP, checksum and exact source revision are identified by `release/l
 
 Source/service setup is in [development.md](development.md) and [service.md](service.md). The SDK, CLI, MCP and Harness archives are built with the corresponding `package:*` scripts; [agent Skills](agent-skills.md) are installed from the repository. No npm publication or AI account is required for RowWeave itself.
 
+The delivered 2026-11-12 candidate is `release/0.1.0-20261112T144603147Z/rowweave-0.1.0-win32-x64.zip`, built cleanly from `5091d04e4b2f77f9595225abd414513422b9f813` (merged through PR #38). SHA-256: `91d0543a2c020031f07dbb49cf390a9e047c14bc5aa37e039bbddb3145c9167f`. Windows and Linux CI passed that revision, including the extracted-package cross-interface workflow. Local Node checks passed 119 tests; the IPv6 loopback test could not bind in the local environment and passed in CI. The final documentation-only PR does not change this binary.
+
 | Scenario | Automated evidence |
 | --- | --- |
 | Tables, typed schema, records and restart persistence | Workspace/schema desktop workflows; SQLite schema/typed-record tests; migrations from earlier formats. |
@@ -20,7 +22,7 @@ Source/service setup is in [development.md](development.md) and [service.md](ser
 
 Run `npm test` for Node regressions, `npm run test:desktop` for source desktop checks, and `npm run test:harness` for host integration. After `npm run package:win`, run `npm run test:packaged` and `npm run test:interfaces`. Windows and Linux CI run the configured checks; native interaction and reference-machine performance are separate evidence.
 
-See [product-performance.md](product-performance.md) for exact production artifacts, methods, results and limits. Native Chinese input and external spreadsheet verification are recorded there when performed; synthetic composition or DOM clipboard events alone are not native verification.
+See [product-performance.md](product-performance.md) for exact production artifacts, methods, results and limits. Its native-interaction section records successful Pinyin and Excel clipboard checks, the discovered/fixed multiline-copy defect and Windows line-ending normalization. Synthetic composition or DOM clipboard events alone are not native verification.
 
 ## Owner walkthrough
 
@@ -33,7 +35,7 @@ See [product-performance.md](product-performance.md) for exact production artifa
 7. **Connect an agent or application.** Follow the [MCP](mcp.md), [CLI](../apps/cli/README.md), [SDK](../packages/client/README.md), or [Harness](harness.md) guide. Point it at the same service as the desktop. Discover schema, add a record, query a saved view, then verify the change in the other interface. Use current versions for writes.
 8. **Recover deliberately.** With an isolated remote service, stop it during editing and confirm the draft/error behavior. Restart it and inspect stored data before repeating a write with an uncertain outcome. Create an online backup, restore it to a new path, and connect to the restored workspace using the [backup guide](backup.md).
 
-Record the candidate checksum, OS/input method/spreadsheet versions, the failing step if any, expected versus observed behavior, and a screenshot or minimal sample without private data. The product is ready for owner acceptance only after the required implementation and verification items in the completion plan are complete; this document does not accept it on the owner's behalf.
+Record the candidate checksum, OS/display refresh rate/input method/spreadsheet versions, the failing step if any, expected versus observed behavior, and a screenshot or minimal sample without private data. Include scrolling on your normal display: the earlier full reference run used 60 Hz, while the final-binary rerun encountered a 32 Hz desktop session and cannot establish a 60 Hz frame-interval result. The product is ready for owner acceptance only after the required implementation and verification items in the completion plan are complete; this document does not accept it on the owner's behalf.
 
 ## Current boundaries
 

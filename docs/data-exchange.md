@@ -56,11 +56,13 @@ An empty file is invalid; a header-only file can preview/export a schema and imp
 
 CSV is a value exchange format, not a workspace backup: schemas, saved views, versions, and record identities are not included. Linked IDs only work while their targets still exist in that workspace. Use a database backup to preserve the entire workspace.
 
-Spreadsheet applications may reinterpret dates, leading zeros, long numbers, and formula-like text when opening CSV. RowWeave exports literal text without silently prefixing or changing values. Use the spreadsheet's text import settings to preserve those columns. A spreadsheet may also remove the quoted-empty/null distinction when resaving a file. Direct RowWeave export/import preserves it; external spreadsheet interoperability is a final-candidate check.
+Spreadsheet applications may reinterpret dates, leading zeros, long numbers, and formula-like text when opening CSV. RowWeave exports literal text without silently prefixing or changing values. Use the spreadsheet's text import settings to preserve those columns. A spreadsheet may also remove the quoted-empty/null distinction when resaving a file. Direct RowWeave export/import preserves it. Native Excel clipboard results and the tested version are recorded in [product-performance.md](product-performance.md#final-native-interaction-checks); they do not establish every CSV import mode.
 
-## Export
+## Grid clipboard
 
 Grid copy uses quoted plain-text TSV, including for row and column selections. It preserves Unicode, literal markup, quoted delimiters, multiline text, and empty cells without an HTML representation that spreadsheet applications can reinterpret. Copy is bounded to 2,000 records / 20,000 cells, follows visible field order, and includes unsaved drafts. Windows may normalize clipboard line endings to CRLF; spreadsheet applications still apply their own cell-type inference. Copying text inside an open cell editor retains the editor's native behavior.
+
+## Export
 
 Send `POST /tables/:tableId/export` with `{}` to export the whole table in schema/insertion order, or with `{ "viewId": "view-id", "expectedViewVersion": 2, "search": "launch" }` to export a saved view. The view supplies filters, sorting, visible fields, and column order; optional `search` overrides its saved search. `expectedViewVersion` rejects a changed view. All matching records are included, not just the current page. The response is `text/csv; charset=utf-8` with an attachment filename. Errors use the ordinary JSON error envelope and a non-success status.
 
