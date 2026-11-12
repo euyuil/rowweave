@@ -56,6 +56,10 @@ test('CLI subprocesses manage schema, atomic records, views and CSV using machin
     [table.primaryFieldId]: `CLI ${i} 中文`, [budget]: cost, [reference]: String(42 + i),
   } })))).records;
   assert.deepEqual(await json(['records', 'get', table.id, created[0]!.id]), created[0]);
+  const summary = await json<{ totals: { count: number; values: number[] } }>(['records', 'summarize', table.id], {
+    measures: [{ fieldId: budget, operation: 'sum' }],
+  });
+  assert.deepEqual(summary.totals, { count: 2, values: [19] });
   const conflict = await execute(['records', 'update', table.id, '--input', '-'], JSON.stringify(created.map((record, i) => ({
     id: record.id, expectedVersion: i ? 99 : record.version, values: { [budget]: 99 },
   }))));

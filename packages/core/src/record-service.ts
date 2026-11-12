@@ -9,6 +9,8 @@ import { parseQuery, type CheckedQuery } from './record-query.js';
 import { parseView } from './grid-views.js';
 import { ServiceError } from './errors.js';
 import { prepareCsvImport, type CheckedCsvImport } from './csv.js';
+import { parseSummary, type CheckedSummary } from './record-summary.js';
+import type { RecordSummary } from '../../contracts/src/index.js';
 import type { CsvImportResult, CsvPreview } from '../../contracts/src/index.js';
 export { ServiceError } from './errors.js';
 
@@ -26,6 +28,7 @@ export interface RecordStore {
   previewConversion(tableId: string, version: number, field: Field, convert: (value: CellValue) => CellValue): ConversionPreview;
   applyConversion(tableId: string, version: number, field: Field, convert: (value: CellValue) => CellValue): Table;
   queryRecords(table: Table, query: CheckedQuery, view?: GridView): QueryPage;
+  summarizeRecords(table: Table, query: CheckedQuery, summary: CheckedSummary, view?: GridView): RecordSummary;
   listViews(tableId: string): GridView[];
   getView(tableId: string, viewId: string): GridView;
   saveView(table: Table, view: GridView, expectedVersion?: number): GridView;
@@ -165,6 +168,23 @@ export class RecordService {
   previewCsv(id: string, input: unknown): CsvPreview {
     const table = this.store.getTable(id);
     return this.store.importCsv(table, prepareCsvImport(table, input), false);
+  }
+
+  summarizeRecords(id: string, input: unknown): RecordSummary {
+    const table = this.store.getTable(id);
+    const item = schemaObject(input);
+    if (item['viewId'] !== undefined && (typeof item['viewId'] !== 'string' || !item['viewId'])) {
+      throw new ServiceError('INVALID_SUMMARY', 'viewId must be a non-empty string.');
+    }
+    const view = item['viewId'] === undefined ? undefined : this.store.getView(id, item['viewId'] as string);
+    if (item['expectedViewVersion'] !== undefined && (!view || schemaVersion(item['expectedViewVersion']) !== view.version)) {
+      throw new ServiceError('VIEW_CONFLICT', 'The view changed. Refresh before summarizing.', 409);
+    }
+    if (view && item['filter'] !== undefined) throw new ServiceError('INVALID_SUMMARY', 'Use the saved view filter or an explicit filter, not both.');
+    const query = parseQuery(table, { filter: view?.query.filter ?? item['filter'],
+      search: item['search'] === undefined ? view?.query.search : item['search'],
+      offset: item['offset'], limit: item['limit'], expectedRevision: item['expectedRevision'] });
+    return this.store.summarizeRecords(table, query, parseSummary(table, item), view);
   }
 
   importCsv(id: string, input: unknown): CsvImportResult {

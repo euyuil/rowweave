@@ -58,6 +58,7 @@ Example request files:
 | `fields preview-conversion`, `fields apply-conversion` | Table ID, field ID | `{ expectedVersion, field: definition }` |
 | `records get` | Table ID, record ID | None |
 | `records query` | Table ID | RecordQuery; defaults to `{}` |
+| `records summarize` | Table ID | SummaryRequest; defaults to `{}` for the whole-table count |
 | `records create` | Table ID | `[{ values }]` |
 | `records update` | Table ID | `[{ id, expectedVersion, values }]` |
 | `records delete` | Table ID | `[{ id, expectedVersion }]` |

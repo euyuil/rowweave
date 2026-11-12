@@ -81,6 +81,11 @@ export async function startServer({ service, token, ...options }: ServerOptions)
       send(response, 200, service.queryRecords(query[1]!, await readJson(request)));
       return;
     }
+    const summary = url.pathname.match(/^\/tables\/([^/]+)\/summary$/);
+    if (summary && request.method === 'POST') {
+      send(response, 200, service.summarizeRecords(summary[1]!, await readJson(request)));
+      return;
+    }
     const csvImport = url.pathname.match(/^\/tables\/([^/]+)\/import(?:\/(preview))?$/);
     if (csvImport && request.method === 'POST') {
       const body = await readJson(request, 64 * 1024 * 1024);

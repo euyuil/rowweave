@@ -54,6 +54,7 @@ Tools have discoverable strict JSON schemas. Read descriptions and use stable ID
 | `fields_preview_conversion`, `fields_apply_conversion` | `{ tableId, fieldId, input: FieldConversion }` |
 | `records_get` | `{ tableId, recordId }` |
 | `records_query` | `{ tableId, query: RecordQuery }` (use `{}` for the default page) |
+| `records_summarize` | `{ tableId, input: SummaryRequest }` for full-set counts, numeric measures and bounded group pages |
 | `records_create`, `records_update`, `records_delete` | `{ tableId, records: [...] }` with the corresponding create/update/delete objects |
 | `views_list` | `{ tableId }` |
 | `views_get` | `{ tableId, viewId }` |
@@ -92,4 +93,4 @@ Service limits still apply: 500 records per page, 2,000 records/20,000 cells per
 
 ## Verification
 
-`npm test` includes real MCP subprocess/client tests against isolated SQLite/HTTP services. They exercise all 24 tools, protocol discovery and legacy negotiation, live schema/view resources, typed links/lookups, schema/record/view conflicts, atomic batch rollback, CSV, input rejection, authentication, uncertain-write recovery without retries, secret-free diagnostics, and offline archive installation outside the repository. These tests do not assert that any particular agent will choose the correct workflow without user review.
+`npm test` includes real MCP subprocess/client tests against isolated SQLite/HTTP services. They exercise all 25 tools, protocol discovery and legacy negotiation, live schema/view resources, typed links/lookups, summaries, schema/record/view conflicts, atomic batch rollback, CSV, input rejection, authentication, uncertain-write recovery without retries, secret-free diagnostics, and offline archive installation outside the repository. These tests do not assert that any particular agent will choose the correct workflow without user review.

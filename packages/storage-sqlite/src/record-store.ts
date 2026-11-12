@@ -2,6 +2,9 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { summarize } from './record-summary.js';
+import type { CheckedSummary } from '../../core/src/record-summary.js';
+import type { RecordSummary } from '../../contracts/src/index.js';
 import { tableId, type BatchResult, type CellValue, type ConversionPreview, type DeleteResult, type Field, type GridView, type QueryPage, type RecordDelete, type RecordPage, type RecordUpdate, type RowRecord, type Table } from '../../contracts/src/index.js';
 import { ServiceError, type RecordStore } from '../../core/src/record-service.js';
 import type { CheckedQuery } from '../../core/src/record-query.js';
@@ -293,6 +296,13 @@ export class SqliteRecordStore implements RecordStore {
         return record;
       });
       return { offset: query.offset, records, total, revision: current.revision, schemaVersion: current.version };
+    }, 'DEFERRED');
+  }
+
+  summarizeRecords(table: Table, query: CheckedQuery, summary: CheckedSummary, view?: GridView): RecordSummary {
+    return this.transaction(() => {
+      const { current, sql } = this.prepareQuery(table, query, view);
+      return summarize(this.db, current, summary, sql.where, sql.countParameters, query.offset, query.limit);
     }, 'DEFERRED');
   }
 

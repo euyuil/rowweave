@@ -5,6 +5,7 @@ import {
   type ViewCreate, type ViewPage, type ViewPageRequest, type ViewUpdate,
   type CsvImportRequest, type CsvPreview, type CsvImportResult, type CsvExportRequest,
 } from '../../contracts/src/index.js';
+import type { RecordSummary, SummaryRequest } from '../../contracts/src/index.js';
 
 export interface Connection {
   url: string;
@@ -67,6 +68,7 @@ export function createWorkspaceClient(connection: Connection, request: typeof fe
     applyConversion: (id: string, fieldId: string, input: FieldConversion) => write<Table>(`${field(id, fieldId)}/conversion/apply`, 'POST', input),
     getRecord: (id: string, recordId: string) => call<RowRecord>(`${root(id)}/records/${encodeURIComponent(recordId)}`),
     queryRecords: (id: string, input: RecordQuery, signal?: AbortSignal) => write<QueryPage>(`${root(id)}/query`, 'POST', input, signal),
+    summarizeRecords: (id: string, input: SummaryRequest, signal?: AbortSignal) => write<RecordSummary>(`${root(id)}/summary`, 'POST', input, signal),
     previewCsv: (id: string, input: CsvImportRequest, signal?: AbortSignal) => write<CsvPreview>(`${root(id)}/import/preview`, 'POST', input, signal),
     importCsv: (id: string, input: CsvImportRequest) => write<CsvImportResult>(`${root(id)}/import`, 'POST', input),
     exportCsv: async (id: string, input: CsvExportRequest = {}, signal?: AbortSignal): Promise<string> =>

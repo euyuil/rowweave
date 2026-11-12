@@ -57,12 +57,32 @@ Records have `{ id, version, values }`, with values keyed by field ID. Relation 
 | `PATCH /tables/:table/records` | `[{ id, expectedVersion, values: { fieldId: value } }]` | `{ records }` with new versions / `updateRecords(id, updates)` |
 | `DELETE /tables/:table/records` | `[{ id, expectedVersion }]` | `{ deleted: recordIds }` / `deleteRecords(id, inputs)` |
 | `POST /tables/:table/query` | RecordQuery below | QueryPage / `queryRecords(id, query, signal?)` |
+| `POST /tables/:table/summary` | SummaryRequest below | RecordSummary / `summarizeRecords(id, input, signal?)` |
 
 Batch operations are atomic and require unique record IDs. Partial updates change only supplied fields. Creation omits computed lookup fields; explicitly supplying a lookup, including null, is rejected. Ordinary batches support up to 2,000 records and 20,000 changed/created cells. A conflict or invalid value on any record prevents every write in that batch.
 
 Records referenced by another record or a linked-field default cannot be deleted until those references are removed. A closed set of self-linked records can be deleted together. There are no dangling links or implicit cascade deletions of other tables' records.
 
 ## Queries
+
+### Summaries
+
+Use `POST /tables/:table/summary` to summarize the entire matching set, independently of loaded record pages:
+
+```json
+{
+  "groupBy": "status-field-id",
+  "measures": [{ "fieldId": "amount-field-id", "operation": "sum" }],
+  "offset": 0,
+  "limit": 50
+}
+```
+
+The response contains `totals: { count, values }`, `groups: [{ key, label, count, values }]`, `groupCount`, `offset`, `revision` and `schemaVersion`. Measure values follow request order. Omit `groupBy` for totals only, or `measures` for record counts. Up to 12 numeric measures support `sum`, `average`, `min` and `max`. Null numbers are excluded; no numeric values returns null, including an empty sum. A numeric overflow returns `SUMMARY_OVERFLOW` instead of a fabricated result. Groups support text, multiline, numbers, booleans, dates, timestamps and single select. Select keys are stable option IDs; labels reflect current names. Null and empty text form separate groups. Groups sort by scalar value or current single-select label, with null last and stable keys breaking ties.
+
+Pass `filter`/`search` to summarize a query, or `viewId` with `expectedViewVersion` to retain the saved view's filter. An explicit filter cannot accompany a saved view; `search` can override the saved search. Group pages use `offset` and `limit` (default 100, maximum 500); totals and `groupCount` cover all matching records on every page. Carry `revision` as `expectedRevision` for continuation; changed data rejects the page with `DATA_CHANGED`. A changed saved view returns `VIEW_CONFLICT`. All totals, counts and returned groups are read in one SQLite transaction.
+
+### Record pages
 
 ```json
 {

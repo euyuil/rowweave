@@ -65,7 +65,7 @@ test('MCP discovers all operations and runs versioned schema, records, views and
   const { service, environment } = await setup(t);
   const { client, call, json, used, stderr } = await connect(t, environment);
   const tools = (await client.listTools()).tools;
-  assert.equal(tools.length, 24);
+  assert.equal(tools.length, 25);
   assert.ok(tools.every(tool => tool.inputSchema.type === 'object' && tool.inputSchema.additionalProperties === false));
   assert.equal(tools.find(tool => tool.name === 'records_query')!.annotations!.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === 'records_update')!.annotations!.destructiveHint, true);
@@ -100,6 +100,10 @@ test('MCP discovers all operations and runs versioned schema, records, views and
   assert.equal(conflict.isError, true);
   assert.equal(JSON.parse(text(conflict)).error.code, 'VERSION_CONFLICT');
   assert.deepEqual((await json<QueryPage>('records_query', { tableId: table.id, query: {} })).records, created);
+  const summary = await json<{ totals: { count: number; values: number[] } }>('records_summarize', {
+    tableId: table.id, input: { measures: [{ fieldId: budget, operation: 'sum' }] },
+  });
+  assert.deepEqual(summary.totals, { count: 2, values: [19] });
   await json('records_update', { tableId: table.id, records: [{ id: created[0]!.id, expectedVersion: 1, values: { [budget]: 15 } }] });
   const conversion = { expectedVersion: table.version, field: { name: 'Code', type: 'number' } };
   const preview = await json<ConversionPreview>('fields_preview_conversion', { tableId: table.id, fieldId: reference, input: conversion });

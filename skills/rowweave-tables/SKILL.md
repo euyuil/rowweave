@@ -24,6 +24,8 @@ If MCP is unavailable and the CLI is already configured, use `rowweave --help` a
 
 Use server filters, sort keys, search and field projection to retrieve only what the task needs. `records_query` accepts `{ tableId, query }`; `views_query` accepts `{ tableId, viewId, query }`. Start with a small page (maximum 500); carry the returned revision as `expectedRevision` to continue consistently. Saved-view continuation also uses `expectedViewVersion`. Never describe one page as the complete table.
 
+Use `records_summarize` with `{ tableId, input }` for counts and numeric sum/average/min/max across the full matching set. Pass scalar `groupBy`, `measures: [{ fieldId, operation }]`, and a filter or saved `viewId` when needed. Group pages are bounded and use `expectedRevision`; totals cover all matching records on each page. Do not compute a table total by adding only the records in one query page.
+
 For writes, use the current **table version** for schema changes, **record versions** for updates/deletions, and **view version** for view changes. Record batches commit or roll back together. A batch supports at most 2,000 records and 20,000 changed cells, including defaulted create cells. Larger jobs require separate batches and therefore are not one transaction: track completed batches and report partial completion if a later batch fails.
 
 Proceed within the user's authorized scope. Do not turn an update into deletion/recreation, remove unrelated fields/options to satisfy a dependency, or change every matching row when the user requested particular records. Before an ambiguous broad or destructive change, establish its concrete affected IDs and clarify the missing scope. Existing authorization does not need to be requested again.
