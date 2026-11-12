@@ -41,7 +41,7 @@ The service supports multiple tables with stable table, field, and record IDs. T
 
 Schema writes return the updated table and increment its schema version. A stale version returns HTTP 409 with `SCHEMA_CONFLICT`; reload schema before retrying. Names contain 1–200 characters and tables support up to 200 fields. A newly added text field has no stored values until edited; an absent field value means null. Renaming and reordering do not rewrite record identities or values.
 
-SQLite format version 2 stores relational table/field metadata and JSON record values, with a table/position index. Opening a version-1 prototype database migrates it transactionally, preserving field IDs, record IDs, positions, values, and record versions. A failed migration rolls back; unsupported newer formats fail without replacing their schema. Back up a working database before upgrading; do not copy a live database without its pending WAL state.
+SQLite stores relational table/field metadata and JSON record values, with a table/position index. Format version 3 adds a persistent data revision for consistent paginated queries. Opening version-1 or version-2 databases migrates transactionally, preserving field IDs, record IDs, positions, values, and record/schema versions. A failed migration rolls back; unsupported newer formats fail without replacing their schema. Back up a working database before upgrading; do not copy a live database without its pending WAL state.
 
 ### Typed values and record lifecycle
 
@@ -72,6 +72,30 @@ Use `POST /tables/:tableId/fields/:fieldId/conversion/preview` with `{ expectedV
 Submit `{ expectedVersion: preview.schemaVersion, field: preview.field }` to `.../conversion/apply` to retain previewed option IDs, recheck current records, and apply the conversion in one transaction. The table schema version increments; only records whose stored value changes receive a new record version. Any invalid value returns `CONVERSION_FAILED` and rolls back the entire operation, including earlier records. A schema change since preview returns `SCHEMA_CONFLICT`. Preview is informational: successful preview does not skip validation during apply.
 
 Text converts using the same rules as typed paste: decimal numbers, true/false, ISO dates/timestamps, option names/IDs, and JSON arrays for multi-select. Empty text becomes null for non-text targets; preview shows this change. Scalars become their textual representation; select values become their labels, and multi-select becomes a JSON array of labels. Multiple selected options cannot be collapsed into one. Same-type conversion validates all values against the target configuration. Target defaults are explicit and apply only to future records; existing nulls are never filled implicitly.
+
+### Server queries
+
+`POST /tables/:tableId/query` accepts this shape (all properties are optional):
+
+```json
+{
+  "offset": 0,
+  "limit": 100,
+  "filter": {
+    "conjunction": "and",
+    "conditions": [{ "fieldId": "field_1", "operator": "contains", "value": "project" }]
+  },
+  "sort": [{ "fieldId": "field_1", "direction": "asc" }],
+  "search": "project",
+  "fields": ["field_1"]
+}
+```
+
+The response contains `offset`, `records`, the filtered `total`, `schemaVersion`, and `revision`. Pass the first page's revision as `expectedRevision` on subsequent pages. A record or schema write increments that revision; a stale continuation receives HTTP 409 `DATA_CHANGED` rather than silently mixing pages. Counts and records come from one SQLite snapshot. The simpler `GET .../records` endpoint remains available without this continuation guarantee.
+
+Filters support nested `and`/`or` groups (four nested levels and 100 conditions), typed `eq`/`neq`, text `contains`, numeric/date/timestamp `gt`/`gte`/`lt`/`lte`, `isEmpty`/`isNotEmpty`, and multi-select `hasAny` with option IDs. Empty means null, an empty string, or an empty multi-select list; false and zero are values. `neq` includes null when comparing with a non-null value. Filter values and search strings are bound parameters, so SQL characters and `%` remain literal.
+
+Sort by multiple distinct fields, ascending or descending. Numbers sort numerically, select fields by display labels, and nulls last; original insertion position breaks ties. Search examines formatted scalar/option values across all fields, including Unicode text. Text matching and sorting use SQLite's ASCII case folding; other Unicode characters match as written. Output `fields` selects values by stable ID, while record IDs and versions are always returned. An empty field list returns record identities only. Pages remain bounded to 500 records; queries execute in the service without loading the entire dataset into the client.
 
 Tests create and remove isolated temporary databases. No test opens a working database.
 

@@ -2,9 +2,11 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { tableId, type BatchResult, type CellValue, type ConversionPreview, type DeleteResult, type Field, type RecordDelete, type RecordPage, type RecordUpdate, type RowRecord, type Table } from '../../contracts/src/index.js';
+import { tableId, type BatchResult, type CellValue, type ConversionPreview, type DeleteResult, type Field, type QueryPage, type RecordDelete, type RecordPage, type RecordUpdate, type RowRecord, type Table } from '../../contracts/src/index.js';
 import { ServiceError, type RecordStore } from '../../core/src/record-service.js';
+import type { CheckedQuery } from '../../core/src/record-query.js';
 import { migrate } from './migrations.js';
+import { querySql } from './query-sql.js';
 
 export interface SeedOptions {
   rows: number;
@@ -22,6 +24,7 @@ interface StoredTable {
   name: string;
   version: number;
   primary_field_id: string;
+  revision: number;
   fields_json: string;
   total: number;
 }
@@ -76,9 +79,9 @@ export class SqliteRecordStore implements RecordStore {
       id: `field_${i + 1}`, name: `Field ${i + 1}`, type: 'text',
     }));
     this.transaction(() => {
-      const table: Table = { id: tableId, name: 'Prototype workspace', version: 1,
+      const table: Table = { id: tableId, name: 'Prototype workspace', version: 1, revision: 1,
         primaryFieldId: fields[0]!.id, fields, total: options.rows };
-      this.db.prepare('INSERT INTO tables VALUES (?, ?, 1, ?)').run(table.id, table.name, table.primaryFieldId);
+      this.db.prepare('INSERT INTO tables (id, name, version, primary_field_id) VALUES (?, ?, 1, ?)').run(table.id, table.name, table.primaryFieldId);
       this.insertFields(table);
       const insert = this.db.prepare('INSERT INTO records (id, table_id, position, values_json) VALUES (?, ?, ?, ?)');
       for (let row = 0; row < options.rows; row++) {
@@ -96,7 +99,7 @@ export class SqliteRecordStore implements RecordStore {
   }
 
   private decodeTable(row: StoredTable): Table {
-    return { id: row.id, name: row.name, version: row.version, primaryFieldId: row.primary_field_id,
+    return { id: row.id, name: row.name, version: row.version, revision: row.revision, primaryFieldId: row.primary_field_id,
       fields: JSON.parse(row.fields_json) as Field[], total: row.total };
   }
 
@@ -113,7 +116,7 @@ export class SqliteRecordStore implements RecordStore {
 
   createTable(table: Table): Table {
     return this.transaction(() => {
-      this.db.prepare('INSERT INTO tables VALUES (?, ?, 1, ?)').run(table.id, table.name, table.primaryFieldId);
+      this.db.prepare('INSERT INTO tables (id, name, version, primary_field_id) VALUES (?, ?, 1, ?)').run(table.id, table.name, table.primaryFieldId);
       this.insertFields(table);
       return this.getTable(table.id);
     });
@@ -147,7 +150,7 @@ export class SqliteRecordStore implements RecordStore {
           .run(`$."${field.id}"`, table.id, `$."${field.id}"`);
       }
       this.insertFields(table);
-      this.db.prepare('UPDATE tables SET name = ?, primary_field_id = ?, version = version + 1 WHERE id = ?')
+      this.db.prepare('UPDATE tables SET name = ?, primary_field_id = ?, version = version + 1, revision = revision + 1 WHERE id = ?')
         .run(table.name, table.primaryFieldId, table.id);
       return this.getTable(table.id);
     });
@@ -202,7 +205,7 @@ export class SqliteRecordStore implements RecordStore {
       }
       this.db.prepare('UPDATE fields SET definition_json = ? WHERE id = ? AND table_id = ?')
         .run(JSON.stringify(field), field.id, id);
-      this.db.prepare('UPDATE tables SET version = version + 1 WHERE id = ?').run(id);
+      this.db.prepare('UPDATE tables SET version = version + 1, revision = revision + 1 WHERE id = ?').run(id);
       return this.getTable(id);
     });
   }
@@ -211,6 +214,28 @@ export class SqliteRecordStore implements RecordStore {
     const rows = this.db.prepare(`SELECT id, version, values_json FROM records WHERE table_id = ?
       ORDER BY position LIMIT ? OFFSET ?`).all(id, limit, offset) as unknown as StoredRecord[];
     return { offset, records: rows.map(row => this.decode(row)) };
+  }
+
+  queryRecords(table: Table, query: CheckedQuery): QueryPage {
+    return this.transaction(() => {
+      this.checkSchema(table.id, table.version);
+      const current = this.getTable(table.id);
+      if (query.expectedRevision !== undefined && query.expectedRevision !== current.revision) {
+        throw new ServiceError('DATA_CHANGED', 'The table changed between pages. Refresh the query before continuing.', 409);
+      }
+      const sql = querySql(current, query);
+      const total = this.db.prepare(`SELECT COUNT(*) AS total FROM records r WHERE ${sql.where}`)
+        .get(sql.countParameters)!['total'] as number;
+      const rows = this.db.prepare(`SELECT r.id, r.version, r.values_json FROM records r WHERE ${sql.where}
+        ORDER BY ${sql.order} LIMIT :limit OFFSET :offset`)
+        .all({ ...sql.parameters, ':limit': query.limit, ':offset': query.offset }) as unknown as StoredRecord[];
+      const records = rows.map(row => {
+        const record = this.decode(row);
+        if (query.fields) record.values = Object.fromEntries(query.fields.map(id => [id, record.values[id] ?? null]));
+        return record;
+      });
+      return { offset: query.offset, records, total, revision: current.revision, schemaVersion: current.version };
+    }, 'DEFERRED');
   }
 
   private decode(row: StoredRecord): RowRecord {
@@ -235,6 +260,7 @@ export class SqliteRecordStore implements RecordStore {
         insert.run(id, table.id, position++, JSON.stringify(values));
         return { id, version: 1, values };
       });
+      this.db.prepare('UPDATE tables SET revision = revision + 1 WHERE id = ?').run(table.id);
       return { records };
     });
   }
@@ -249,6 +275,7 @@ export class SqliteRecordStore implements RecordStore {
         }
         remove.run(id, item.id);
       }
+      this.db.prepare('UPDATE tables SET revision = revision + 1 WHERE id = ?').run(id);
       return { deleted: records.map(record => record.id) };
     });
   }
@@ -270,6 +297,7 @@ export class SqliteRecordStore implements RecordStore {
         write.run(JSON.stringify(record.values), record.id, id);
         return record;
       });
+      this.db.prepare('UPDATE tables SET revision = revision + 1 WHERE id = ?').run(id);
       return { records };
     });
   }

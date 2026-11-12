@@ -52,6 +52,11 @@ export async function startServer({ service, token, port = 0 }: ServerOptions) {
       throw new ServiceError('UNAUTHORIZED', 'A valid access token is required.', 401);
     }
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+    const query = url.pathname.match(/^\/tables\/([^/]+)\/query$/);
+    if (query && request.method === 'POST') {
+      send(response, 200, service.queryRecords(query[1]!, await readJson(request)));
+      return;
+    }
     const conversion = url.pathname.match(/^\/tables\/([^/]+)\/fields\/([^/]+)\/conversion\/(preview|apply)$/);
     if (conversion && request.method === 'POST') {
       const operation = conversion[3] === 'preview' ? service.previewConversion.bind(service) : service.applyConversion.bind(service);

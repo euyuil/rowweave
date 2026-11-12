@@ -1,0 +1,62 @@
+import type { SQLInputValue } from 'node:sqlite';
+import type { CellValue, Field, FieldFilter, FilterGroup, Table } from '../../contracts/src/index.js';
+import type { CheckedQuery } from '../../core/src/record-query.js';
+
+export function querySql(table: Table, query: CheckedQuery) {
+  const fields = new Map(table.fields.map(field => [field.id, field]));
+  const parameters: Record<string, SQLInputValue> = { ':table': table.id };
+  let parameterIndex = 0;
+  const bind = (value: CellValue) => {
+    const name = `:p${parameterIndex++}`;
+    parameters[name] = typeof value === 'boolean' ? Number(value) : Array.isArray(value) ? JSON.stringify(value) : value;
+    return name;
+  };
+  const raw = (field: Field) => {
+    const path = `$.${JSON.stringify(field.id)}`;
+    return `json_extract(r.values_json, '${path.replaceAll("'", "''")}')`;
+  };
+  function display(field: Field): string {
+    const value = raw(field);
+    if (field.type === 'checkbox') return `(CASE ${value} WHEN 1 THEN 'true' WHEN 0 THEN 'false' END)`;
+    if (field.type === 'singleSelect' || field.type === 'multiSelect') {
+      if (!field.options!.length) return 'NULL';
+      const labels = bind(JSON.stringify(Object.fromEntries(field.options!.map(option => [option.id, option.name]))));
+      if (field.type === 'singleSelect') return `(SELECT label.value FROM json_each(${labels}) label WHERE label.key = ${value})`;
+      return `(SELECT group_concat(label.value, ', ') FROM json_each(${value}) choice
+        JOIN json_each(${labels}) label ON label.key = choice.value)`;
+    }
+    return value;
+  }
+  function condition(filter: FieldFilter | FilterGroup): string {
+    if ('conjunction' in filter) {
+      if (!filter.conditions.length) return filter.conjunction === 'and' ? '1' : '0';
+      return `(${filter.conditions.map(condition).join(filter.conjunction === 'and' ? ' AND ' : ' OR ')})`;
+    }
+    const field = fields.get(filter.fieldId)!;
+    const value = raw(field);
+    if (filter.operator === 'isEmpty' || filter.operator === 'isNotEmpty') {
+      const empty = `(${value} IS NULL OR ${value} = ''${field.type === 'multiSelect' ? ` OR json_array_length(${value}) = 0` : ''})`;
+      return filter.operator === 'isEmpty' ? empty : `NOT ${empty}`;
+    }
+    if (filter.operator === 'contains') return `instr(lower(${value}), lower(${bind(filter.value!)})) > 0`;
+    if (filter.operator === 'hasAny') {
+      const ids = filter.value as string[];
+      return ids.length ? `EXISTS (SELECT 1 FROM json_each(${value}) selected WHERE selected.value IN (${ids.map(bind).join(', ')}))` : '0';
+    }
+    const operators = { eq: 'IS', neq: 'IS NOT', gt: '>', gte: '>=', lt: '<', lte: '<=' };
+    return `${value} ${operators[filter.operator]} ${bind(filter.value!)}`;
+  }
+  const clauses = ['r.table_id = :table'];
+  if (query.filter) clauses.push(condition(query.filter));
+  if (query.search) {
+    const search = bind(query.search);
+    clauses.push(`(${table.fields.map(field => `instr(lower(CAST(${display(field)} AS TEXT)), lower(${search})) > 0`).join(' OR ')})`);
+  }
+  const countParameters = { ...parameters };
+  const order = (query.sort ?? []).flatMap(sort => {
+    const expression = display(fields.get(sort.fieldId)!);
+    return [`(${expression} IS NULL) ASC`, `${expression} COLLATE NOCASE ${sort.direction === 'asc' ? 'ASC' : 'DESC'}`];
+  });
+  order.push('r.position ASC');
+  return { where: clauses.join(' AND '), order: order.join(', '), parameters, countParameters };
+}
