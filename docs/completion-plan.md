@@ -44,6 +44,7 @@ Each item may need more than one focused PR. Do not batch completed PRs while wa
 - [x] Schema conversion preview and atomic application (bounded diagnostics, stale-schema checks, failed-apply rollback, and HTTP regression tests).
 - [x] Service queries, filtering, sorting, search, and consistent pagination (SQLite/HTTP regression tests, including schema/data revision changes).
 - [x] Saved grid views and persistent column configuration (versioned HTTP operations, schema reconciliation, query dependencies, and migration regression tests).
+- [x] Workspace HTTP client, query-aware bounded cache, drafts keyed by record ID, and bounded draft undo/redo (cross-query, paste, conflict, cancellation, and real HTTP workflow tests).
 - [ ] Desktop workspace navigation and schema/record management.
 - [ ] Typed grid editors, draft undo/redo, views, and clipboard workflows.
 - [ ] Relations, lookups, record picker, and record details/navigation.

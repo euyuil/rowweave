@@ -11,7 +11,7 @@ function apiFor(t: Parameters<typeof fixture>[0], rows = 30): TableApi {
   const service = new RecordService(fixture(t, { rows, columns: 20 }).open());
   return {
     getTable: async () => service.getTable(),
-    readPage: async (offset, limit) => service.readPage(offset, limit),
+    readPage: async (offset, limit, query) => service.queryRecords('prototype', { ...query, offset, limit }),
     save: async updates => service.updateBatch(updates),
   };
 }
@@ -20,7 +20,7 @@ test('page requests are deduplicated and the cache stays bounded without droppin
   const api = apiFor(t);
   let reads = 0;
   const model = new TableModel({
-    ...api, readPage: async (offset, limit) => { reads++; return api.readPage(offset, limit); },
+    ...api, readPage: async (offset, limit, query) => { reads++; return api.readPage(offset, limit, query); },
   }, 5, 2);
   await model.initialize();
   model.applyEdits([{ row: 0, fieldId: 'field_1', value: 'Unsaved' }]);
@@ -80,8 +80,8 @@ test('a late page response cannot overwrite the result of a successful save', as
   let release: (() => void) | undefined;
   let pause = false;
   const model = new TableModel({
-    ...api, readPage: async (offset, limit) => {
-      const snapshot = await api.readPage(offset, limit);
+    ...api, readPage: async (offset, limit, query) => {
+      const snapshot = await api.readPage(offset, limit, query);
       if (pause && offset === 0) {
         pause = false;
         await new Promise<void>(resolve => { release = resolve; });

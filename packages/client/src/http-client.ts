@@ -1,4 +1,9 @@
-import { tableId, type BatchResult, type RecordPage, type RecordUpdate, type Table } from '../../contracts/src/index.js';
+import {
+  tableId, type BatchResult, type ConversionPreview, type DeleteResult, type FieldConversion,
+  type FieldCreate, type FieldUpdate, type GridView, type QueryPage, type RecordCreate, type RecordDelete,
+  type RecordQuery, type RecordUpdate, type RowRecord, type Table, type TableCreate, type TableUpdate,
+  type ViewCreate, type ViewPage, type ViewPageRequest, type ViewUpdate,
+} from '../../contracts/src/index.js';
 
 export interface Connection {
   url: string;
@@ -7,7 +12,7 @@ export interface Connection {
 
 export interface TableApi {
   getTable(): Promise<Table>;
-  readPage(offset: number, limit: number): Promise<RecordPage>;
+  readPage(offset: number, limit: number, query?: RecordQuery, signal?: AbortSignal): Promise<QueryPage>;
   save(updates: RecordUpdate[]): Promise<BatchResult>;
 }
 
@@ -17,10 +22,12 @@ export class ApiFailure extends Error {
   }
 }
 
-export function createHttpClient(connection: Connection, request: typeof fetch = fetch): TableApi {
+export function createWorkspaceClient(connection: Connection, request: typeof fetch = fetch) {
+  const base = connection.url.replace(/\/$/, '');
   async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
-    const response = await request(`${connection.url}/tables/${tableId}${path}`, {
-      ...init, signal: AbortSignal.timeout(15_000),
+    const timeout = AbortSignal.timeout(15_000);
+    const response = await request(`${base}${path}`, {
+      ...init, signal: init.signal ? AbortSignal.any([init.signal, timeout]) : timeout,
       headers: { Authorization: `Bearer ${connection.token}`, 'Content-Type': 'application/json' },
     });
     const body = await response.json();
@@ -29,9 +36,46 @@ export function createHttpClient(connection: Connection, request: typeof fetch =
     }
     return body as T;
   }
-  return {
-    getTable: () => call<Table>(''),
-    readPage: (offset, limit) => call<RecordPage>(`/records?offset=${offset}&limit=${limit}`),
-    save: updates => call<BatchResult>('/records', { method: 'PATCH', body: JSON.stringify(updates) }),
+  const root = (id: string) => `/tables/${encodeURIComponent(id)}`;
+  const field = (id: string, fieldId: string) => `${root(id)}/fields/${encodeURIComponent(fieldId)}`;
+  const view = (id: string, viewId: string) => `${root(id)}/views/${encodeURIComponent(viewId)}`;
+  const write = <T>(path: string, method: string, body: unknown, signal?: AbortSignal) =>
+    call<T>(path, { method, body: JSON.stringify(body), ...(signal ? { signal } : {}) });
+  const api = {
+    listTables: () => call<Table[]>('/tables'),
+    getTable: (id: string) => call<Table>(root(id)),
+    createTable: (input: TableCreate) => write<Table>('/tables', 'POST', input),
+    updateTable: (id: string, input: TableUpdate) => write<Table>(root(id), 'PATCH', input),
+    deleteTable: (id: string, expectedVersion: number) => write<{ deleted: string }>(root(id), 'DELETE', { expectedVersion }),
+    createField: (id: string, input: FieldCreate) => write<Table>(`${root(id)}/fields`, 'POST', input),
+    updateField: (id: string, fieldId: string, input: FieldUpdate) => write<Table>(field(id, fieldId), 'PATCH', input),
+    deleteField: (id: string, fieldId: string, expectedVersion: number) => write<Table>(field(id, fieldId), 'DELETE', { expectedVersion }),
+    previewConversion: (id: string, fieldId: string, input: FieldConversion) => write<ConversionPreview>(`${field(id, fieldId)}/conversion/preview`, 'POST', input),
+    applyConversion: (id: string, fieldId: string, input: FieldConversion) => write<Table>(`${field(id, fieldId)}/conversion/apply`, 'POST', input),
+    getRecord: (id: string, recordId: string) => call<RowRecord>(`${root(id)}/records/${encodeURIComponent(recordId)}`),
+    queryRecords: (id: string, input: RecordQuery, signal?: AbortSignal) => write<QueryPage>(`${root(id)}/query`, 'POST', input, signal),
+    createRecords: (id: string, input: RecordCreate[]) => write<BatchResult>(`${root(id)}/records`, 'POST', input),
+    updateRecords: (id: string, input: RecordUpdate[]) => write<BatchResult>(`${root(id)}/records`, 'PATCH', input),
+    deleteRecords: (id: string, input: RecordDelete[]) => write<DeleteResult>(`${root(id)}/records`, 'DELETE', input),
+    listViews: (id: string) => call<GridView[]>(`${root(id)}/views`),
+    getView: (id: string, viewId: string) => call<GridView>(view(id, viewId)),
+    createView: (id: string, input: ViewCreate) => write<GridView>(`${root(id)}/views`, 'POST', input),
+    updateView: (id: string, viewId: string, input: ViewUpdate) => write<GridView>(view(id, viewId), 'PATCH', input),
+    deleteView: (id: string, viewId: string, expectedVersion: number) => write<{ deleted: string }>(view(id, viewId), 'DELETE', { expectedVersion }),
+    queryView: (id: string, viewId: string, input: ViewPageRequest, signal?: AbortSignal) => write<ViewPage>(`${view(id, viewId)}/query`, 'POST', input, signal),
+    table(id: string): TableApi {
+      return {
+        getTable: () => api.getTable(id),
+        readPage: (offset, limit, query = {}, signal) => api.queryRecords(id, { ...query, offset, limit }, signal),
+        save: updates => api.updateRecords(id, updates),
+      };
+    },
   };
+  return api;
+}
+
+export type WorkspaceApi = ReturnType<typeof createWorkspaceClient>;
+
+export function createHttpClient(connection: Connection, request: typeof fetch = fetch, id = tableId): TableApi {
+  return createWorkspaceClient(connection, request).table(id);
 }

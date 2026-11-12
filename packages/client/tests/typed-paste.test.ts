@@ -12,7 +12,7 @@ test('typed paste converts a whole rectangle and retains earlier drafts on an in
   table = service.createField(table.id, { expectedVersion: table.version, name: 'Tags', type: 'multiSelect', options: [{ name: '中文 🌱' }] });
   service.createRecords(table.id, [{ values: {} }, { values: {} }]);
   const model = new TableModel({ getTable: async () => service.getTable(table.id),
-    readPage: async (offset, limit) => service.readPage(offset, limit, table.id),
+    readPage: async (offset, limit, query) => service.queryRecords(table.id, { ...query, offset, limit }),
     save: async updates => service.updateBatch(updates, table.id) });
   await model.initialize();
   await model.paste(0, 0, [['First', '12.5', '["中文 🌱"]'], ['Second', '0', '[]']]);
