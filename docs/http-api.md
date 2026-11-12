@@ -123,17 +123,19 @@ Sort rules are ordered and use distinct fields with `asc`/`desc`. Nulls sort las
 | Method and path | Request body | Result / SDK method |
 | --- | --- | --- |
 | `GET /tables/:table/views` | None | `GridView[]` / `listViews(id)` |
-| `POST /tables/:table/views` | `{ name, query?, columns? }` | `201 GridView` / `createView(id, input)` |
+| `POST /tables/:table/views` | `{ name, query?, columns?, rowHeight?, frozenColumns?, type?, groupBy? }` | `201 GridView` / `createView(id, input)` |
 | `GET /tables/:table/views/:view` | None | `GridView` / `getView(id, viewId)` |
-| `PATCH /tables/:table/views/:view` | `{ expectedVersion, name?, query?, columns? }` | `GridView` / `updateView(id, viewId, input)` |
+| `PATCH /tables/:table/views/:view` | `{ expectedVersion, name?, query?, columns?, rowHeight?, frozenColumns?, type?, groupBy? }` | `GridView` / `updateView(id, viewId, input)` |
 | `DELETE /tables/:table/views/:view` | `{ expectedVersion }` | `{ deleted: viewId }` / `deleteView(id, viewId, version)` |
-| `POST /tables/:table/views/:view/query` | `{ offset?, limit?, fields?, expectedRevision?, expectedViewVersion?, search? }` | QueryPage plus `viewId`, `viewVersion` / `queryView(id, viewId, input, signal?)` |
+| `POST /tables/:table/views/:view/query` | `{ offset?, limit?, fields?, expectedRevision?, expectedViewVersion?, search?, lane? }` | QueryPage plus `viewId`, `viewVersion` / `queryView(id, viewId, input, signal?)` |
 
-A GridView has `id`, `tableId`, `name`, `version`, `query`, `columns`, `rowHeight`, and `frozenColumns`. Its query contains only `filter`, `sort`, and `search`. Columns contain every field once, in display order, as `{ fieldId, width, hidden }`; widths are integer pixels from 50 to 1,000. At least one column and one view remain visible/available. Omitted columns show every field in schema order.
+A saved view has `id`, `tableId`, `name`, `version`, `query`, `columns`, `rowHeight`, `frozenColumns`, and `type`. Its query contains only `filter`, `sort`, and `search`. Columns contain every field once, in display order, as `{ fieldId, width, hidden }`; widths are integer pixels from 50 to 1,000. At least one column and one view remain visible/available. Omitted columns show every field in schema order.
 
 Create/update accepts `rowHeight` (36, 48 or 64 pixels) and `frozenColumns` (an integer from zero through the visible column count). New views default to 36 and zero. Frozen columns follow the leading visible positions. An explicitly invalid count returns `INVALID_VIEW`; when column visibility/schema changes without an explicit count, the previous count is reduced to the new visible count if needed. Display changes use the same `expectedVersion` check as other view edits. SDK, CLI and MCP view operations expose these properties without a separate layout endpoint.
 
 View updates replace supplied query/columns configurations; `{ query: {} }` clears conditions. View queries default to visible columns and the saved search; request `search` temporarily overrides it. Pass `expectedViewVersion` and `expectedRevision` when paging. Schema changes reconcile view columns/deleted predicates atomically; incompatible remaining filters prevent conversion/option removal until the view is changed.
+
+`type` is `grid` (the default) or `board`. A board also requires `groupBy`, the ID of a single-select field in this table. Board queries accept `lane` as a current option ID or `null` for unset values, combined with the saved filter/search. Omit it to query the full view. Invalid options and lane queries on grids return `INVALID_QUERY`. The SDK's existing `GridView` type represents both layouts. Deleting/converting the grouping field returns `VIEW_DEPENDENCY`; reconfigure/delete the view first. Updating to `{ type: 'grid', expectedVersion }` removes grouping. Move records with ordinary versioned record updates; no separate mutation or retry path is used.
 
 ## CSV
 

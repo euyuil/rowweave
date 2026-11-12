@@ -18,6 +18,7 @@ import { CsvExportDialog } from './csv-export-dialog.js';
 import { SummaryDialog } from './summary-dialog.js';
 import { FieldForm } from './field-form.js';
 import { ColumnActions, type ColumnAction } from './column-actions.js';
+import { BoardView } from './board-view.js';
 import './table-app.css';
 
 export interface TableHost {
@@ -150,17 +151,17 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     });
     observer.observe(gridHost.current);
     return () => observer.disconnect();
-  }, [ready]);
+  }, [ready, view?.type]);
 
   useEffect(() => {
-    if (!ready || offline) return;
+    if (!ready || offline || view?.type === 'board') return;
     let active = true;
     const timer = setTimeout(() => {
       void model.readRange(visible.y, Math.min(visible.height + 5, maxBatchRecords))
         .catch(failure => { if (active) report(failure); });
     }, 30);
     return () => { active = false; clearTimeout(timer); };
-  }, [ready, offline, visible, model, report, queryVersion]);
+  }, [ready, offline, visible, model, report, queryVersion, view?.type]);
 
   const save = useCallback(async () => {
     if (busyRef.current || offline || model.saving) return;
@@ -286,6 +287,27 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     await applyView(saved, appliedSearch.current);
     setColumnAction(undefined);
   };
+  const readCurrentRecord = async (record: RowRecord) => {
+    const result = await api.queryRecords(table!.id, { recordIds: [record.id], limit: 1 });
+    if (result.schemaVersion !== table!.version) throw new Error('The table schema changed. Reload before opening this record.');
+    if (!result.records.length) throw new Error('This record was deleted. Reload the table.');
+    return result.records[0]!;
+  };
+  const openBoardRecord = async (record: RowRecord) => {
+    if (recordActionsLocked || busyRef.current) return;
+    setBusy(true); busyRef.current = true; setError(undefined);
+    try { setRecordAction({ kind: 'edit', records: [await readCurrentRecord(record)] }); }
+    catch (failure) { report(failure); }
+    finally { setBusy(false); busyRef.current = false; }
+  };
+  const moveBoardRecord = async (record: RowRecord, lane: string | null) => {
+    if (recordActionsLocked || busyRef.current) throw new Error('Wait for the current operation to finish.');
+    setBusy(true); busyRef.current = true; setError(undefined);
+    try {
+      await api.updateRecords(tableId, [{ id: record.id, expectedVersion: record.version, values: { [view!.groupBy!]: lane } }]);
+      await refreshAfterWrite('Record');
+    } finally { setBusy(false); busyRef.current = false; }
+  };
   const openRecord = async (kind: RecordAction['kind']) => {
     if (recordActionsLocked || busyRef.current) return;
     if (kind === 'create') { setError(undefined); setRecordAction({ kind, records: [] }); return; }
@@ -306,12 +328,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
         index += count;
       }
       if (generation !== model.queryVersion) throw new Error('The view changed. Select the records again.');
-      if (kind !== 'delete') {
-        const result = await api.queryRecords(table!.id, { recordIds: [records[0]!.id], limit: 1 });
-        if (result.schemaVersion !== table!.version) throw new Error('The table schema changed. Reload before opening this record.');
-        if (!result.records.length) throw new Error('This record was deleted. Reload the table.');
-        records[0] = result.records[0]!;
-      }
+      if (kind !== 'delete') records[0] = await readCurrentRecord(records[0]!);
       setRecordAction({ kind, records });
     } catch (failure) { report(failure); }
     finally { busyRef.current = false; setBusy(false); }
@@ -399,13 +416,14 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     {notice && <div role="status" className="notice-banner"><span>{notice}</span><button onClick={() => setNotice(undefined)}>Dismiss</button></div>}
     <div className="record-toolbar">
       <button className="primary" disabled={recordActionsLocked} onClick={() => void openRecord('create')}>+ New record</button>
-      <button disabled={recordActionsLocked || selectedCount !== 1} onClick={() => void openRecord('edit')}>Open record</button>
+      {view?.type !== 'board' && <><button disabled={recordActionsLocked || selectedCount !== 1} onClick={() => void openRecord('edit')}>Open record</button>
       <button disabled={recordActionsLocked || selectedCount !== 1} onClick={() => void openRecord('duplicate')}>Duplicate</button>
-      <button disabled={recordActionsLocked || !selectedCount} onClick={() => void openRecord('delete')}>Delete records</button>
+      <button disabled={recordActionsLocked || !selectedCount} onClick={() => void openRecord('delete')}>Delete records</button></>}
       <button disabled={recordActionsLocked} onClick={() => setCsvAction('import')}>Import CSV</button>
       <button disabled={recordActionsLocked || !view || searchComposing} onClick={() => setCsvAction('export')}>Export CSV</button>
       <span>{pending > 0 || editorDirty ? 'Save or discard grid edits to manage records.'
-        : selectedCount ? `${selectedCount.toLocaleString()} selected` : 'Select a row or cell to open a record.'}</span>
+        : view?.type === 'board' ? 'Open a card to edit, or move it to another group.'
+          : selectedCount ? `${selectedCount.toLocaleString()} selected` : 'Select a row or cell to open a record.'}</span>
     </div>
     <section className="table-panel" aria-label="Data table">
       <div className="view-toolbar">
@@ -425,7 +443,10 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       </div>
       <div className="table-toolbar"><strong>▦ &nbsp; {view?.name ?? 'Loading view…'}</strong>
         <span>{table ? `${model.rowCount.toLocaleString()} ${model.rowCount === 1 ? 'record' : 'records'} · ${fields.length} ${fields.length === 1 ? 'field' : 'fields'}` : 'Loading records…'}</span></div>
-      <div className="grid-host" aria-busy={locked || !ready} ref={gridHost} onCopyCapture={event => {
+      {ready && table && view?.type === 'board' ? <BoardView table={table} view={view} search={appliedSearch.current} generation={queryVersion} api={api}
+        disabled={recordActionsLocked} onOpen={record => void openBoardRecord(record)} onRefresh={() => void reload()}
+        onCreate={lane => setRecordAction({ kind: 'create', records: [], initialValues: { [view.groupBy!]: lane } })} onMove={moveBoardRecord} />
+        : <div className="grid-host" aria-busy={locked || !ready} ref={gridHost} onCopyCapture={event => {
         if (!gridHost.current?.querySelector('canvas')?.contains(document.activeElement)) return;
         event.preventDefault();
         event.stopPropagation();
@@ -486,10 +507,10 @@ export function TableApp({ tableId, model, api, host, onManage }: {
             bgCell: '#ffffff', textDark: '#17243b', borderColor: '#e5eaf1', baseFontStyle: '14px',
             fontFamily: 'Segoe UI, Microsoft YaHei, sans-serif' }}
         /></EditorContext.Provider> : <div className="loading-state" role="status">{message ? 'Could not load the table. Try Reload.' : 'Opening your workspace…'}</div>}
-      </div>
+      </div>}
     </section>
     <footer><span role="status" className={pending ? 'pending-status' : ''}>{status}</span>
-      <span>Enter to edit · Esc to cancel · Ctrl+C / Ctrl+V · Ctrl+S to save</span></footer>
+      <span>{view?.type === 'board' ? 'Move records by dragging or choosing a status' : 'Enter to edit · Esc to cancel · Ctrl+C / Ctrl+V · Ctrl+S to save'}</span></footer>
     {recordAction && table && <RecordDialog action={recordAction} table={table} api={api} setDirty={setFormDirty}
       onClose={() => setRecordAction(undefined)} onSaved={() => { setRecordAction(undefined); void refreshAfterWrite('Records'); }} />}
     {summarizing && table && view && <SummaryDialog table={table} view={view} search={search} api={api} onClose={() => setSummarizing(false)} />}

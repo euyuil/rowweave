@@ -250,6 +250,16 @@ export class RecordService {
     const query = parseQuery(table, { ...view.query, offset: item['offset'], limit: item['limit'],
       fields: item['fields'] === undefined ? view.columns.filter(column => !column.hidden).map(column => column.fieldId) : item['fields'],
       expectedRevision: item['expectedRevision'], search: item['search'] === undefined ? view.query.search : item['search'] });
+    if (item['lane'] !== undefined) {
+      if (view.type !== 'board') throw new ServiceError('INVALID_QUERY', 'Lane queries require a board view.');
+      const group = table.fields.find(field => field.id === view.groupBy)!;
+      const lane = item['lane'];
+      if (lane !== null && (typeof lane !== 'string' || !group.options!.some(option => option.id === lane))) {
+        throw new ServiceError('INVALID_QUERY', 'Choose a current board option ID or null for records without a value.');
+      }
+      query.filter = { conjunction: 'and', conditions: [...(query.filter ? [query.filter] : []),
+        { fieldId: group.id, operator: 'eq', value: lane as string | null }] };
+    }
     return { ...this.store.queryRecords(table, query, view), viewId, viewVersion: view.version };
   }
 

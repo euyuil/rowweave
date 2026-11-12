@@ -178,6 +178,8 @@ export interface GridView {
   columns: ViewColumn[];
   rowHeight: RowHeight;
   frozenColumns: number;
+  type: 'grid' | 'board';
+  groupBy?: string;
 }
 
 export interface ViewCreate {
@@ -186,6 +188,8 @@ export interface ViewCreate {
   columns?: ViewColumn[];
   rowHeight?: RowHeight;
   frozenColumns?: number;
+  type?: 'grid' | 'board';
+  groupBy?: string;
 }
 
 export interface ViewUpdate extends Partial<ViewCreate> {
@@ -194,6 +198,7 @@ export interface ViewUpdate extends Partial<ViewCreate> {
 
 export interface ViewPageRequest extends Pick<RecordQuery, 'offset' | 'limit' | 'fields' | 'expectedRevision' | 'search'> {
   expectedViewVersion?: number;
+  lane?: string | null;
 }
 
 export interface ViewPage extends QueryPage {

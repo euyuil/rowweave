@@ -26,6 +26,8 @@ Use server filters, sort keys, search and field projection to retrieve only what
 
 Use `records_summarize` with `{ tableId, input }` for counts and numeric sum/average/min/max across the full matching set. Pass scalar `groupBy`, `measures: [{ fieldId, operation }]`, and a filter or saved `viewId` when needed. Group pages are bounded and use `expectedRevision`; totals cover all matching records on each page. Do not compute a table total by adding only the records in one query page.
 
+Create a board through `views_create` with `input: { name, type: 'board', groupBy: singleSelectFieldId }`. Query a column using `views_query` with `query.lane` set to an option ID or null; omit lane for the whole view. Move cards through ordinary `records_update` calls using current record versions. Option IDs remain stable when labels change. Reconfigure a board before deleting or converting its grouping field.
+
 For writes, use the current **table version** for schema changes, **record versions** for updates/deletions, and **view version** for view changes. Record batches commit or roll back together. A batch supports at most 2,000 records and 20,000 changed cells, including defaulted create cells. Larger jobs require separate batches and therefore are not one transaction: track completed batches and report partial completion if a later batch fails.
 
 Proceed within the user's authorized scope. Do not turn an update into deletion/recreation, remove unrelated fields/options to satisfy a dependency, or change every matching row when the user requested particular records. Before an ambiguous broad or destructive change, establish its concrete affected IDs and clarify the missing scope. Existing authorization does not need to be requested again.

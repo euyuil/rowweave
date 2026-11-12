@@ -63,6 +63,7 @@ export async function verifyDisplayWorkflow(page) {
   assert.equal(await page.getByLabel('Frozen columns', { exact: true }).inputValue(), '0');
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.getByLabel('Current view', { exact: true }).selectOption({ label: 'All records' });
+  await page.waitForFunction(() => document.querySelector('.grid-host')?.getAttribute('aria-busy') === 'false');
   await page.reload();
   await page.getByRole('navigation', { name: 'Tables', exact: true }).getByRole('button', { name: 'Display lab', exact: true }).click();
   await page.getByRole('button', { name: 'Display', exact: true }).click();

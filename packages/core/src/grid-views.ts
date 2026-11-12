@@ -5,12 +5,19 @@ import { schemaName, schemaObject } from './schema-validation.js';
 import { ServiceError } from './errors.js';
 
 export function defaultView(table: Pick<Table, 'id' | 'fields'>): GridView {
-  return { id: randomUUID(), tableId: table.id, name: 'All records', version: 1, query: {}, rowHeight: 36, frozenColumns: 0,
+  return { id: randomUUID(), tableId: table.id, name: 'All records', version: 1, query: {}, rowHeight: 36, frozenColumns: 0, type: 'grid',
     columns: table.fields.map(field => ({ fieldId: field.id, width: 180, hidden: false })) };
 }
 
 export function parseView(table: Table, input: unknown, previous = defaultView(table)): GridView {
   const item = schemaObject(input);
+  const type = item['type'] === undefined ? previous.type : item['type'];
+  if (type !== 'grid' && type !== 'board') throw new ServiceError('INVALID_VIEW', 'Choose a grid or board view.');
+  const groupBy = item['groupBy'] === undefined ? previous.groupBy : item['groupBy'];
+  if (type === 'board' && (typeof groupBy !== 'string' || !table.fields.some(field => field.id === groupBy && field.type === 'singleSelect'))) {
+    throw new ServiceError('INVALID_VIEW', 'A board needs a single-select grouping field. Choose another field or change the view to a grid.');
+  }
+  if (type === 'grid' && item['groupBy'] !== undefined) throw new ServiceError('INVALID_VIEW', 'Grouping is only available for board views.');
   const query = parseQuery(table, item['query'] === undefined ? previous.query : item['query']);
   const saved: ViewQuery = {};
   if (query.filter) saved.filter = query.filter;
@@ -39,8 +46,10 @@ export function parseView(table: Table, input: unknown, previous = defaultView(t
   if (!Number.isInteger(frozenColumns) || (frozenColumns as number) < 0 || (frozenColumns as number) > visible) {
     throw new ServiceError('INVALID_VIEW', 'Freeze a whole number of leading columns, up to the number of visible fields.');
   }
-  return { ...previous, name: item['name'] === undefined ? previous.name : schemaName(item['name']), query: saved, columns,
-    rowHeight: rowHeight as RowHeight, frozenColumns: frozenColumns as number };
+  const { groupBy: _previousGroup, ...base } = previous;
+  return { ...base, name: item['name'] === undefined ? previous.name : schemaName(item['name']), query: saved, columns,
+    rowHeight: rowHeight as RowHeight, frozenColumns: frozenColumns as number, type,
+    ...(type === 'board' ? { groupBy: groupBy as string } : {}) };
 }
 
 export function reconcileView(view: GridView, table: Table): GridView {

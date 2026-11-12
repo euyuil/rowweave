@@ -59,12 +59,12 @@ export function createMcpServer(api: WorkspaceApi): McpServer {
   tool('records_create', 'Create records atomically, applying defaults to omitted writable fields.', table.extend({ records: schemas.recordCreate }), 'create', a => api.createRecords(a.tableId, a.records));
   tool('records_update', 'Update records atomically using each current record version; any invalid/stale record rejects the batch.', table.extend({ records: schemas.recordUpdate }), 'change', a => api.updateRecords(a.tableId, a.records));
   tool('records_delete', 'Permanently delete a versioned record batch atomically; external links prevent deletion.', table.extend({ records: schemas.recordDelete }), 'change', a => api.deleteRecords(a.tableId, a.records));
-  tool('views_list', 'List persisted grid views for a table.', table, 'read', a => api.listViews(a.tableId));
-  tool('views_get', 'Read a view version, query and column configuration.', view, 'read', a => api.getView(a.tableId, a.viewId));
-  tool('views_create', 'Create a named view with filters, sorting, search and column configuration.', table.extend({ input: schemas.viewCreate }), 'create', a => api.createView(a.tableId, a.input));
+  tool('views_list', 'List saved grid and board views for a table.', table, 'read', a => api.listViews(a.tableId));
+  tool('views_get', 'Read a view version, query, layout and column configuration.', view, 'read', a => api.getView(a.tableId, a.viewId));
+  tool('views_create', 'Create a grid or single-select board view with filters, sorting, search and column configuration.', table.extend({ input: schemas.viewCreate }), 'create', a => api.createView(a.tableId, a.input));
   tool('views_update', 'Change a view using its current version; this does not change records.', view.extend({ input: schemas.viewUpdate }), 'change', a => api.updateView(a.tableId, a.viewId, a.input));
   tool('views_delete', 'Delete a view without deleting records; the final view cannot be deleted.', view.extend(schemas.expectedVersion), 'change', a => api.deleteView(a.tableId, a.viewId, a.expectedVersion));
-  tool('views_query', 'Read a saved view page; include expectedViewVersion and expectedRevision when continuing.', view.extend({ query: schemas.viewPage }), 'read', a => api.queryView(a.tableId, a.viewId, a.query));
+  tool('views_query', 'Read a saved view page, optionally one board lane by option ID or null. Include expectedViewVersion and expectedRevision when continuing.', view.extend({ query: schemas.viewPage }), 'read', a => api.queryView(a.tableId, a.viewId, a.query));
   tool('csv_preview', 'Preview CSV mapping, typed validation and bounded samples without writing.', table.extend({ input: schemas.csvImport }), 'read', a => api.previewCsv(a.tableId, a.input));
   tool('csv_import', 'Append reviewed CSV rows atomically using the current schema version. Never blindly retry.', table.extend({ input: schemas.csvImport }), 'create', a => api.importCsv(a.tableId, a.input));
   tool('csv_export', 'Export table/current-view CSV text with a BOM, preserving Unicode and typed values. Use CLI for large files.', table.extend({ query: schemas.csvExport }), 'read', a => api.exportCsv(a.tableId, a.query), true);

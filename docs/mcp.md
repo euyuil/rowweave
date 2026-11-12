@@ -66,6 +66,8 @@ Tools have discoverable strict JSON schemas. Read descriptions and use stable ID
 
 Successful results contain one text block holding JSON, except `csv_export`, which returns CSV text including its BOM. There is no duplicated structured-content payload. Read-only and destructive annotations help hosts present operations; they do not replace user authorization or service validation.
 
+Board views use `views_create` with `input: { name, type: 'board', groupBy: singleSelectFieldId }`. `views_query` accepts `query.lane` as an option ID or null for unset records, preserving the view's filters/search. Move a card with `records_update` using its current record version and a value for the grouping field. `views_update` also accepts row height and frozen columns for grid layouts. These operations share the desktop's validation and conflict handling.
+
 Resources are read on demand:
 
 - `rowweave://workspace`: current tables, schema versions, record counts and complete field definitions.

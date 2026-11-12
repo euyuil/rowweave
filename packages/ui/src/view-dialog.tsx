@@ -14,6 +14,8 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
   const [columns, setColumns] = useState<ViewColumn[]>(view.columns);
   const [rowHeight, setRowHeight] = useState<RowHeight>(view.rowHeight);
   const [frozenColumns, setFrozenColumns] = useState(view.frozenColumns);
+  const [type, setType] = useState(view.type);
+  const [groupBy, setGroupBy] = useState(view.groupBy ?? table.fields.find(field => field.type === 'singleSelect')?.id ?? '');
   const [filter, setFilter] = useState(() => filterDraft(view.query.filter, table.fields));
   const [sort, setSort] = useState<SortRule[]>(view.query.sort ?? []);
   const [busy, setBusy] = useState(false);
@@ -45,7 +47,7 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
       void (async () => {
         let result: GridView | undefined;
         const display = { columns, rowHeight, frozenColumns: Math.min(frozenColumns, visibleCount) };
-        const config = { name, ...display, query: { filter: filterValue(filter, table.fields), sort, search: savedSearch } };
+        const config = { name, ...display, type, ...(type === 'board' ? { groupBy } : {}), query: { filter: filterValue(filter, table.fields), sort, search: savedSearch } };
         if (deleting) await api.deleteView(table.id, view.id, view.version);
         else if (kind === 'create') result = await api.createView(table.id, config);
         else result = await api.updateView(table.id, view.id, { ...(queryOnly ? { query: config.query } : displayOnly ? display : config), expectedVersion: view.version });
@@ -54,12 +56,20 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
       })().catch(error => { setError(error instanceof Error ? error.message : 'The view could not be saved.'); setBusy(false); });
     }}>
       {deleting ? <p>Delete <strong>{view.name}</strong>? Its records remain in the table.</p> : <fieldset disabled={busy}>
-        {!queryOnly && !displayOnly && <label className="form-field">View name<input autoFocus required maxLength={200} value={name} onChange={event => setName(event.target.value)} /></label>}
+        {!queryOnly && !displayOnly && <><label className="form-field">View name<input autoFocus required maxLength={200} value={name} onChange={event => setName(event.target.value)} /></label>
+          <div className="form-row"><label className="form-field">View type<select aria-label="View type" value={type} onChange={event => setType(event.target.value as GridView['type'])}>
+            <option value="grid">Grid</option><option value="board">Board</option>
+          </select></label>
+          {type === 'board' && <label className="form-field">Group by<select aria-label="Board group field" required value={groupBy} onChange={event => setGroupBy(event.target.value)}>
+            <option value="" disabled>Choose a single-select field</option>{table.fields.filter(field => field.type === 'singleSelect').map(field => <option key={field.id} value={field.id}>{field.name}</option>)}
+          </select></label>}</div>
+          {type === 'board' && !groupBy && <p className="form-note">Add a single-select field to use a board view.</p>}
+        </>}
         {!displayOnly && <><label className="form-field">Saved search<input value={savedSearch} onChange={event => setSavedSearch(event.target.value)} /></label>
         <QueryEditor fields={table.fields} filter={filter} sort={sort}
           onFilter={value => { setFilter(value); setDirty(true); }} onSort={value => { setSort(value); setDirty(true); }} /></>}
         {!queryOnly && <><h3>Display</h3>
-        <div className="form-row">
+        {type === 'grid' && <><div className="form-row">
           <label className="form-field">Row density<select aria-label="Row density" value={rowHeight} onChange={event => setRowHeight(Number(event.target.value) as RowHeight)}>
             <option value={36}>Compact</option><option value={48}>Comfortable</option><option value={64}>Spacious</option>
           </select></label>
@@ -68,9 +78,10 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
               {index === 0 ? 'First column' : `First ${index + 1} columns`}</option>)}
           </select></label>
         </div>
-        <p className="form-note">Keep leading columns visible while you scroll horizontally. These settings apply only to this view.</p>
+        <p className="form-note">Keep leading columns visible while you scroll horizontally. These settings apply only to this view.</p></>}
         <h3>Columns</h3>
-        <p className="form-note">Choose the fields and their order in this view. Hidden fields remain in each record.</p>
+        <p className="form-note">{type === 'board' ? 'Cards show the first three visible fields besides their title and grouping field. Open a card to see every field.'
+          : 'Choose the fields and their order in this view. Hidden fields remain in each record.'}</p>
         <div>{columns.map((column, index) => {
           const field = fields.get(column.fieldId)!;
           return <div className="view-column" role="group" aria-label={field.name} key={field.id}>
@@ -86,7 +97,7 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
       </fieldset>}
       {error && <p className="form-error" role="alert">{error}</p>}
       <div className="dialog-actions"><button type="button" disabled={busy} onClick={onClose}>Cancel</button>
-        <button className={deleting ? 'danger' : 'primary'} disabled={busy || (!deleting && columns.every(column => column.hidden))}>
+        <button className={deleting ? 'danger' : 'primary'} disabled={busy || (!deleting && (columns.every(column => column.hidden) || (type === 'board' && !groupBy)))}>
           {busy ? 'Working…' : deleting ? 'Delete view' : kind === 'create' ? 'Create view' : 'Save view'}</button></div>
     </form>
   </Dialog>;
