@@ -94,6 +94,15 @@ try {
   await clearClipboard();
   assert.equal(await copyCell(), 'Desktop smoke 🌱');
 
+  await page.keyboard.press('Control+z');
+  await page.getByText('All changes saved', { exact: true }).waitFor();
+  await clearClipboard();
+  assert.equal(await copyCell(), '');
+  await page.keyboard.press('Control+y');
+  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
+  await clearClipboard();
+  assert.equal(await copyCell(), 'Desktop smoke 🌱');
+
   await application.evaluate(({ dialog, BrowserWindow }) => {
     dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
     BrowserWindow.getAllWindows()[0].close();

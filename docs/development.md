@@ -114,9 +114,15 @@ Tests create and remove isolated temporary databases. No test opens a working da
 
 ## Shared client
 
-`packages/client` exposes an HTTP adapter and a host-independent table model. Its default page size is 100 records, its LRU cache holds at most 12 pages, and it permits at most four page requests in flight. Pending edits are retained separately within the service's batch limits, so scrolling cannot silently discard them.
+`packages/client` exposes `createWorkspaceClient(connection)` for table, field, conversion, record, query, and saved-view operations. Its `table(id)` adapter supplies the host-independent `TableModel`; `createHttpClient` still selects the existing prototype table for the current desktop entry point. Requests support cancellation and never retry writes automatically.
+
+The model uses query pages with data revisions. Its default page size is 100 records, its LRU cache holds at most 12 pages, and it permits at most four page requests in flight. Drafts are keyed by record ID and retained separately within the service's batch limits, so scrolling, sorting, filtering, or hiding a field cannot silently discard or redirect them. `setQuery` changes filters/sorting/projection, `rowCount` reflects the result count, and `fields` follows the selected field order. Paste follows this visible order. `pendingRecords` exposes retained drafts, including records hidden by the current query.
 
 Saving is explicit. A failed request retains the pending values; version conflicts require deliberate resolution. Discard-and-reload replaces local drafts with the latest stored values. The UI must confirm before invoking that operation when edits are pending. Responses from an older cache generation cannot overwrite a completed save.
+
+`refresh` retains drafts while reloading current schema/data; `discardAndReload` explicitly clears them. A changed data revision stops stale page loading until refresh/save. A successful save invalidates the query cache because edits may change filtering or order. If the subsequent refresh fails, the model reports that the changes were saved and does not resend them. Dispose a model when its panel closes to abort outstanding reads and remove listeners.
+
+Draft undo/redo stores complete editing actions, including rectangular paste, up to 100 actions and 60,000 changed cells of history. Undo history ends on save, discard, query changes, or refresh; retained drafts remain editable. The grid exposes Undo/Redo buttons and Ctrl+Z/Ctrl+Y (or Ctrl+Shift+Z), scoped to its panel. Text editing retains its native undo behavior while a cell editor is open.
 
 ## Prototype PR sequence
 

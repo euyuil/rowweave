@@ -1,0 +1,36 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { randomBytes } from 'node:crypto';
+import { fixture } from '../../storage-sqlite/tests/helpers.js';
+import { RecordService } from '../../core/src/record-service.js';
+import { startServer } from '../../../apps/server/src/http-server.js';
+import { createWorkspaceClient } from '../src/http-client.js';
+
+test('the workspace client completes a schema, view, conversion and record lifecycle over HTTP', async t => {
+  const token = randomBytes(32).toString('hex');
+  const server = await startServer({ service: new RecordService(fixture(t, null).open()), token });
+  t.after(() => server.close());
+  const api = createWorkspaceClient({ url: `${server.url}/`, token });
+  let table = await api.createTable({ name: 'Invoices' });
+  table = await api.createField(table.id, { expectedVersion: table.version, name: 'Amount', type: 'number', defaultValue: 0 });
+  const amount = table.fields[1]!.id;
+  const record = (await api.createRecords(table.id, [{ values: { [table.primaryFieldId]: '100', [amount]: 12 } }])).records[0]!;
+  let view = await api.createView(table.id, { name: 'Large', query: { filter: { conjunction: 'and', conditions: [{ fieldId: amount, operator: 'gte', value: 10 }] } } });
+  assert.equal((await api.queryView(table.id, view.id, {})).total, 1);
+  table = await api.updateField(table.id, amount, { expectedVersion: table.version, name: 'Total' });
+  table = await api.updateTable(table.id, { expectedVersion: table.version, name: 'Sales' });
+  const preview = await api.previewConversion(table.id, table.primaryFieldId, { expectedVersion: table.version, field: { name: 'Invoice', type: 'number' } });
+  table = await api.applyConversion(table.id, table.primaryFieldId, { expectedVersion: preview.schemaVersion, field: preview.field });
+  const converted = await api.getRecord(table.id, record.id);
+  assert.equal(converted.values[table.primaryFieldId], 100);
+  const updated = (await api.updateRecords(table.id, [{ id: record.id, expectedVersion: converted.version, values: { [amount]: 3 } }])).records[0]!;
+  assert.equal((await api.queryView(table.id, view.id, {})).total, 0);
+  await api.deleteRecords(table.id, [{ id: record.id, expectedVersion: updated.version }]);
+  table = await api.deleteField(table.id, amount, table.version);
+  view = await api.getView(table.id, view.id);
+  view = await api.updateView(table.id, view.id, { expectedVersion: view.version, name: 'Empty' });
+  await api.deleteView(table.id, view.id, view.version);
+  assert.equal((await api.listViews(table.id)).length, 1);
+  await api.deleteTable(table.id, table.version);
+  assert.deepEqual(await api.listTables(), []);
+});
