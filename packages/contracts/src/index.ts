@@ -24,6 +24,7 @@ export interface Table {
   id: string;
   name: string;
   version: number;
+  revision: number;
   primaryFieldId: string;
   fields: Field[];
   total: number;
@@ -81,6 +82,40 @@ export interface RowRecord {
 export interface RecordPage {
   offset: number;
   records: RowRecord[];
+}
+
+export type FilterOperator = 'eq' | 'neq' | 'contains' | 'gt' | 'gte' | 'lt' | 'lte' | 'isEmpty' | 'isNotEmpty' | 'hasAny';
+
+export interface FieldFilter {
+  fieldId: string;
+  operator: FilterOperator;
+  value?: CellValue;
+}
+
+export interface FilterGroup {
+  conjunction: 'and' | 'or';
+  conditions: Array<FieldFilter | FilterGroup>;
+}
+
+export interface SortRule {
+  fieldId: string;
+  direction: 'asc' | 'desc';
+}
+
+export interface RecordQuery {
+  offset?: number;
+  limit?: number;
+  filter?: FilterGroup;
+  sort?: SortRule[];
+  search?: string;
+  fields?: string[];
+  expectedRevision?: number;
+}
+
+export interface QueryPage extends RecordPage {
+  total: number;
+  revision: number;
+  schemaVersion: number;
 }
 
 export interface ApiError {

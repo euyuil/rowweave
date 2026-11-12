@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { maxPageSize, maxBatchRecords, maxBatchCells, maxFields, tableId,
-  type BatchResult, type CellValue, type ConversionPreview, type DeleteResult, type Field, type RecordDelete, type RecordPage, type RecordUpdate, type RowRecord, type Table } from '../../contracts/src/index.js';
+  type BatchResult, type CellValue, type ConversionPreview, type DeleteResult, type Field, type QueryPage, type RecordDelete, type RecordPage, type RecordUpdate, type RowRecord, type Table } from '../../contracts/src/index.js';
 import { schemaName, schemaObject, schemaVersion } from './schema-validation.js';
 import { parseField } from './field-schema.js';
 import { validateValue } from './field-values.js';
 import { convertValue } from './field-conversion.js';
+import { parseQuery, type CheckedQuery } from './record-query.js';
 import { ServiceError } from './errors.js';
 export { ServiceError } from './errors.js';
 
@@ -21,6 +22,7 @@ export interface RecordStore {
   deleteRecords(tableId: string, records: RecordDelete[]): DeleteResult;
   previewConversion(tableId: string, version: number, field: Field, convert: (value: CellValue) => CellValue): ConversionPreview;
   applyConversion(tableId: string, version: number, field: Field, convert: (value: CellValue) => CellValue): Table;
+  queryRecords(table: Table, query: CheckedQuery): QueryPage;
 }
 
 export class RecordService {
@@ -37,7 +39,7 @@ export class RecordService {
   createTable(input: unknown): Table {
     const item = schemaObject(input);
     const fieldId = randomUUID();
-    return this.store.createTable({ id: randomUUID(), name: schemaName(item['name']), version: 1,
+    return this.store.createTable({ id: randomUUID(), name: schemaName(item['name']), version: 1, revision: 1,
       primaryFieldId: fieldId, fields: [{ id: fieldId, name: 'Name', type: 'text' }], total: 0 });
   }
 
@@ -140,6 +142,11 @@ export class RecordService {
     }
     this.store.getTable(id);
     return this.store.readPage(offset, limit, id);
+  }
+
+  queryRecords(id: string, input: unknown): QueryPage {
+    const table = this.store.getTable(id);
+    return this.store.queryRecords(table, parseQuery(table, input));
   }
 
   updateBatch(input: unknown, id = tableId): BatchResult {
