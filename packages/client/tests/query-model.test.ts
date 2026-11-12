@@ -101,6 +101,27 @@ test('external changes stop stale paging and refresh retains conflicting drafts 
   assert.equal(model.getRecord(0)!.values[table.primaryFieldId], 'Peer');
 });
 
+test('an in-flight range never combines records from different query orders', async t => {
+  const { api, table, records } = await workspace(t);
+  const base = api.table(table.id);
+  let release: (() => void) | undefined;
+  let pause = true;
+  const model = new TableModel({ ...base, readPage: async (offset, limit, query, signal) => {
+    const page = await base.readPage(offset, limit, query, signal);
+    if (pause && offset === 1) {
+      pause = false;
+      await new Promise<void>(resolve => { release = resolve; });
+    }
+    return page;
+  } }, 1, 2);
+  await model.initialize();
+  const range = model.readRange(0, 3);
+  while (!release) await new Promise(resolve => setImmediate(resolve));
+  await model.setQuery({ sort: [{ fieldId: table.primaryFieldId, direction: 'desc' }] });
+  release();
+  assert.deepEqual((await range).map(record => record.id), records.map(record => record.id).reverse());
+});
+
 test('a committed save is not reported as failed when the following refresh cannot connect', async t => {
   const { api, table, records } = await workspace(t);
   const base = api.table(table.id);

@@ -165,9 +165,11 @@ export class TableModel {
         !Number.isSafeInteger(count) || count < 0 || count > maxBatchRecords) {
       throw new Error('The requested range is invalid or too large.');
     }
+    const generation = this.generation;
     const rows: RowRecord[] = [];
     for (let offset = start; offset < Math.min(start + count, this.rowCount);) {
       const page = await this.loadPage(Math.floor(offset / this.pageSize));
+      if (generation !== this.generation) return this.readRange(start, count);
       const end = Math.min(start + count, this.rowCount, page.offset + page.records.length);
       if (offset >= this.rowCount) break;
       if (end <= offset) throw new Error('The service returned an incomplete page.');
