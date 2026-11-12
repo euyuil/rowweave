@@ -44,6 +44,19 @@
 .rowweave-app input, .rowweave-app textarea, .rowweave-app select { padding: 10px; border: 1px solid #c6d0e0; border-radius: 6px; font: inherit; color: inherit; background: #fff; }
 .rowweave-app .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 26px; position: sticky; bottom: -26px; padding: 16px 0; background: #fff; z-index: 1; }
 .rowweave-app .form-error { color: #9a382a; }
+.rowweave-app .notice-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 24px 12px; padding: 8px 14px; background: #eaf4ef; color: #285c43; border-radius: 6px; }
+.rowweave-app .notice-banner button { background: none; border: 0; padding: 4px; font-size: 12px; }
+.rowweave-app .csv-column-pages { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin: 18px 0 10px; }
+.rowweave-app .csv-column-pages button, .rowweave-app .csv-column-pages span { font-size: 12px; }
+.rowweave-app .csv-column { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: center; margin: 8px 0; }
+.rowweave-app .csv-column span { overflow-wrap: anywhere; }
+.rowweave-app .csv-column select { width: 100%; }
+.rowweave-app .csv-sample-scroll { max-height: 240px; overflow: auto; border: 1px solid #dde4ef; border-radius: 6px; }
+.rowweave-app .csv-samples { border-collapse: collapse; font-size: 12px; width: 100%; }
+.rowweave-app .csv-samples caption { text-align: left; padding: 10px; color: #69768b; }
+.rowweave-app .csv-samples th, .rowweave-app .csv-samples td { padding: 8px; text-align: left; border: 1px solid #e5eaf1; min-width: 100px; max-width: 220px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.rowweave-app .csv-samples th:first-child { min-width: 42px; }
+.rowweave-app .csv-samples em { color: #738098; }
 .rowweave-app button.danger { background: #b33e2f; border-color: #b33e2f; color: #fff; }
 .rowweave-app .record-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 0 24px 14px; }
 .rowweave-app .record-toolbar button { padding: 7px 10px; font-size: 12px; }

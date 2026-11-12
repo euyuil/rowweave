@@ -3,6 +3,8 @@ import { randomBytes } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { maxCsvBytes } from '../../../packages/contracts/src/index.js';
+import { writeCsvFile } from './csv-file.js';
 
 app.setName('RowWeave');
 if (process.env['ROWWEAVE_DATA_DIR']) {
@@ -77,6 +79,17 @@ void app.whenReady().then(async () => {
     ipcMain.handle('dirty', (event, value: unknown) => {
       if (!trusted(event) || typeof value !== 'boolean') throw new Error('Invalid edit state.');
       dirty = value;
+    });
+    ipcMain.handle('save-csv', async (event, name: unknown, csv: unknown) => {
+      if (!trusted(event) || typeof name !== 'string' || name.length > 500 || typeof csv !== 'string' || Buffer.byteLength(csv, 'utf8') > maxCsvBytes) {
+        throw new Error('Invalid CSV export.');
+      }
+      const filename = 'RowWeave-' + name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').slice(0, 100).replace(/[. ]+$/, '') + '.csv';
+      const result = await dialog.showSaveDialog(window!, { title: 'Export CSV', defaultPath: filename,
+        filters: [{ name: 'CSV files', extensions: ['csv'] }] });
+      if (result.canceled) return false;
+      await writeCsvFile(result.filePath, csv);
+      return true;
     });
     window.on('close', event => {
       if (!dirty || quitting) return;

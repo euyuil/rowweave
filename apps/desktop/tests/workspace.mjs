@@ -11,6 +11,7 @@ import { verifyQueryWorkflow } from './query-workflow.mjs';
 import { verifyGridWorkflow } from './grid-workflow.mjs';
 import { verifyRelationWorkflow } from './relation-workflow.mjs';
 import { verifyLookupWorkflow } from './lookup-workflow.mjs';
+import { verifyCsvWorkflow } from './csv-workflow.mjs';
 
 const dataDirectory = await mkdtemp(join(tmpdir(), 'rowweave-workspace-'));
 await mkdir('.artifacts', { recursive: true });
@@ -235,6 +236,7 @@ try {
   await verifyGridWorkflow(page);
   await verifyRelationWorkflow(page);
   await verifyLookupWorkflow(page);
+  await verifyCsvWorkflow(page, application, dataDirectory);
   await application.close();
   application = undefined;
   application = await electron.launch({ executablePath, args: packaged ? [] : ['.'],
@@ -260,7 +262,7 @@ try {
   await launch();
   assert.deepEqual(await tables(), []);
   assert.deepEqual(errors, []);
-  console.log('Workspace lifecycle passed: tables, typed records/grid editors, linked records/lookups, atomic clearing, schema configuration/conversion, views/queries, conflicts, draft/form guards, confirmations, and persistence.');
+  console.log('Workspace lifecycle passed: tables, typed records/grid editors, linked records/lookups, atomic clearing, schema configuration/conversion, views/queries, CSV import/export, conflicts, draft/form guards, confirmations, and persistence.');
 } catch (error) {
   console.error('Renderer errors:', errors);
   if (page && !page.isClosed()) await page.screenshot({ path: '.artifacts/desktop-workspace-failure.png' });
