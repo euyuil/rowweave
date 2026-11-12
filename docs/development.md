@@ -144,6 +144,8 @@ Tests create and remove isolated temporary databases. No test opens a working da
 
 ## Shared client
 
+The `rowweave` CLI uses this same client for schema, record, view, query, conversion, and CSV operations. Run `npm run build`, then `node dist/apps/cli/src/main.js --help`; `npm run package:cli` creates an independently installable archive under `release/cli/`. See the [CLI guide](../apps/cli/README.md) for JSON/stdin inputs, output/exit codes, and connection settings. Linux CI uploads the `rowweave-cli` artifact. Desktop and CLI file exports share a small Node-only completed-file replacement helper in `packages/node-host`; shared UI/client code does not import filesystem APIs.
+
 The HTTP client is also available as the standalone `@rowweave/sdk` ESM package. Run `npm run build:sdk` to build its runtime and declarations, or `npm run package:sdk` to create `release/sdk/rowweave-sdk-0.1.0.tgz`. `npm test` packs and installs it offline into an isolated application, type-checks public imports, and exercises a real temporary service. See the [SDK guide](../packages/client/README.md) and [HTTP API reference](http-api.md). Linux CI uploads the installable `rowweave-typescript-sdk` artifact. The package remains private and is not published to a registry.
 
 CSV service endpoints and client methods provide preview, mapped atomic import, and table/view export. Desktop **Import CSV** and **Export CSV** use these same operations. See [data-exchange.md](data-exchange.md) for the workflow, request format, value semantics, limits, and regression evidence.

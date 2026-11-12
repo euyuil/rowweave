@@ -4,7 +4,7 @@ import { mkdirSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { maxCsvBytes } from '../../../packages/contracts/src/index.js';
-import { writeCsvFile } from './csv-file.js';
+import { writeTextFile } from '../../../packages/node-host/src/files.js';
 
 app.setName('RowWeave');
 if (process.env['ROWWEAVE_DATA_DIR']) {
@@ -88,7 +88,7 @@ void app.whenReady().then(async () => {
       const result = await dialog.showSaveDialog(window!, { title: 'Export CSV', defaultPath: filename,
         filters: [{ name: 'CSV files', extensions: ['csv'] }] });
       if (result.canceled) return false;
-      await writeCsvFile(result.filePath, csv);
+      await writeTextFile(result.filePath, csv);
       return true;
     });
     window.on('close', event => {

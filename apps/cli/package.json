@@ -1,0 +1,11 @@
+{
+  "name": "@rowweave/cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Command-line access to RowWeave schemas, records, views, and CSV exchange.",
+  "type": "module",
+  "engines": { "node": ">=24.22.1 <25" },
+  "bin": { "rowweave": "dist/rowweave.js" },
+  "files": ["dist"],
+  "repository": { "type": "git", "url": "https://github.com/euyuil/rowweave.git", "directory": "apps/cli" }
+}
