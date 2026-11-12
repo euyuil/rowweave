@@ -2,7 +2,7 @@
 
 RowWeave exposes one bearer-authenticated HTTP/JSON API. The desktop, [TypeScript SDK](../packages/client/README.md), and other clients share its validation, transactions, and conflict rules. See [development.md](development.md) to start the service. The current default address is `http://127.0.0.1:4317`; the desktop's bundled service uses an ephemeral loopback port and token supplied by its host.
 
-Send `Authorization: Bearer <token>` on every operation, and `Content-Type: application/json` for request bodies, including DELETE bodies. The token has at least 32 characters. Loopback Host validation and origin restrictions currently permit the bundled file renderer (`Origin: null`) and clients without an Origin header. Remote binding/origin configuration is delivered separately. Keep credentials outside source and logs.
+Send `Authorization: Bearer <token>` on every operation, and `Content-Type: application/json` for request bodies, including DELETE bodies. The token has at least 32 printable ASCII characters without spaces. Default loopback settings permit the bundled file renderer (`Origin: null`) and clients without an Origin header. Independent services support explicit IP binding and exact Host/origin allowlists; see [service configuration](service.md). Browser preflights do not require a token, but actual operations always do. Keep credentials outside source and logs.
 
 Successful JSON responses contain the resource/result directly. Errors use a non-success status and `{ "error": { "code": "VERSION_CONFLICT", "message": "..." } }`. CSV export is the one successful non-JSON response. Writes are not idempotent unless the operation itself makes them so; clients must not automatically retry creates/imports after an uncertain response.
 
@@ -127,7 +127,7 @@ See [data-exchange.md](data-exchange.md) for mapping, null/empty/default semanti
 | --- | --- |
 | `400`: `INVALID_SCHEMA`, `INVALID_VALUE`, `INVALID_QUERY`, `INVALID_BATCH`, `INVALID_CSV`, `READ_ONLY_FIELD`, `INVALID_LINK` | Correct the request against the current schema. No partial batch/import writes are exposed. |
 | `401 UNAUTHORIZED` | Correct the configured bearer token; do not print it in diagnostics. |
-| `403 INVALID_HOST`, `INVALID_ORIGIN` | Use the configured service address and permitted origin. |
+| `403 INVALID_HOST`, `INVALID_ORIGIN`, `INVALID_PREFLIGHT` | Use the configured service address, permitted origin, and supported request method/headers. |
 | `404`: `TABLE_NOT_FOUND`, `FIELD_NOT_FOUND`, `RECORD_NOT_FOUND`, `VIEW_NOT_FOUND`, `NOT_FOUND` | Refresh IDs or correct the endpoint. |
 | `409`: `SCHEMA_CONFLICT`, `VERSION_CONFLICT`, `VIEW_CONFLICT`, `DATA_CHANGED` | Reload the relevant schema/record/view/query; compare changes before intentionally resubmitting. |
 | `409`: `RELATION_DEPENDENCY`, `LOOKUP_DEPENDENCY`, `VIEW_DEPENDENCY` | Remove or reconfigure the named dependency first. |

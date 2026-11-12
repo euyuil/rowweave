@@ -62,7 +62,8 @@ Each item may need more than one focused PR. Do not batch completed PRs while wa
 - [ ] SDK, CLI, HTTP reference, and standalone/remote connection workflow.
   - [x] Consumable ESM TypeScript SDK with complete declarations and HTTP API reference (90 Node tests, including offline archive installation and a real-service workflow from outside the repository).
   - [x] Machine-readable CLI for schema, records, views, queries, conversion and CSV, with independent archive installation (93 Node tests, including real subprocess workflows and offline command installation).
-  - [ ] Standalone/remote desktop connection settings and backup/restore procedures.
+  - [x] Standalone service with explicit IPv4/IPv6 binding, exact Host/origin policy, authenticated operations, CORS preflights, and deployment documentation (HTTP boundary tests and real-process restart persistence).
+  - [ ] Desktop connection settings and backup/restore procedures.
 - [ ] MCP protocol server and agent usage Skills.
 - [ ] Harness adapter and host integration verification.
 - [ ] Complete cross-interface regression, migration/backup verification, production performance, and packaging.
