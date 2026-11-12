@@ -59,12 +59,12 @@ Each item may need more than one focused PR. Do not batch completed PRs while wa
 - [x] CSV import/export through service and desktop.
   - [x] Service/client preview, explicit or name-based column mapping, typed/reference validation, atomic append, snapshot table/view export, and bounded file handling (88 Node regression tests; native spreadsheet verification remains deferred).
   - [x] Desktop UTF-8 file selection, paged mapping/preview, conflict and uncertain-write recovery, import feedback, and table/current-view export with completed-file replacement (89 Node tests and full offscreen desktop workflows; final native spreadsheet checks remain pending).
-- [ ] SDK, CLI, HTTP reference, and standalone/remote connection workflow.
+- [x] SDK, CLI, HTTP reference, and standalone/remote connection workflow.
   - [x] Consumable ESM TypeScript SDK with complete declarations and HTTP API reference (90 Node tests, including offline archive installation and a real-service workflow from outside the repository).
   - [x] Machine-readable CLI for schema, records, views, queries, conversion and CSV, with independent archive installation (93 Node tests, including real subprocess workflows and offline command installation).
   - [x] Standalone service with explicit IPv4/IPv6 binding, exact Host/origin policy, authenticated operations, CORS preflights, and deployment documentation (HTTP boundary tests and real-process restart persistence).
   - [x] Online workspace backups and restore to a new path with integrity checks, migration, overwrite protection, subprocess validation, and upgrade/rollback documentation.
-  - [ ] Desktop connection settings.
+  - [x] Desktop local/remote connection settings, encrypted credential persistence, process ownership, failed-switch protection, and outage/settings recovery (Node preference tests plus complete offscreen workspace/connection workflows; native checks remain deferred).
 - [ ] MCP protocol server and agent usage Skills.
 - [ ] Harness adapter and host integration verification.
 - [ ] Complete cross-interface regression, migration/backup verification, production performance, and packaging.
