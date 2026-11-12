@@ -1,9 +1,9 @@
 import {
   maxBatchCells, maxBatchRecords,
-  type CellValue, type Field, type QueryPage, type RecordQuery, type RowRecord, type Table,
+  type CellValue, type Field, type QueryPage, type RowRecord, type Table,
 } from '../../contracts/src/index.js';
 import { parseTextValue, validateValue } from '../../core/src/field-values.js';
-import { ApiFailure, type TableApi } from './http-client.js';
+import { ApiFailure, type TableApi, type TableQuery } from './http-client.js';
 import { sameValue } from './cell-values.js';
 
 export interface CellEdit {
@@ -39,7 +39,7 @@ export class TableModel {
   private generation = 0;
   private disposed = false;
   private queryRevision: number | undefined;
-  private query: RecordQuery = {};
+  private query: TableQuery = {};
   private visibleFields: Field[] = [];
   private readonly listeners = new Set<() => void>();
   private readonly pages = new Map<number, QueryPage>();
@@ -130,6 +130,9 @@ export class TableModel {
       ...this.query, ...(this.queryRevision === undefined ? {} : { expectedRevision: this.queryRevision }),
     }, controller.signal).then(page => {
       if (generation !== this.generation) return this.loadPage(index);
+      if (page.schemaVersion !== this.table!.version) {
+        throw new ApiFailure('SCHEMA_CONFLICT', 'The table schema changed. Reload before editing.', 409);
+      }
       this.queryRevision = page.revision;
       this.rowCount = page.total;
       this.pages.set(index, page);
@@ -147,7 +150,7 @@ export class TableModel {
       return page;
     }).catch(error => {
       if (generation !== this.generation && !this.disposed) return this.loadPage(index);
-      if (error instanceof ApiFailure && ['DATA_CHANGED', 'SCHEMA_CONFLICT'].includes(error.code)) {
+      if (error instanceof ApiFailure && ['DATA_CHANGED', 'SCHEMA_CONFLICT', 'VIEW_CONFLICT'].includes(error.code)) {
         this.stale = true;
         this.error = 'The table changed. Refresh to load current rows; your drafts are retained.';
         this.emit();
@@ -269,7 +272,7 @@ export class TableModel {
     this.redoStack = [];
   }
 
-  async setQuery(query: Omit<RecordQuery, 'offset' | 'limit' | 'expectedRevision'>): Promise<void> {
+  async setQuery(query: Omit<TableQuery, 'offset' | 'limit' | 'expectedRevision'>): Promise<void> {
     if (this.saving) throw new Error('Wait for the current save to finish.');
     this.query = query;
     this.updateFields();
@@ -279,8 +282,9 @@ export class TableModel {
     await this.loadPage(0);
   }
 
-  async refresh(): Promise<void> {
+  async refresh(query?: TableQuery): Promise<void> {
     if (this.saving) throw new Error('Wait for the current save to finish.');
+    if (query) this.query = query;
     this.resetPages();
     this.error = undefined;
     this.conflicted = false;
@@ -313,10 +317,10 @@ export class TableModel {
     }
   }
 
-  async discardAndReload(): Promise<void> {
+  async discardAndReload(query?: TableQuery): Promise<void> {
     if (this.saving) throw new Error('Wait for the current save to finish.');
     this.edits = { drafts: new Map(), rows: new Map() };
-    await this.refresh();
+    await this.refresh(query);
   }
 
   dispose(): void {

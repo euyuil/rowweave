@@ -103,6 +103,10 @@ Sort by multiple distinct fields, ascending or descending. Numbers sort numerica
 
 ### Saved grid views
 
+The desktop view selector switches between saved views without losing record drafts. **New view** copies the current configuration; **View settings** renames a view and saves search text, column visibility, order, and width. The search box temporarily overrides that view's search, waits until typing pauses, and defers requests during IME composition. The selected view is remembered per table on this device. Deleting a view leaves its records intact; every table retains at least one view. Filtering and sorting are supported by the service; their desktop controls follow in the next UI increment.
+
+Desktop pagination uses the saved view ID and version as well as the data revision. A concurrent view/schema change stops stale loading and retains drafts. **Refresh view** fetches current metadata while keeping drafts (and resets undo history); **Discard edits** asks before removing drafts. Configuration dialogs retain inputs when their own versioned save conflicts. Record details and duplication include fields hidden from the grid.
+
 Every table starts with an **All records** view. A view contains a stable `id`, `tableId`, `name`, independent `version`, saved `query` (`filter`, `sort`, `search`), and ordered `columns` (`fieldId`, `width`, `hidden`). At least one column and one view remain visible/available. Column widths range from 50 to 1,000 pixels.
 
 - `GET /tables/:tableId/views`: list saved views.

@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { fixture } from '../../storage-sqlite/tests/helpers.js';
 import { RecordService } from '../../core/src/record-service.js';
 import { startServer } from '../../../apps/server/src/http-server.js';
-import { ApiFailure, createWorkspaceClient } from '../src/http-client.js';
+import { ApiFailure, createWorkspaceClient, queryForView } from '../src/http-client.js';
 import { TableModel } from '../src/table-model.js';
 
 async function workspace(t: Parameters<typeof fixture>[0]) {
@@ -38,6 +38,48 @@ test('drafts follow record IDs through sorting and filtering and save while hidd
   assert.equal((await api.getRecord(table.id, records[0]!.id)).values[table.primaryFieldId], 'Z');
   assert.equal(model.rowCount, 1);
   assert.equal(model.pendingCells, 0);
+});
+
+test('saved view paging detects configuration conflicts and refresh preserves drafts by identity', async t => {
+  const { api, table, records } = await workspace(t);
+  let view = await api.createView(table.id, { name: 'Descending', query: { sort: [{ fieldId: table.primaryFieldId, direction: 'desc' }] },
+    columns: table.fields.map(field => ({ fieldId: field.id, hidden: field.id !== table.primaryFieldId, width: 240 })) });
+  const model = new TableModel(api.table(table.id), 1, 2);
+  await model.initialize();
+  await model.setQuery(queryForView(view));
+  assert.equal(model.getRecord(0)!.id, records[2]!.id);
+  assert.deepEqual(model.fields.map(field => field.id), [table.primaryFieldId]);
+  model.applyEdits([{ row: 0, fieldId: table.primaryFieldId, value: 'Draft C' }]);
+  view = await api.updateView(table.id, view.id, { expectedVersion: view.version, query: {} });
+  await assert.rejects(model.readRange(1, 1), error => error instanceof ApiFailure && error.code === 'VIEW_CONFLICT');
+  assert.equal(model.stale, true);
+  assert.equal(model.pendingCells, 1);
+  await model.refresh(queryForView(view));
+  assert.equal((await model.readRange(2, 1))[0]!.values[table.primaryFieldId], 'Draft C');
+  await model.save();
+  assert.equal((await api.getRecord(table.id, records[2]!.id)).values[table.primaryFieldId], 'Draft C');
+  await model.setQuery(queryForView(view, 'Draft'));
+  assert.equal(model.rowCount, 1);
+});
+
+test('a schema change between metadata and first page cannot populate a cache with incompatible values', async t => {
+  const { api, table } = await workspace(t);
+  const base = api.table(table.id);
+  let race = true;
+  const model = new TableModel({ ...base, getTable: async () => {
+    const result = await base.getTable();
+    if (race) {
+      race = false;
+      await api.updateField(table.id, table.primaryFieldId, { expectedVersion: result.version, name: 'Renamed' });
+    }
+    return result;
+  } });
+  await assert.rejects(model.initialize(), error => error instanceof ApiFailure && error.code === 'SCHEMA_CONFLICT');
+  assert.equal(model.cacheStats.pages, 0);
+  assert.equal(model.stale, true);
+  await model.refresh();
+  assert.equal(model.fields[0]!.name, 'Renamed');
+  assert.equal(model.rowCount, 3);
 });
 
 test('paste uses visible field order and whole actions can be undone and redone', async t => {

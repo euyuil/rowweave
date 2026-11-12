@@ -3,15 +3,16 @@ import DataEditor, {
   CompactSelection, GridCellKind, type DataEditorRef, type GridCell, type GridSelection, type Rectangle,
 } from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
-import { maxBatchCells, maxBatchRecords, type Field, type RowRecord, type Table } from '../../contracts/src/index.js';
+import { maxBatchCells, maxBatchRecords, type Field, type GridView, type RowRecord, type Table } from '../../contracts/src/index.js';
 import type { TableModel } from '../../client/src/table-model.js';
-import type { WorkspaceApi } from '../../client/src/http-client.js';
+import { queryForView, type WorkspaceApi } from '../../client/src/http-client.js';
 import { cellDisplay, cellText } from '../../client/src/cell-values.js';
 import { parseTextValue } from '../../core/src/field-values.js';
 import { EditorContext, TextCellEditor, type FinishEditor } from './text-cell-editor.js';
 import { parseClipboard } from './clipboard.js';
 import { RecordDialog, type RecordAction } from './record-dialog.js';
 import { FieldsDialog } from './fields-dialog.js';
+import { ViewDialog } from './view-dialog.js';
 import './table-app.css';
 
 export interface TableHost {
@@ -28,13 +29,24 @@ function textCell(record: RowRecord | undefined, field: Field | undefined, reado
     allowOverlay: !readonly, readonly };
 }
 
-export function TableApp({ model, api, host, onManage }: {
-  model: TableModel; api: WorkspaceApi; host: TableHost; onManage(kind: 'rename' | 'delete', table: Table): void;
+export function TableApp({ tableId, model, api, host, onManage }: {
+  tableId: string; model: TableModel; api: WorkspaceApi; host: TableHost; onManage(kind: 'rename' | 'delete', table: Table): void;
 }) {
   const revision = useSyncExternalStore(model.subscribe, model.getSnapshot);
   const queryVersion = model.queryVersion;
   const fields = model.fields;
-  const columns = useMemo(() => fields.map(field => ({ id: field.id, title: field.name, width: 180 })), [fields]);
+  const [views, setViews] = useState<GridView[]>([]);
+  const [view, setView] = useState<GridView>();
+  const [search, setSearch] = useState('');
+  const [searchComposing, setSearchComposing] = useState(false);
+  const [viewAction, setViewAction] = useState<'create' | 'edit' | 'delete'>();
+  const currentView = useRef<GridView>();
+  const appliedSearch = useRef('');
+  const viewRequest = useRef(0);
+  const columns = useMemo(() => {
+    const widths = new Map(view?.columns.map(column => [column.fieldId, column.width]));
+    return fields.map(field => ({ id: field.id, title: field.name, width: widths.get(field.id) ?? 180 }));
+  }, [fields, view]);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -60,15 +72,59 @@ export function TableApp({ model, api, host, onManage }: {
     setError(failure instanceof Error ? failure.message : 'The operation failed. Please try again.');
   }, []);
 
+  const loadView = useCallback(async (discard = false) => {
+    const loaded = await api.listViews(tableId);
+    const preferred = currentView.current?.id ?? localStorage.getItem(`rowweave.view.${tableId}`);
+    const selected = loaded.find(item => item.id === preferred) ?? loaded[0]!;
+    const text = currentView.current?.id === selected.id ? appliedSearch.current : selected.query.search ?? '';
+    currentView.current = selected;
+    appliedSearch.current = text;
+    setViews(loaded);
+    setView(selected);
+    setSearch(text);
+    const query = queryForView(selected, text);
+    if (discard) await model.discardAndReload(query);
+    else await model.refresh(query);
+    localStorage.setItem(`rowweave.view.${tableId}`, selected.id);
+  }, [api, model, tableId]);
+
+  const applyView = useCallback(async (selected: GridView, text = selected.query.search ?? '') => {
+    if (model.saving) return;
+    if (activeEditor.current) {
+      if (!activeEditor.current(true)) return;
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    const request = ++viewRequest.current;
+    busyRef.current = true;
+    setBusy(true);
+    setError(undefined);
+    currentView.current = selected;
+    appliedSearch.current = text;
+    setView(selected);
+    setSearch(text);
+    setSelection({ columns: CompactSelection.empty(), rows: CompactSelection.empty() });
+    try {
+      await model.setQuery(queryForView(selected, text));
+      localStorage.setItem(`rowweave.view.${selected.tableId}`, selected.id);
+    } catch (failure) { if (request === viewRequest.current) report(failure); }
+    finally { if (request === viewRequest.current) { busyRef.current = false; setBusy(false); } }
+  }, [model, report]);
+
+  useEffect(() => {
+    if (!ready || offline || model.saving || searchComposing || search === appliedSearch.current || !currentView.current) return;
+    const timer = setTimeout(() => { void applyView(currentView.current!, search); }, 200);
+    return () => clearTimeout(timer);
+  }, [search, searchComposing, ready, offline, model.saving, applyView]);
+
   useEffect(() => {
     let active = true;
-    void model.initialize().then(() => { if (active) setReady(true); }).catch(error => { if (active) report(error); });
+    void loadView().then(() => { if (active) setReady(true); }).catch(error => { if (active) report(error); });
     const unsubscribe = host.onServiceExit(() => {
       setOffline(true);
       setError('The data service stopped. Keep your unsaved values visible and restart when ready.');
     });
     return () => { active = false; unsubscribe(); model.dispose(); };
-  }, [model, host, report]);
+  }, [model, host, report, loadView]);
 
   useEffect(() => { void host.setDirty(pending > 0 || editorDirty || formDirty).catch(report); }, [pending, editorDirty, formDirty, host, report]);
 
@@ -111,6 +167,7 @@ export function TableApp({ model, api, host, onManage }: {
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
       if (!(event.target instanceof Node) || !rootHost.current?.contains(event.target)) return;
+      if (event.target instanceof Element && event.target.closest('dialog')) return;
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's' && !event.isComposing) {
         event.preventDefault();
         void save();
@@ -136,14 +193,14 @@ export function TableApp({ model, api, host, onManage }: {
     finally { busyRef.current = false; setBusy(false); }
   }, [model, offline, report]);
 
-  const discard = async () => {
-    if (locked || ((pending > 0 || editorDirty) && !await host.confirmDiscard())) return;
+  const reload = async (discardDrafts = true) => {
+    if (locked || (!discardDrafts && editorDirty) || (discardDrafts && (pending > 0 || editorDirty) && !await host.confirmDiscard())) return;
     activeEditor.current?.(false);
     busyRef.current = true;
     setBusy(true);
     setError(undefined);
     try {
-      await model.discardAndReload();
+      await loadView(discardDrafts);
       await model.readRange(visible.y, Math.min(visible.height + 5, maxBatchRecords));
       setSelection({ columns: CompactSelection.empty(), rows: CompactSelection.empty() });
       setReady(true);
@@ -183,7 +240,7 @@ export function TableApp({ model, api, host, onManage }: {
     setSelection({ columns: CompactSelection.empty(), rows: CompactSelection.empty() });
     setBusy(true);
     busyRef.current = true;
-    try { await model.refresh(); }
+    try { await loadView(); }
     catch (failure) { report(new Error(`${kind} saved, but refreshing failed: ${failure instanceof Error ? failure.message : 'connection unavailable'}`)); }
     finally { busyRef.current = false; setBusy(false); }
   };
@@ -218,7 +275,9 @@ export function TableApp({ model, api, host, onManage }: {
       <div className="actions">
         <button onClick={() => model.undo()} disabled={locked || !model.canUndo}>Undo</button>
         <button onClick={() => model.redo()} disabled={locked || !model.canRedo}>Redo</button>
-        <button onClick={() => void discard()} disabled={locked}>{pending || editorDirty ? 'Discard edits' : 'Reload'}</button>
+        {(pending > 0 || model.stale) && <button onClick={() => void reload(false)} disabled={locked || editorDirty}
+          title="Refresh saved data and view settings while keeping drafts. Undo history resets.">Refresh view</button>}
+        <button onClick={() => void reload()} disabled={locked}>{pending || editorDirty ? 'Discard edits' : 'Reload'}</button>
         <button className="primary" onClick={() => void save()} disabled={locked || (!pending && !editorDirty)}>Save changes</button>
       </div>
     </section>
@@ -234,9 +293,21 @@ export function TableApp({ model, api, host, onManage }: {
         : selectedCount ? `${selectedCount.toLocaleString()} selected` : 'Select a row or cell to open a record.'}</span>
     </div>
     <section className="table-panel" aria-label="Data table">
-      <div className="table-toolbar"><strong>▦ &nbsp; All records</strong>
+      <div className="view-toolbar">
+        <select aria-label="Current view" value={view?.id ?? ''} disabled={!ready || locked}
+          onChange={event => void applyView(views.find(item => item.id === event.target.value)!)}>
+          {views.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+        </select>
+        <button disabled={!view || locked} onClick={() => setViewAction('create')}>New view</button>
+        <button disabled={!view || locked} onClick={() => setViewAction('edit')}>View settings</button>
+        <button disabled={!view || locked || views.length < 2} onClick={() => setViewAction('delete')}>Delete view</button>
+        <input type="search" aria-label="Search records" placeholder="Search records…" value={search}
+          disabled={!ready || model.saving || offline} onChange={event => setSearch(event.target.value)}
+          onCompositionStart={() => setSearchComposing(true)} onCompositionEnd={() => setSearchComposing(false)} />
+      </div>
+      <div className="table-toolbar"><strong>▦ &nbsp; {view?.name ?? 'Loading view…'}</strong>
         <span>{table ? `${model.rowCount.toLocaleString()} ${model.rowCount === 1 ? 'record' : 'records'} · ${fields.length} ${fields.length === 1 ? 'field' : 'fields'}` : 'Loading records…'}</span></div>
-      <div className="grid-host" ref={gridHost} onPasteCapture={event => {
+      <div className="grid-host" aria-busy={locked || !ready} ref={gridHost} onPasteCapture={event => {
         if (!gridHost.current?.querySelector('canvas')?.contains(document.activeElement) || !selection.current) return;
         event.preventDefault();
         event.stopPropagation();
@@ -283,5 +354,12 @@ export function TableApp({ model, api, host, onManage }: {
       onClose={() => setRecordAction(undefined)} onSaved={() => { setRecordAction(undefined); void refreshAfterWrite('Records'); }} />}
     {managingFields && table && <FieldsDialog initial={table} api={api} setDirty={setFormDirty}
       onClose={() => setManagingFields(false)} onSaved={() => refreshAfterWrite('Schema')} />}
+    {viewAction && view && table && <ViewDialog kind={viewAction} view={view} search={search} table={table} api={api} setDirty={setFormDirty}
+      onClose={() => setViewAction(undefined)} onSaved={saved => {
+        setViewAction(undefined);
+        currentView.current = saved;
+        appliedSearch.current = saved?.query.search ?? '';
+        void refreshAfterWrite('View');
+      }} />}
   </section>;
 }
