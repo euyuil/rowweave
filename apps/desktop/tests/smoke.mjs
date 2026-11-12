@@ -75,7 +75,7 @@ try {
     const directory = join(dataDirectory, 'application');
     await mkdir(directory);
     await extract(manifest.zip, { dir: directory });
-    packaged = join(directory, 'RowWeave-win32-x64', 'RowWeave.exe');
+    packaged = join(directory, 'rowweave-win32-x64', 'rowweave.exe');
   }
   await launch();
   await page.screenshot({ path: '.artifacts/desktop-initial.png' });
@@ -228,7 +228,7 @@ try {
   assert.equal((await records(0, 1))[0].values.field_1, 'External change');
   assert.equal((await records(999, 1))[0].values.field_10, 'Paste 999/9 🌱');
   await application.evaluate(({ app }) => {
-    const service = app.getAppMetrics().find(metric => metric.name === 'RowWeave data service');
+    const service = app.getAppMetrics().find(metric => metric.name === 'rowweave-data-service');
     if (!service) throw new Error('Missing separate data service process.');
     process.kill(service.pid);
   });

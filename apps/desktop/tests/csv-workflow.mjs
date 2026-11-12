@@ -97,7 +97,7 @@ export async function verifyCsvWorkflow(page, application, directory) {
   assert.ok(saved.startsWith('\uFEFF'));
   assert.deepEqual([...parseCsv(saved)].map(row => row.cells.map(cell => cell.text)), [['Count', 'Name'], ['12.5', '中文, 🌱']]);
   const options = await application.evaluate(() => globalThis.csvSaveOptions);
-  assert.equal(options.defaultPath, 'RowWeave-CSV lab-Export subset.csv');
+  assert.equal(options.defaultPath, 'rowweave-CSV lab-Export subset.csv');
   assert.deepEqual(options.filters, [{ name: 'CSV files', extensions: ['csv'] }]);
   await page.getByLabel('Export scope', { exact: true }).selectOption('table');
   await page.getByRole('button', { name: 'Save CSV', exact: true }).click();

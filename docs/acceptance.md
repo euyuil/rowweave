@@ -4,11 +4,11 @@ This walkthrough is for the first usable RowWeave product described in [completi
 
 ## Candidate and verification
 
-The Windows ZIP, checksum and exact source revision are identified by `release/latest.json`. Extract the whole ZIP and start `RowWeave.exe`; the desktop includes its runtime. Use a fresh workspace for acceptance. To isolate it from an existing profile, set `ROWWEAVE_DATA_DIR` to a new directory before launch. The default database filename `prototype.sqlite` is retained for compatibility; fresh workspaces contain no sample records.
+The Windows ZIP, checksum and exact source revision are identified by `release/latest.json`. Extract the whole ZIP and start `rowweave.exe`; the desktop includes its runtime. Use a fresh workspace for acceptance. To isolate it from an existing profile, set `ROWWEAVE_DATA_DIR` to a new directory before launch. The default database filename `prototype.sqlite` is retained for compatibility; fresh workspaces contain no sample records.
 
 Source/service setup is in [development.md](development.md) and [service.md](service.md). The SDK, CLI, MCP and Harness archives are built with the corresponding `package:*` scripts; [agent Skills](agent-skills.md) are installed from the repository. No npm publication or AI account is required for RowWeave itself.
 
-The delivered 2026-11-12 candidate is `release/0.1.0-20261112T144603147Z/rowweave-0.1.0-win32-x64.zip`, built cleanly from `5091d04e4b2f77f9595225abd414513422b9f813` (merged through PR #38). SHA-256: `91d0543a2c020031f07dbb49cf390a9e047c14bc5aa37e039bbddb3145c9167f`. Windows and Linux CI passed that revision, including the extracted-package cross-interface workflow. Local Node checks passed 119 tests; the IPv6 loopback test could not bind in the local environment and passed in CI. The final documentation-only PR does not change this binary.
+The functional verification baseline recorded on 2026-11-12 is `release/0.1.0-20261112T144603147Z/rowweave-0.1.0-win32-x64.zip`, built cleanly from `5091d04e4b2f77f9595225abd414513422b9f813` (merged through PR #38). SHA-256: `91d0543a2c020031f07dbb49cf390a9e047c14bc5aa37e039bbddb3145c9167f`. Windows and Linux CI passed that revision, including the extracted-package cross-interface workflow. Local Node checks passed 119 tests; the IPv6 loopback test could not bind in the local environment and passed in CI. This baseline predates the technical-name correction to `rowweave.exe`; use `release/latest.json` for the current package identity. Historical performance/native evidence retains its original artifact identifiers.
 
 | Scenario | Automated evidence |
 | --- | --- |

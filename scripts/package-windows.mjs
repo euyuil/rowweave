@@ -37,10 +37,10 @@ try {
     if (digest.digest('hex') !== checksums[basename(localZip)]) throw new Error('Cached Electron archive checksum mismatch.');
   }
   const [directory] = await packager({
-    dir: stage, out: output, name: 'RowWeave', executableName: 'RowWeave',
+    dir: stage, out: output, name: 'rowweave', executableName: 'rowweave',
     platform: 'win32', arch: 'x64', electronVersion, asar: true, prune: false,
     ...(hasLocalZip ? { electronZipDir: artifacts } : {}),
-    win32metadata: { CompanyName: 'RowWeave', FileDescription: 'RowWeave desktop' },
+    win32metadata: { CompanyName: 'RowWeave', ProductName: 'RowWeave', FileDescription: 'RowWeave desktop' },
   });
   if (!directory) throw new Error('Packaging did not produce an application.');
   const zip = join(output, `rowweave-${manifest.version}-win32-x64.zip`);
@@ -60,7 +60,7 @@ try {
     version: manifest.version, createdAt: new Date().toISOString(),
     revision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
     uncommittedChanges: execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' }).trim().length > 0,
-    executable: join(directory, 'RowWeave.exe'), zip, sha256: hash.digest('hex'),
+    executable: join(directory, 'rowweave.exe'), zip, sha256: hash.digest('hex'),
   };
   await writeFile(`${zip}.sha256`, `${result.sha256}  ${basename(zip)}\n`);
   await writeFile('release/latest.json', JSON.stringify(result, null, 2) + '\n');
