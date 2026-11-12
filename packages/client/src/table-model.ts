@@ -1,18 +1,20 @@
 import {
-  maxBatchCells, maxBatchRecords, maxTextLength,
-  type RecordPage, type RowRecord, type Table,
+  maxBatchCells, maxBatchRecords,
+  type CellValue, type RecordPage, type RowRecord, type Table,
 } from '../../contracts/src/index.js';
+import { parseTextValue, validateValue } from '../../core/src/field-values.js';
 import { ApiFailure, type TableApi } from './http-client.js';
+import { sameValue } from './cell-values.js';
 
 export interface CellEdit {
   row: number;
   fieldId: string;
-  value: string | null;
+  value: CellValue;
 }
 
 interface Draft {
   base: RowRecord;
-  values: Record<string, string | null>;
+  values: Record<string, CellValue>;
 }
 
 export class TableModel {
@@ -124,18 +126,18 @@ export class TableModel {
   applyEdits(edits: CellEdit[]): void {
     if (this.saving) throw new Error('Wait for the current save to finish.');
     if (!this.table) throw new Error('The table is still loading.');
-    const fields = new Set(this.table.fields.map(field => field.id));
+    const fields = new Map(this.table.fields.map(field => [field.id, field]));
     const next = new Map(this.drafts);
     for (const edit of edits) {
-      if (!Number.isSafeInteger(edit.row) || edit.row < 0 || edit.row >= this.table.total || !fields.has(edit.fieldId) ||
-          (edit.value !== null && (typeof edit.value !== 'string' || edit.value.length > maxTextLength))) {
+      if (!Number.isSafeInteger(edit.row) || edit.row < 0 || edit.row >= this.table.total || !fields.has(edit.fieldId)) {
         throw new Error('One or more pasted values are invalid.');
       }
+      const value = validateValue(fields.get(edit.fieldId)!, edit.value);
       const existing = next.get(edit.row);
       const base = existing?.base ?? this.getRecord(edit.row);
       if (!base) throw new Error('Load the selected rows before editing.');
-      const values = { ...existing?.values, [edit.fieldId]: edit.value };
-      if (edit.value === base.values[edit.fieldId]) delete values[edit.fieldId];
+      const values = { ...existing?.values, [edit.fieldId]: value };
+      if (sameValue(value, base.values[edit.fieldId] ?? null)) delete values[edit.fieldId];
       if (Object.keys(values).length) next.set(edit.row, { base, values });
       else next.delete(edit.row);
     }
@@ -162,7 +164,8 @@ export class TableModel {
     }
     try {
       this.applyEdits(cells.flatMap((row, y) => row.map((value, x) => ({
-        row: startRow + y, fieldId: this.table!.fields[startColumn + x]!.id, value,
+        row: startRow + y, fieldId: this.table!.fields[startColumn + x]!.id,
+        value: parseTextValue(this.table!.fields[startColumn + x]!, value),
       }))));
       for (const [row, draft] of this.drafts) if (!Object.keys(draft.values).length) this.drafts.delete(row);
     } catch (error) {

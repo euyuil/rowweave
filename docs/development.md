@@ -19,7 +19,7 @@ Requests use `Authorization: Bearer <token>`:
 
 - `GET /tables/prototype`: field definitions and record count.
 - `GET /tables/prototype/records?offset=0&limit=100`: records in a stable order, with at most 500 per page.
-- `PATCH /tables/prototype/records`: a JSON array of `{ id, expectedVersion, values }` updates, where `values` maps stable field IDs to strings or null. The entire batch commits or rolls back together. Successful records return their incremented versions. A stale version returns HTTP 409; reload before explicitly resolving the conflict.
+- `PATCH /tables/prototype/records`: a JSON array of `{ id, expectedVersion, values }` updates, where `values` maps stable field IDs to typed values. The entire batch commits or rolls back together. Successful records return their incremented versions. A stale version returns HTTP 409; reload before explicitly resolving the conflict.
 
 Write limits are 2,000 distinct records, 20,000 changed cells, 10,000 UTF-16 code units per text value, and an 8 MiB JSON request body. Duplicate IDs and unknown fields are rejected. Empty strings and nulls remain distinct in storage.
 
@@ -27,21 +27,43 @@ A new desktop database is still seeded deterministically with 10,000 rows and 20
 
 ### Dynamic tables and schema
 
-The service supports multiple tables with stable table, field, and record IDs. Schema management currently supports text fields; the typed-field and desktop management workflows follow the [completion plan](completion-plan.md).
+The service supports multiple tables with stable table, field, and record IDs. Typed schema and record operations are available through HTTP; the desktop management workflows follow the [completion plan](completion-plan.md).
 
 - `GET /tables`: list table definitions and counts.
 - `POST /tables`: create an empty table with `{ "name": "Projects" }` and an initial **Name** field.
 - `GET /tables/:tableId`: read a table, including its schema `version` and `primaryFieldId`.
 - `PATCH /tables/:tableId`: pass `expectedVersion` and any of `name`, `primaryFieldId`, or `fieldOrder` (every field ID exactly once).
 - `DELETE /tables/:tableId`: pass `{ "expectedVersion": 1 }` in the JSON body. The table, its fields, and its records are removed atomically.
-- `POST /tables/:tableId/fields`: pass `expectedVersion`, `name`, and `type: "text"`.
-- `PATCH /tables/:tableId/fields/:fieldId`: pass `expectedVersion` and `name`.
+- `POST /tables/:tableId/fields`: pass `expectedVersion`, `name`, `type`, and the type's configuration described below.
+- `PATCH /tables/:tableId/fields/:fieldId`: pass `expectedVersion` and changed field settings. Type changes require the separate conversion workflow; they are not silently coerced by this endpoint.
 - `DELETE /tables/:tableId/fields/:fieldId`: pass `expectedVersion`. Choose another primary field before deleting the primary field. Existing cell values are removed and affected record versions increment atomically.
 - The existing paginated record reads and atomic updates work at `/tables/:tableId/records` for any table.
 
 Schema writes return the updated table and increment its schema version. A stale version returns HTTP 409 with `SCHEMA_CONFLICT`; reload schema before retrying. Names contain 1–200 characters and tables support up to 200 fields. A newly added text field has no stored values until edited; an absent field value means null. Renaming and reordering do not rewrite record identities or values.
 
 SQLite format version 2 stores relational table/field metadata and JSON record values, with a table/position index. Opening a version-1 prototype database migrates it transactionally, preserving field IDs, record IDs, positions, values, and record versions. A failed migration rolls back; unsupported newer formats fail without replacing their schema. Back up a working database before upgrading; do not copy a live database without its pending WAL state.
+
+### Typed values and record lifecycle
+
+| Field type | JSON value and configuration |
+| --- | --- |
+| `text`, `multiline` | String up to 10,000 UTF-16 code units, or null. Empty strings remain distinct from null. |
+| `number` | Finite JSON number. Optional `numberFormat`: `decimal`, `currency`, or `percent`; `precision`: 0–10; currency formatting requires a three-letter uppercase `currency` code. Formatting never rounds stored values. Percent values use fractions: `0.5` displays as 50%. |
+| `checkbox` | Boolean; false is a valid required value. |
+| `date` | Valid `YYYY-MM-DD` calendar date. |
+| `datetime` | ISO timestamp with seconds and an explicit zone (`Z` or an offset), normalized to UTC. |
+| `singleSelect` | An existing option ID or null. |
+| `multiSelect` | Array of unique existing option IDs, or null. |
+
+Select fields have up to 200 `options`, each with `name`, optional `color` (`#RRGGBB`), and optional `id` on creation. The service generates missing IDs. Retain returned IDs when renaming options. IDs and names must be unique within the field. Removing an option still used by a record is rejected atomically.
+
+All fields accept `required` and `defaultValue`. Defaults apply only when a new record omits that field; explicit null does not apply the default. Passing `defaultValue: null` clears a configured default. Required text must not be blank, required multi-select must contain an option, and required fields reject null. To add a required field to a populated table, add it as optional, populate it, then enable `required`; enabling it checks all existing values transactionally.
+
+- `POST /tables/:tableId/records`: array of `{ values }` objects; returns `{ records }` with generated IDs and version 1. Creation is atomic and uses the same 2,000-record/20,000-cell limits (including defaulted cells).
+- `GET /tables/:tableId/records/:recordId`: fetch one record by stable ID.
+- `DELETE /tables/:tableId/records`: array of `{ id, expectedVersion }` objects; returns `{ deleted: [id, ...] }`. A missing/stale record rolls back the whole batch.
+
+The grid retains its text editor until the dedicated typed-editor workflow is introduced, but renders typed values and parses typed edits/paste. Select clipboard values use option names; multi-select uses a JSON array of names. Number input uses decimal notation, checkboxes use `true`/`false`, and blank non-text input means null. Invalid cells reject the complete pasted rectangle and preserve existing drafts. Service writes always validate again.
 
 Tests create and remove isolated temporary databases. No test opens a working database.
 

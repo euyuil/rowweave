@@ -1,7 +1,23 @@
+export type CellValue = string | number | boolean | string[] | null;
+
+export interface SelectOption {
+  id: string;
+  name: string;
+  color?: string;
+}
+
+export type FieldType = 'text' | 'multiline' | 'number' | 'checkbox' | 'date' | 'datetime' | 'singleSelect' | 'multiSelect';
+
 export interface Field {
   id: string;
   name: string;
-  type: 'text';
+  type: FieldType;
+  required?: boolean;
+  defaultValue?: CellValue;
+  options?: SelectOption[];
+  numberFormat?: 'decimal' | 'currency' | 'percent';
+  precision?: number;
+  currency?: string;
 }
 
 export interface Table {
@@ -29,17 +45,21 @@ export interface TableUpdate extends SchemaWrite {
 
 export interface FieldCreate extends SchemaWrite {
   name: string;
-  type: 'text';
+  type: FieldType;
+  required?: boolean;
+  defaultValue?: CellValue;
+  options?: Array<Omit<SelectOption, 'id'> & { id?: string }>;
+  numberFormat?: Field['numberFormat'];
+  precision?: number;
+  currency?: string;
 }
 
-export interface FieldUpdate extends SchemaWrite {
-  name: string;
-}
+export type FieldUpdate = SchemaWrite & Partial<Omit<FieldCreate, 'expectedVersion'>>;
 
 export interface RowRecord {
   id: string;
   version: number;
-  values: Record<string, string | null>;
+  values: Record<string, CellValue>;
 }
 
 export interface RecordPage {
@@ -57,7 +77,20 @@ export const maxPageSize = 500;
 export interface RecordUpdate {
   id: string;
   expectedVersion: number;
-  values: Record<string, string | null>;
+  values: Record<string, CellValue>;
+}
+
+export interface RecordCreate {
+  values: Record<string, CellValue>;
+}
+
+export interface RecordDelete {
+  id: string;
+  expectedVersion: number;
+}
+
+export interface DeleteResult {
+  deleted: string[];
 }
 
 export interface BatchResult {

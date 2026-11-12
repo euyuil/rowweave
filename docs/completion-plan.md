@@ -40,7 +40,8 @@ Each item may need more than one focused PR. Do not batch completed PRs while wa
 
 - [x] Prototype: bounded grid, persistence, editing, packaging, and baseline measurements ([validation.md](validation.md)).
 - [x] Multi-table storage migration, schema contracts, and text table/field operations (SQLite/HTTP regression tests; typed configuration and desktop workflows follow below).
-- [ ] Typed validation, record creation/deletion, defaults, and schema conversion.
+- [x] Typed validation, record creation/deletion, defaults, and constraint changes (service/HTTP/client regression tests).
+- [ ] Schema conversion preview and atomic application.
 - [ ] Service queries, saved views, filtering, sorting, and search.
 - [ ] Desktop workspace navigation and schema/record management.
 - [ ] Typed grid editors, draft undo/redo, views, and clipboard workflows.

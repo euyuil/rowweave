@@ -3,8 +3,10 @@ import DataEditor, {
   CompactSelection, GridCellKind, type DataEditorRef, type GridCell, type GridSelection, type Rectangle,
 } from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
-import { maxBatchCells, maxBatchRecords, type RowRecord } from '../../contracts/src/index.js';
+import { maxBatchCells, maxBatchRecords, type Field, type RowRecord } from '../../contracts/src/index.js';
 import type { TableModel } from '../../client/src/table-model.js';
+import { cellDisplay, cellText } from '../../client/src/cell-values.js';
+import { parseTextValue } from '../../core/src/field-values.js';
 import { EditorContext, TextCellEditor, type FinishEditor } from './text-cell-editor.js';
 import { parseClipboard } from './clipboard.js';
 import './table-app.css';
@@ -15,10 +17,11 @@ export interface TableHost {
   onServiceExit(listener: () => void): () => void;
 }
 
-function textCell(record: RowRecord | undefined, fieldId: string, readonly: boolean): GridCell {
-  if (!record) return { kind: GridCellKind.Loading, allowOverlay: false };
-  const text = record.values[fieldId] ?? '';
-  return { kind: GridCellKind.Text, data: text, copyData: text, displayData: text.replace(/\r?\n/g, ' ↵ '),
+function textCell(record: RowRecord | undefined, field: Field | undefined, readonly: boolean): GridCell {
+  if (!record || !field) return { kind: GridCellKind.Loading, allowOverlay: false };
+  const value = record.values[field.id];
+  const text = cellText(field, value);
+  return { kind: GridCellKind.Text, data: text, copyData: text, displayData: cellDisplay(field, value),
     allowOverlay: !readonly, readonly };
 }
 
@@ -129,7 +132,7 @@ export function TableApp({ model, host }: { model: TableModel; host: TableHost }
   const table = model.table;
   const getCellContent = useCallback(([column, row]: readonly [number, number]): GridCell => {
     const field = table?.fields[column];
-    return textCell(model.getRecord(row), field?.id ?? '', locked);
+    return textCell(model.getRecord(row), field, locked);
   }, [model, table, locked, revision]);
 
   const getCellsForSelection = (rectangle: Rectangle, signal: AbortSignal) => async () => {
@@ -141,7 +144,7 @@ export function TableApp({ model, host }: { model: TableModel; host: TableHost }
       const records = await model.readRange(rectangle.y, rectangle.height);
       if (signal.aborted) return [];
       return records.map(record => Array.from({ length: rectangle.width }, (_, x) =>
-        textCell(record, table!.fields[rectangle.x + x]!.id, locked)));
+        textCell(record, table!.fields[rectangle.x + x], locked)));
     } catch (failure) { report(failure); return []; }
   };
 
@@ -197,7 +200,7 @@ export function TableApp({ model, host }: { model: TableModel; host: TableHost }
             try {
               model.applyEdits(edits.filter(edit => edit.value.kind === GridCellKind.Text).map(edit => ({
                 row: edit.location[1], fieldId: table.fields[edit.location[0]]!.id,
-                value: edit.value.kind === GridCellKind.Text ? edit.value.data : '',
+                value: parseTextValue(table.fields[edit.location[0]]!, edit.value.kind === GridCellKind.Text ? edit.value.data : ''),
               })));
             } catch (failure) { report(failure); }
             return true;
