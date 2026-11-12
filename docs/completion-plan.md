@@ -49,7 +49,7 @@ Each item may need more than one focused PR. Do not batch completed PRs while wa
   - [x] Empty first workspace, table navigation/create/rename/delete, and draft-safe switching (automated desktop lifecycle tests).
   - [x] Typed record forms, details, duplication, and versioned batch deletion (automated desktop validation/conflict/lifecycle tests).
   - [x] Typed field configuration, options/defaults/constraints, primary field/order, deletion, and conversion preview/application (automated desktop schema and concurrent conversion tests).
-- [x] Typed grid editors, draft undo/redo, views, and clipboard workflows (automated verification; final native-input and external spreadsheet checks remain below).
+- [x] Typed grid editors, draft undo/redo, views, and clipboard workflows (automated verification and the final native checks below).
   - [x] Desktop saved-view lifecycle, persisted column visibility/order/width, debounced composition-aware search, selected-view restoration, and version-aware paging (client and offscreen desktop tests).
   - [x] Desktop nested AND/OR filter builder with typed operands and ordered multi-field sorting (round-trip and offscreen combined-query tests).
   - [x] Typed cell editors, invalid-input retention, keyboard commit/cancel/save, null preservation, and atomic selection clearing beyond the cache (offscreen desktop and client regression tests).
@@ -57,25 +57,25 @@ Each item may need more than one focused PR. Do not batch completed PRs while wa
   - [x] Single/multiple linked records, transactional reference constraints, primary labels, dependency-aware revisions, searchable/paged desktop picker, and linked details (SQLite/HTTP/client and offscreen desktop workflows).
   - [x] Typed read-only lookups, transactional field/view dependencies, query operators/projection/sorting, current computed values alongside retained drafts, and desktop configuration/details/duplication (77 Node tests and offscreen desktop workflows).
 - [x] CSV import/export through service and desktop.
-  - [x] Service/client preview, explicit or name-based column mapping, typed/reference validation, atomic append, snapshot table/view export, and bounded file handling (88 Node regression tests; native spreadsheet verification remains deferred).
-  - [x] Desktop UTF-8 file selection, paged mapping/preview, conflict and uncertain-write recovery, import feedback, and table/current-view export with completed-file replacement (89 Node tests and full offscreen desktop workflows; final native spreadsheet checks remain pending).
+  - [x] Service/client preview, explicit or name-based column mapping, typed/reference validation, atomic append, snapshot table/view export, and bounded file handling (Node regression tests).
+  - [x] Desktop UTF-8 file selection, paged mapping/preview, conflict and uncertain-write recovery, import feedback, and table/current-view export with completed-file replacement (Node tests and full offscreen desktop workflows).
 - [x] SDK, CLI, HTTP reference, and standalone/remote connection workflow.
   - [x] Consumable ESM TypeScript SDK with complete declarations and HTTP API reference (90 Node tests, including offline archive installation and a real-service workflow from outside the repository).
   - [x] Machine-readable CLI for schema, records, views, queries, conversion and CSV, with independent archive installation (93 Node tests, including real subprocess workflows and offline command installation).
   - [x] Standalone service with explicit IPv4/IPv6 binding, exact Host/origin policy, authenticated operations, CORS preflights, and deployment documentation (HTTP boundary tests and real-process restart persistence).
   - [x] Online workspace backups and restore to a new path with integrity checks, migration, overwrite protection, subprocess validation, and upgrade/rollback documentation.
-  - [x] Desktop local/remote connection settings, encrypted credential persistence, process ownership, failed-switch protection, and outage/settings recovery (Node preference tests plus complete offscreen workspace/connection workflows; native checks remain deferred).
+  - [x] Desktop local/remote connection settings, encrypted credential persistence, process ownership, failed-switch protection, and outage/settings recovery (Node preference tests plus complete offscreen workspace/connection workflows).
 - [x] MCP protocol server and agent usage Skills.
   - [x] Stdio MCP adapter with 24 discoverable tools, live schema/view resources, versioned writes, protocol-client workflows and an offline-installable bundle.
   - [x] Portable RowWeave usage Skill with concrete MCP/CLI recipes, bounded reads, conflict/uncertain-write recovery, installation guidance and validated metadata.
 - [x] Harness adapter and host integration verification (installable Web-profile bundle, official module/slot/layout/renderer integration, typed workspace editing, draft-safe navigation, browser CSV download, failed-connection retention, and disposal/reload tests).
 - [x] Complete cross-interface regression, migration/backup verification, production performance, and packaging.
-  - [x] Mixed-type pressure datasets and expanded production benchmarks (100 input samples per launch, reproducible view queries, raw outliers; [initial baseline](product-performance.md) identifies large-table paste/query work still required).
-  - [x] Bounded batch reads for large paste/clear operations, with atomic staging and cancellation regression tests; packaged 100,000 × 100 paste retiming is 412–448 ms. The final complete run remains pending.
-  - [x] Transactional saved-query indexes and format-7 migration, with lifecycle/conversion/rollback tests; the five packaged 100,000 × 100 benchmark queries now measure 72–109 ms p95. Initial index construction is recorded separately; the final complete run remains pending.
+  - [x] Mixed-type pressure datasets and expanded production benchmarks (100 input samples per launch, reproducible view queries and raw outliers).
+  - [x] Bounded batch reads for large paste/clear operations, with atomic staging and cancellation regression tests; complete packaged measurements follow below.
+  - [x] Transactional saved-query indexes and format-7 migration, with lifecycle/conversion/rollback tests; initial index construction is recorded separately from steady-state queries.
   - [x] Shared-service acceptance across desktop, SDK, CLI, MCP and Harness, including schema discovery, saved views, versioned edits and rejected stale writes. The extracted Windows package and source desktop both run this scenario. The full official Harness Web host was also installed and exercised separately ([evidence](harness.md#integration-and-verification)).
-  - [x] Clean production package measured at both required scales: all startup/input/paste/save/query/scrolling targets passed. Separate five-circuit memory measurements remained below 533 MiB, with last-three spreads below 8 MiB ([complete results](product-performance.md#complete-production-run)).
-- [ ] Final native-input checks and invitation for user end-to-end acceptance.
+  - [x] Clean production package measured at both required scales: all targets passed in the complete 60 Hz reference run. The final clipboard-fix package passed the other timing/memory gates on the subsequently observed 32 Hz display; the controlled comparison and unavailable final-binary 60 Hz repeat are explicit in the [report](product-performance.md#final-package-rerun-and-display-comparison). Thresholds were not changed.
+- [x] Final native Pinyin and Excel clipboard checks, including the multiline-copy fix and saved-value comparisons ([evidence](product-performance.md#final-native-interaction-checks)). Packaged delivery and the [owner walkthrough](acceptance.md) are ready for user end-to-end acceptance; the owner's acceptance decision remains pending.
 
 ## Acceptance scenarios
 

@@ -1,6 +1,6 @@
 # Product performance verification
 
-The [completion plan](completion-plan.md#performance-gate) defines the acceptance targets. The complete production run below meets every timing and memory target on the reference machine. Earlier baselines are retained to show the fixes and their measured effects. Native IME, external spreadsheet interoperability, and the user's end-to-end acceptance remain pending.
+The [completion plan](completion-plan.md#performance-gate) defines the acceptance targets. The complete 60 Hz reference run below met every timing and memory target. A final-package rerun passed the other gates but encountered a different 32 Hz display environment, so it does not reestablish the 60 Hz scrolling gate. Both runs and a controlled display comparison are reported separately. Native Chinese IME and Excel clipboard checks passed as described below. The user's end-to-end acceptance remains their decision.
 
 ## Reproduce
 
@@ -40,6 +40,42 @@ The separate memory run summed Electron's main, renderer, GPU, network and RowWe
 The instrumented timing run also retains per-process snapshots and a forced-GC diagnostic, which include renderer-debugger overhead and are not substituted for the separate memory gate. Input/frame metrics remain animation-frame proxies rather than physical display latency. None of these automated results establishes native IME or external spreadsheet compatibility.
 
 Raw local reports: `.artifacts/benchmarks/2026-11-12T12-33-52-773Z/results.json` and the adjacent `memory-without-renderer-debugger.json`. The directory also contains both generated databases and screenshots. The package manifest, runtime/display details, raw input/query/frame samples and per-process memory circuits identify the exact measured workload.
+
+## Final package rerun and display comparison
+
+The delivered clean package from `5091d04e4b2f77f9595225abd414513422b9f813` (PR #38) has SHA-256 `91d0543a2c020031f07dbb49cf390a9e047c14bc5aa37e039bbddb3145c9167f`. Its clipboard fix followed the reference run. The full production benchmark and separate memory measurement were repeated on 2026-11-12, without overlapping other test suites or downloads. Hardware/runtime versions were unchanged, but Electron reported a single **1728 × 1085, 100%, 32 Hz** display instead of the reference run's 1920 × 1080, 60 Hz display. Dataset generation took 2.2 and 201.1 seconds.
+
+| Measurement | 10,000 × 20 | 100,000 × 100 |
+| --- | ---: | ---: |
+| Startup, median of three launches | 1,068 ms | 1,110 ms |
+| Input p95, range across three trials | 28.8–28.9 ms | 28.8–29.0 ms |
+| Maximum measured input delay | 29.2 ms | 29.7 ms |
+| Paste 1,000 × 10, three trials | 111–122 ms | 420–437 ms |
+| Atomic save, three trials | 358–387 ms | 971–998 ms |
+| First-page / range / compound query p95 | 19 / 18 / 6 ms | 68 / 76 / 71 ms |
+| Primary-text / numeric sort p95 | 19 / 10 ms | 79 / 69 ms |
+| Scrolling frame interval p95 at 32 Hz | 31.6 ms | 31.6 ms |
+| Long frames over 25 / 50 ms | 2,163 / 3 of 2,164 | 2,233 / 1 of 2,233 |
+| Summed working sets, five separate circuits | 482–491 MiB | 511–549 MiB |
+| Spread across the last three circuits | 8.4 MiB | 27.5 MiB |
+
+All startup/input/paste/save/query/memory values meet their original targets. The scrolling values exceed 25 ms and are **not a pass of the 60 Hz gate**: the measured display itself presents one frame every 31.25 ms. A separate controlled check opened both the previously measured reference package and the final package on the same small dataset, with each window visible and focused. Both reported the same 32 Hz display and idle frame p50/p95 of 31.2/31.6 ms, supporting display cadence as the cause rather than a clipboard-code regression. No display settings, application frame limits or acceptance thresholds were changed. The earlier complete 60 Hz reference run remains the available evidence for that environment; a final-binary 60 Hz repeat was not available in the current desktop session.
+
+Four saved-index preparation times were 71–98 ms and 1.65–2.13 seconds. Separate memory totals were 483.0/490.2/486.2/490.2/481.8 MiB and 510.9/517.4/521.3/548.8/546.3 MiB. Service working sets were 69–73 MiB and 108–145 MiB; private bytes were 36–39 MiB and 74–111 MiB. The same shared-page accounting and five-circuit limits as the reference run apply.
+
+Raw reports: `.artifacts/benchmarks/2026-11-12T14-52-07-284Z/results.json`, its adjacent `memory-without-renderer-debugger.json`, and `.artifacts/display-cadence-comparison.json`. Each report identifies the artifact and observed environment. Owner acceptance should include scrolling on the user's normal display.
+
+## Final native interaction checks
+
+Performed on 2026-11-12 on the reference Windows machine, using Microsoft Pinyin and Microsoft Excel `16.0.20326.20318`. Only generated fixtures and an isolated RowWeave workspace were used. These checks used real application windows, native key input and the system clipboard, separately from browser automation.
+
+- **Chinese input:** typing `ni` displayed the Pinyin candidate panel; Space selected `你`. Escape canceled the next composition without closing the editor. Enter confirmed a subsequent literal `n` composition without submitting the cell prematurely. Ctrl+S saved `你n`; a separate read-only SQLite connection confirmed the value and record version. This ran on the product candidate from `6f23fa9d9a2788ee16373e28feffb1337dd33a82`; the later clipboard-only fix did not change the cell editor.
+- **Excel → RowWeave:** copied the generated workbook's `A2:C4` into three text/multiline fields, saved, and compared stored values through a read-only SQLite connection. Chinese, emoji, embedded quotes, a comma, multiline text and trailing blank cells were retained.
+- **RowWeave → Excel:** the first native run exposed the grid library's HTML clipboard representation collapsing a line break to a space. PR #38 replaced grid copy with quoted plain-text TSV and added serializer/desktop regressions. The corrected clean package from `5091d04e4b2f77f9595225abd414513422b9f813` (ZIP SHA-256 `91d0543a2c020031f07dbb49cf390a9e047c14bc5aa37e039bbddb3145c9167f`) was opened on the same persisted workspace. Its selected rectangle was copied into Excel `E2:G4`, saved and compared against `A2:C4` by reading the workbook XML. All nine values matched after decoding Excel's carriage-return escape and normalizing Windows CRLF to LF. No other characters were normalized.
+
+Evidence remains local under `.artifacts/`: `native-ime-composition.png`, `native-ime-saved.png`, `native-excel-paste-saved.png`, `native-excel-roundtrip-fixed.png`, `native-paste-persistence.json`, and `native-excel-roundtrip.json`. The generated workbook and isolated database are in `native-acceptance-2026-11-12T12-47-52-360Z/`. The test windows were closed after saving.
+
+This establishes the tested input method and clipboard values on this machine, not every spreadsheet version, cell-type inference rule, CSV import mode or input method. Excel's legacy text import split an embedded newline in the preliminary CSV fixture, so the clipboard check used an exact `.xlsx` fixture. CSV service/export round trips have separate automated coverage; users should follow the [data exchange semantics](data-exchange.md) and try their normal applications in [owner acceptance](acceptance.md).
 
 ## Initial mixed-type baseline
 
