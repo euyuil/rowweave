@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { maxPageSize, maxBatchRecords, maxBatchCells, maxFields, tableId,
-  type BatchResult, type CellValue, type DeleteResult, type RecordDelete, type RecordPage, type RecordUpdate, type RowRecord, type Table } from '../../contracts/src/index.js';
+  type BatchResult, type CellValue, type ConversionPreview, type DeleteResult, type Field, type RecordDelete, type RecordPage, type RecordUpdate, type RowRecord, type Table } from '../../contracts/src/index.js';
 import { schemaName, schemaObject, schemaVersion } from './schema-validation.js';
 import { parseField } from './field-schema.js';
 import { validateValue } from './field-values.js';
+import { convertValue } from './field-conversion.js';
 import { ServiceError } from './errors.js';
 export { ServiceError } from './errors.js';
 
@@ -18,6 +19,8 @@ export interface RecordStore {
   getRecord(tableId: string, recordId: string): RowRecord;
   createRecords(table: Table, values: Array<Record<string, CellValue>>): BatchResult;
   deleteRecords(tableId: string, records: RecordDelete[]): DeleteResult;
+  previewConversion(tableId: string, version: number, field: Field, convert: (value: CellValue) => CellValue): ConversionPreview;
+  applyConversion(tableId: string, version: number, field: Field, convert: (value: CellValue) => CellValue): Table;
 }
 
 export class RecordService {
@@ -106,6 +109,28 @@ export class RecordService {
     if (table.primaryFieldId === fieldId) throw new ServiceError('INVALID_SCHEMA', 'Choose another primary field before deleting this field.');
     table.fields = table.fields.filter(field => field.id !== fieldId);
     return this.store.updateSchema(table, version);
+  }
+
+  private conversion(id: string, fieldId: string, input: unknown) {
+    const item = schemaObject(input);
+    const version = schemaVersion(item['expectedVersion']);
+    const table = this.store.getTable(id);
+    if (table.version !== version) throw new ServiceError('SCHEMA_CONFLICT', 'The table schema changed. Reload it before trying again.', 409);
+    const previous = table.fields.find(field => field.id === fieldId);
+    if (!previous) throw new ServiceError('FIELD_NOT_FOUND', 'This field does not exist.', 404);
+    const config = schemaObject(item['field']);
+    const field = parseField(config, { id: previous.id, name: previous.name, type: previous.type });
+    return { version, field, convert: (value: CellValue) => convertValue(previous, field, value) };
+  }
+
+  previewConversion(id: string, fieldId: string, input: unknown): ConversionPreview {
+    const { version, field, convert } = this.conversion(id, fieldId, input);
+    return this.store.previewConversion(id, version, field, convert);
+  }
+
+  applyConversion(id: string, fieldId: string, input: unknown): Table {
+    const { version, field, convert } = this.conversion(id, fieldId, input);
+    return this.store.applyConversion(id, version, field, convert);
   }
 
   readPage(offset: number, limit: number, id = tableId): RecordPage {

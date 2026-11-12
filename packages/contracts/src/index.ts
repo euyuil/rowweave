@@ -56,6 +56,22 @@ export interface FieldCreate extends SchemaWrite {
 
 export type FieldUpdate = SchemaWrite & Partial<Omit<FieldCreate, 'expectedVersion'>>;
 
+export interface FieldConversion extends SchemaWrite {
+  field: Omit<FieldCreate, 'expectedVersion'>;
+}
+
+export interface ConversionPreview {
+  tableId: string;
+  fieldId: string;
+  field: Field;
+  schemaVersion: number;
+  total: number;
+  changed: number;
+  invalid: number;
+  samples: Array<{ recordId: string; before: CellValue; after: CellValue }>;
+  issues: Array<{ recordId: string; message: string }>;
+}
+
 export interface RowRecord {
   id: string;
   version: number;

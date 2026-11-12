@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { tableId, type BatchResult, type CellValue, type DeleteResult, type Field, type RecordDelete, type RecordPage, type RecordUpdate, type RowRecord, type Table } from '../../contracts/src/index.js';
+import { tableId, type BatchResult, type CellValue, type ConversionPreview, type DeleteResult, type Field, type RecordDelete, type RecordPage, type RecordUpdate, type RowRecord, type Table } from '../../contracts/src/index.js';
 import { ServiceError, type RecordStore } from '../../core/src/record-service.js';
 import { migrate } from './migrations.js';
 
@@ -51,8 +51,8 @@ export class SqliteRecordStore implements RecordStore {
     }
   }
 
-  private transaction<T>(operation: () => T): T {
-    this.db.exec('BEGIN IMMEDIATE');
+  private transaction<T>(operation: () => T, mode: 'IMMEDIATE' | 'DEFERRED' = 'IMMEDIATE'): T {
+    this.db.exec(`BEGIN ${mode}`);
     try {
       const result = operation();
       this.db.exec('COMMIT');
@@ -157,6 +157,53 @@ export class SqliteRecordStore implements RecordStore {
     this.transaction(() => {
       this.checkSchema(id, expectedVersion);
       this.db.prepare('DELETE FROM tables WHERE id = ?').run(id);
+    });
+  }
+
+  private scanConversion(table: Table, field: Field, convert: (value: CellValue) => CellValue, apply: boolean): ConversionPreview {
+    const preview: ConversionPreview = { tableId: table.id, fieldId: field.id, field, schemaVersion: table.version,
+      total: 0, changed: 0, invalid: 0, samples: [], issues: [] };
+    const update = this.db.prepare('UPDATE records SET values_json = ?, version = version + 1 WHERE id = ?');
+    const rows = this.db.prepare('SELECT id, version, values_json FROM records WHERE table_id = ? ORDER BY position');
+    for (const stored of rows.iterate(table.id)) {
+      const record = this.decode(stored as unknown as StoredRecord);
+      const before = record.values[field.id] ?? null;
+      preview.total++;
+      let after: CellValue;
+      try { after = convert(before); }
+      catch (error) {
+        if (!(error instanceof ServiceError)) throw error;
+        preview.invalid++;
+        if (preview.issues.length < 20) preview.issues.push({ recordId: record.id, message: error.message });
+        continue;
+      }
+      if (JSON.stringify(before) === JSON.stringify(after)) continue;
+      preview.changed++;
+      if (preview.samples.length < 10) preview.samples.push({ recordId: record.id, before, after });
+      if (apply) update.run(JSON.stringify({ ...record.values, [field.id]: after }), record.id);
+    }
+    return preview;
+  }
+
+  previewConversion(id: string, version: number, field: Field, convert: (value: CellValue) => CellValue): ConversionPreview {
+    return this.transaction(() => {
+      this.checkSchema(id, version);
+      return this.scanConversion(this.getTable(id), field, convert, false);
+    }, 'DEFERRED');
+  }
+
+  applyConversion(id: string, version: number, field: Field, convert: (value: CellValue) => CellValue): Table {
+    return this.transaction(() => {
+      this.checkSchema(id, version);
+      const table = this.getTable(id);
+      const result = this.scanConversion(table, field, convert, true);
+      if (result.invalid) {
+        throw new ServiceError('CONVERSION_FAILED', `${result.invalid} records could not be converted. Record ${result.issues[0]!.recordId}: ${result.issues[0]!.message}`);
+      }
+      this.db.prepare('UPDATE fields SET definition_json = ? WHERE id = ? AND table_id = ?')
+        .run(JSON.stringify(field), field.id, id);
+      this.db.prepare('UPDATE tables SET version = version + 1 WHERE id = ?').run(id);
+      return this.getTable(id);
     });
   }
 
