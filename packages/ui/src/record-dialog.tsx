@@ -41,11 +41,11 @@ export function RecordDialog({ action, table, api, setDirty, onClose, onSaved }:
         if (deleting) {
           await api.deleteRecords(table.id, action.records.map(record => ({ id: record.id, expectedVersion: record.version })));
         } else {
-          const parsed = Object.fromEntries(table.fields.map(field => [field.id, fromFormValue(field, values[field.id]!)]));
+          const parsed = Object.fromEntries(table.fields.filter(field => field.type !== 'lookup').map(field => [field.id, fromFormValue(field, values[field.id]!)]));
           if (action.kind === 'edit') {
             const changed = Object.fromEntries(Object.entries(parsed).filter(([id, value]) => !sameValue(value, original!.values[id] ?? null)));
             if (Object.keys(changed).length) await api.updateRecords(table.id, [{ id: original!.id, expectedVersion: original!.version, values: changed }]);
-          } else await api.createRecords(table.id, [{ values: { ...original?.values, ...parsed } }]);
+          } else await api.createRecords(table.id, [{ values: parsed }]);
         }
         setDirty(false);
         onSaved();

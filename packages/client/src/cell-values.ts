@@ -6,6 +6,11 @@ const numberFormats = new WeakMap<Field, Intl.NumberFormat>();
 export const cellText = fieldText;
 
 export function cellDisplay(field: Field, value: CellValue | undefined): string {
+  if (field.type === 'lookup') {
+    const target = field.lookupResult!;
+    const scalar = target.type === 'multiSelect' ? { ...target, type: 'singleSelect' as const } : target;
+    return ((value ?? []) as CellValue[]).map(value => cellDisplay(scalar, value)).join(', ');
+  }
   if (field.type === 'number' && typeof value === 'number') {
     let formatter = numberFormats.get(field);
     if (!formatter) {

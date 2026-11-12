@@ -2,6 +2,7 @@ import { maxTextLength, type CellValue, type Field } from '../../contracts/src/i
 import { ServiceError } from './errors.js';
 
 export function validateValue(field: Field, input: unknown): CellValue {
+  if (field.type === 'lookup') throw new ServiceError('READ_ONLY_FIELD', `${field.name}: lookup values are read-only.`);
   const invalid = (reason: string): never => { throw new ServiceError('INVALID_VALUE', `${field.name} (${field.id}): ${reason}`); };
   if (input === null) {
     if (field.required) return invalid('a value is required.');

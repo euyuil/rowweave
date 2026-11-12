@@ -5,7 +5,7 @@ export type FormValue = string | string[] | null;
 
 export function toFormValue(field: Field, value: CellValue | undefined): FormValue {
   if (value === null || value === undefined) return null;
-  if (Array.isArray(value)) return value;
+  if (Array.isArray(value)) return field.type === 'lookup' ? JSON.stringify(value) : value as string[];
   if (field.type === 'datetime') return String(value).replace(/Z$/, '');
   return String(value);
 }

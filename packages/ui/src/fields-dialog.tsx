@@ -51,7 +51,7 @@ export function FieldsDialog({ initial, api, setDirty, onClose, onSaved }: {
         <button disabled={busy || index === 0} aria-label={`Move ${field.name} up`} onClick={() => move(index, -1)}>↑</button>
         <button disabled={busy || index === table.fields.length - 1} aria-label={`Move ${field.name} down`} onClick={() => move(index, 1)}>↓</button>
         <button disabled={busy} onClick={() => setEditing(field)}>Configure</button>
-        <button disabled={busy || field.id === table.primaryFieldId || field.type === 'relation'} onClick={() => void write(() => api.updateTable(table.id, {
+        <button disabled={busy || field.id === table.primaryFieldId || ['relation', 'lookup'].includes(field.type)} onClick={() => void write(() => api.updateTable(table.id, {
           expectedVersion: table.version, primaryFieldId: field.id,
         }))}>Make primary</button>
         <button disabled={busy || field.id === table.primaryFieldId} onClick={() => { setError(undefined); setRemoving(field); }}>Delete</button>

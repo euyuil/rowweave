@@ -9,6 +9,7 @@ import { defaultView, reconcileView } from '../../core/src/grid-views.js';
 import { migrate } from './migrations.js';
 import { querySql } from './query-sql.js';
 import { Relations } from './relations.js';
+import { Lookups } from './lookups.js';
 
 export interface SeedOptions {
   rows: number;
@@ -47,6 +48,7 @@ const selectTables = `SELECT t.*,
 export class SqliteRecordStore implements RecordStore {
   private readonly db: DatabaseSync;
   private readonly relations: Relations;
+  private readonly lookups: Lookups;
 
   constructor(path: string, seed: SeedOptions | null = null) {
     if (seed && (!Number.isSafeInteger(seed.rows) || seed.rows < 1 || seed.rows > 100_000 ||
@@ -56,6 +58,7 @@ export class SqliteRecordStore implements RecordStore {
     if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
     this.db = new DatabaseSync(path);
     this.relations = new Relations(this.db);
+    this.lookups = new Lookups(this.db);
     try {
       this.db.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;');
       const fresh = migrate(this.db);
@@ -82,7 +85,8 @@ export class SqliteRecordStore implements RecordStore {
     const write = this.db.prepare(`INSERT INTO fields VALUES (?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET position = excluded.position, definition_json = excluded.definition_json`);
     for (const [position, field] of table.fields.entries()) {
-      write.run(field.id, table.id, position, JSON.stringify(field));
+      const { lookupResult: _result, ...stored } = field;
+      write.run(field.id, table.id, position, JSON.stringify(stored));
     }
   }
 
@@ -112,8 +116,8 @@ export class SqliteRecordStore implements RecordStore {
   }
 
   private decodeTable(row: StoredTable): Table {
-    return { id: row.id, name: row.name, version: row.version, revision: row.revision, primaryFieldId: row.primary_field_id,
-      fields: JSON.parse(row.fields_json) as Field[], total: row.total };
+    return this.lookups.resolve({ id: row.id, name: row.name, version: row.version, revision: row.revision, primaryFieldId: row.primary_field_id,
+      fields: JSON.parse(row.fields_json) as Field[], total: row.total });
   }
 
   listTables(): Table[] {
@@ -152,6 +156,7 @@ export class SqliteRecordStore implements RecordStore {
       }
       const before = this.getTable(table.id);
       this.relations.validateSchema(table, before);
+      this.lookups.validateSchema(table, before);
       if (validateRecord) {
         for (const row of this.db.prepare('SELECT id, version, values_json FROM records WHERE table_id = ?').iterate(table.id)) {
           validateRecord(this.decode(row as unknown as StoredRecord));
@@ -166,10 +171,12 @@ export class SqliteRecordStore implements RecordStore {
       }
       this.insertFields(table);
       this.relations.syncFields(table);
+      this.lookups.sync(table);
       this.syncViews(table);
       this.db.prepare('UPDATE tables SET name = ?, primary_field_id = ?, version = version + 1 WHERE id = ?')
         .run(table.name, table.primaryFieldId, table.id);
       this.relations.bumpRevision(table.id);
+      this.syncLookupViews(table, true);
       return this.getTable(table.id);
     });
   }
@@ -177,6 +184,7 @@ export class SqliteRecordStore implements RecordStore {
   deleteTable(id: string, expectedVersion: number): void {
     this.transaction(() => {
       this.checkSchema(id, expectedVersion);
+      this.lookups.deleteTable(id);
       this.relations.deleteTable(id);
       this.db.prepare('DELETE FROM tables WHERE id = ?').run(id);
     });
@@ -212,7 +220,9 @@ export class SqliteRecordStore implements RecordStore {
       this.checkSchema(id, version);
       const table = this.getTable(id);
       const next = { ...table, fields: table.fields.map(previous => previous.id === field.id ? field : previous) };
+      this.lookups.validateSchema(next, table);
       for (const view of this.listViews(id)) reconcileView(view, next);
+      this.syncLookupViews(next, false);
       return this.scanConversion(table, field, convert, false);
     }, 'DEFERRED');
   }
@@ -221,7 +231,9 @@ export class SqliteRecordStore implements RecordStore {
     return this.transaction(() => {
       this.checkSchema(id, version);
       const table = this.getTable(id);
-      this.syncViews({ ...table, fields: table.fields.map(previous => previous.id === field.id ? field : previous) });
+      const next = { ...table, fields: table.fields.map(previous => previous.id === field.id ? field : previous) };
+      this.lookups.validateSchema(next, table);
+      this.syncViews(next);
       const result = this.scanConversion(table, field, convert, true);
       if (result.invalid) {
         throw new ServiceError('CONVERSION_FAILED', `${result.invalid} records could not be converted. Record ${result.issues[0]!.recordId}: ${result.issues[0]!.message}`);
@@ -230,6 +242,7 @@ export class SqliteRecordStore implements RecordStore {
         .run(JSON.stringify(field), field.id, id);
       this.db.prepare('UPDATE tables SET version = version + 1 WHERE id = ?').run(id);
       this.relations.bumpRevision(id);
+      this.syncLookupViews(next, true);
       return this.getTable(id);
     });
   }
@@ -238,7 +251,8 @@ export class SqliteRecordStore implements RecordStore {
     return this.transaction(() => {
       const rows = this.db.prepare(`SELECT id, version, values_json FROM records WHERE table_id = ?
         ORDER BY position LIMIT ? OFFSET ?`).all(id, limit, offset) as unknown as StoredRecord[];
-      return { offset, records: this.relations.hydrate(this.getTable(id), rows.map(row => this.decode(row))) };
+      const table = this.getTable(id);
+      return { offset, records: this.lookups.hydrate(table, this.relations.hydrate(table, rows.map(row => this.decode(row)))) };
     }, 'DEFERRED');
   }
 
@@ -263,7 +277,8 @@ export class SqliteRecordStore implements RecordStore {
         ORDER BY ${sql.order} LIMIT :limit OFFSET :offset`)
         .all({ ...sql.parameters, ':limit': query.limit, ':offset': query.offset }) as unknown as StoredRecord[];
       const output = query.fields ? { ...current, fields: current.fields.filter(field => query.fields!.includes(field.id)) } : current;
-      const records = this.relations.hydrate(output, rows.map(row => this.decode(row))).map(record => {
+      const hydrated = this.lookups.hydrate(current, this.relations.hydrate(output, rows.map(row => this.decode(row))), query.fields);
+      const records = hydrated.map(record => {
         if (query.fields) {
           record.values = Object.fromEntries(query.fields.map(id => [id, record.values[id] ?? null]));
         }
@@ -302,6 +317,20 @@ export class SqliteRecordStore implements RecordStore {
     }
   }
 
+  private syncLookupViews(changed: Table, write: boolean): void {
+    const definitions = new Map(changed.fields.map(field => [field.id, field]));
+    for (const id of this.lookups.dependents(changed.id)) {
+      const source = id === changed.id ? changed : this.getTable(id);
+      source.fields = source.fields.map(field => field.type === 'lookup' && definitions.has(field.lookup!.fieldId)
+        ? { ...field, lookupResult: definitions.get(field.lookup!.fieldId)! } : field);
+      if (!write) { for (const view of this.listViews(id)) reconcileView(view, source); }
+      else {
+        this.syncViews(source);
+        if (id !== changed.id) this.db.prepare('UPDATE tables SET version = version + 1 WHERE id = ?').run(id);
+      }
+    }
+  }
+
   saveView(table: Table, view: GridView, expectedVersion?: number): GridView {
     return this.transaction(() => {
       this.checkSchema(table.id, table.version);
@@ -328,7 +357,10 @@ export class SqliteRecordStore implements RecordStore {
   }
 
   getRecord(id: string, recordId: string): RowRecord {
-    return this.transaction(() => this.relations.hydrate(this.getTable(id), [this.readRecord(id, recordId)])[0]!, 'DEFERRED');
+    return this.transaction(() => {
+      const table = this.getTable(id);
+      return this.lookups.hydrate(table, this.relations.hydrate(table, [this.readRecord(id, recordId)]))[0]!;
+    }, 'DEFERRED');
   }
 
   private readRecord(id: string, recordId: string): RowRecord {
@@ -351,7 +383,7 @@ export class SqliteRecordStore implements RecordStore {
         return { id, version: 1, values };
       });
       this.relations.bumpRevision(table.id);
-      return { records: this.relations.hydrate(table, records) };
+      return { records: this.lookups.hydrate(table, this.relations.hydrate(table, records)) };
     });
   }
 
@@ -391,7 +423,7 @@ export class SqliteRecordStore implements RecordStore {
         return record;
       });
       this.relations.bumpRevision(id);
-      return { records: this.relations.hydrate(table, records) };
+      return { records: this.lookups.hydrate(table, this.relations.hydrate(table, records)) };
     });
   }
 
