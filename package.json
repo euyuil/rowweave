@@ -18,6 +18,7 @@
     "cli": "node dist/apps/cli/src/main.js",
     "test": "npm run build && node --test \"dist/**/tests/*.test.js\"",
     "start:server": "node dist/apps/server/src/cli.js",
+    "workspace:file": "node dist/apps/server/src/workspace-file.js",
     "setup:desktop": "install-electron",
     "start": "npm run build && npm run setup:desktop && electron .",
     "test:desktop": "npm run build && npm run setup:desktop && node apps/desktop/tests/workspace.mjs && node apps/desktop/tests/smoke.mjs",
