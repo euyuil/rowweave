@@ -13,12 +13,15 @@ import { parseClipboard } from './clipboard.js';
 import { RecordDialog, type RecordAction } from './record-dialog.js';
 import { FieldsDialog } from './fields-dialog.js';
 import { ViewDialog } from './view-dialog.js';
+import { CsvImportDialog } from './csv-import-dialog.js';
+import { CsvExportDialog } from './csv-export-dialog.js';
 import './table-app.css';
 
 export interface TableHost {
   confirmDiscard(): Promise<boolean>;
   setDirty(value: boolean): Promise<void>;
   onServiceExit(listener: () => void): () => void;
+  saveCsv(name: string, csv: string): Promise<boolean>;
 }
 
 function gridCell(record: RowRecord | undefined, field: Field | undefined, readonly: boolean, row: number): GridCell {
@@ -58,6 +61,8 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   const [formDirty, setFormDirty] = useState(false);
   const [recordAction, setRecordAction] = useState<RecordAction>();
   const [managingFields, setManagingFields] = useState(false);
+  const [csvAction, setCsvAction] = useState<'import' | 'export'>();
+  const [notice, setNotice] = useState<string>();
   const activeEditor = useRef<EditorHandle>();
   const [size, setSize] = useState({ width: 900, height: 500 });
   const [visible, setVisible] = useState({ y: 0, height: 50 });
@@ -320,11 +325,14 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     {message && <div role="alert" className="error-banner">{message}
       {model.conflicted && <span> Your edits are still here. Copy them before discarding and reloading the current records.</span>}
     </div>}
+    {notice && <div role="status" className="notice-banner"><span>{notice}</span><button onClick={() => setNotice(undefined)}>Dismiss</button></div>}
     <div className="record-toolbar">
       <button className="primary" disabled={recordActionsLocked} onClick={() => void openRecord('create')}>+ New record</button>
       <button disabled={recordActionsLocked || selectedCount !== 1} onClick={() => void openRecord('edit')}>Open record</button>
       <button disabled={recordActionsLocked || selectedCount !== 1} onClick={() => void openRecord('duplicate')}>Duplicate</button>
       <button disabled={recordActionsLocked || !selectedCount} onClick={() => void openRecord('delete')}>Delete records</button>
+      <button disabled={recordActionsLocked} onClick={() => setCsvAction('import')}>Import CSV</button>
+      <button disabled={recordActionsLocked || !view || searchComposing} onClick={() => setCsvAction('export')}>Export CSV</button>
       <span>{pending > 0 || editorDirty ? 'Save or discard grid edits to manage records.'
         : selectedCount ? `${selectedCount.toLocaleString()} selected` : 'Select a row or cell to open a record.'}</span>
     </div>
@@ -396,6 +404,14 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       <span>Enter to edit · Esc to cancel · Ctrl+C / Ctrl+V · Ctrl+S to save</span></footer>
     {recordAction && table && <RecordDialog action={recordAction} table={table} api={api} setDirty={setFormDirty}
       onClose={() => setRecordAction(undefined)} onSaved={() => { setRecordAction(undefined); void refreshAfterWrite('Records'); }} />}
+    {csvAction === 'import' && table && <CsvImportDialog initial={table} api={api} setDirty={setFormDirty}
+      onClose={() => { setCsvAction(undefined); void reload(false); }} onImported={count => {
+        setCsvAction(undefined);
+        setNotice(`Imported ${count.toLocaleString()} ${count === 1 ? 'record' : 'records'}.`);
+        void refreshAfterWrite('Imported records');
+      }} />}
+    {csvAction === 'export' && table && view && <CsvExportDialog table={table} view={view} search={search} api={api} host={host}
+      onClose={() => setCsvAction(undefined)} />}
     {managingFields && table && <FieldsDialog initial={table} api={api} setDirty={setFormDirty}
       onClose={() => setManagingFields(false)} onSaved={() => refreshAfterWrite('Schema')} />}
     {viewAction && view && table && <ViewDialog kind={viewAction} view={view} search={search} table={table} api={api} setDirty={setFormDirty}

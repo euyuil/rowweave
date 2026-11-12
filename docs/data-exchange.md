@@ -1,6 +1,16 @@
 # CSV data exchange
 
-CSV imports append records to an existing table. Configure its schema first; imports do not create fields, change existing records, or preserve source record IDs. All interfaces use the same service validation and transactions. The desktop workflow is implemented separately from these service endpoints.
+CSV imports append records to an existing table. Configure its schema first; imports do not create fields, change existing records, or preserve source record IDs. All interfaces use the same service validation and transactions.
+
+## Desktop workflow
+
+Save or discard grid edits before opening **Import CSV** or **Export CSV** in the record toolbar.
+
+For import, choose a UTF-8 CSV file, set whether its first row contains column names, then click **Preview CSV**. Match source columns to existing fields or **Skip column**. Field choices include their table position and type to distinguish duplicate names. Mapping and samples show ten columns at a time. After changing mappings, preview again; import stays disabled until the current mapping validates every row. Correct invalid data in the source file and choose it again. **Import N records** appends the validated rows and reloads the grid. A changed schema offers **Reload schema**, retaining the chosen file while resetting mappings for a new preview.
+
+For export, choose the current view (including its current search) or the entire table, then **Save CSV** and choose a destination. Canceling the save dialog writes nothing. File errors remain visible; only a completed write shows **CSV saved**. A completed temporary file replaces the chosen destination, so a failed write does not truncate an existing export. The host's file dialog and write capability are injected into the shared UI; the renderer has no filesystem access. The Electron host uses its [native save dialog](https://www.electronjs.org/docs/latest/api/dialog#dialogshowsavedialogwindow-options) and validates the IPC sender and payload.
+
+A confirmed import remains successful even if the following refresh fails. If the connection drops before the import result is known, the dialog disables another import and asks you to close it and inspect the reloaded table first. This avoids automatically duplicating a write whose response was lost. Import configuration is protected by the application's unsaved-changes close prompt; the original CSV file is never changed.
 
 ## Preview and import
 
@@ -58,4 +68,4 @@ Export reads records and computed values in one consistent SQLite snapshot, hydr
 
 Each operation supports at most 32 MiB of UTF-8 CSV, 100,000 data rows, 200 source columns, and 2,000,000 cells. Import counts the greater of the source column count and the table's writable field count per row, so unmapped defaults also count. Export counts visible output fields. Use a filtered view or fewer visible columns for larger exports. Field-level limits, including 10,000 characters for text, still apply. CSV request JSON is limited to 64 MiB to allow quoting overhead; other JSON endpoints retain their 8 MiB limit. The separate normal record-batch limit remains 2,000 records / 20,000 cells.
 
-Regression tests cover typed/Unicode/empty-value round trips, header mappings, bounded diagnostics and file limits, late-failure rollback, changed schemas/targets, view ordering/projection, authenticated HTTP access, and the shared client. These are automated service tests, not native spreadsheet verification.
+Regression tests cover typed/Unicode/empty-value round trips, header mappings, bounded diagnostics and file limits, late-failure rollback, changed schemas/targets, view ordering/projection, authenticated HTTP access, and the shared client. The offscreen desktop workflow also checks mapping pagination, UTF-8 errors, stale-schema recovery, saved files with BOMs, save cancellation/failure, failed refresh after a committed import, lost import responses, and draft guards. Native file dialogs are stubbed to isolated test paths; actual file writes are verified. These checks are not native spreadsheet verification.

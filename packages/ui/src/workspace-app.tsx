@@ -21,6 +21,7 @@ export function WorkspaceApp({ api, host }: { api: WorkspaceApi; host: TableHost
   const tableHost = useMemo<TableHost>(() => ({
     confirmDiscard: () => host.confirmDiscard(),
     onServiceExit: listener => host.onServiceExit(listener),
+    saveCsv: (name, csv) => host.saveCsv(name, csv),
     setDirty: async value => {
       dirty.current.table = value;
       await host.setDirty(value || dirty.current.form);

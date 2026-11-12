@@ -2,14 +2,12 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { createWorkspaceClient, type Connection } from '../../../packages/client/src/http-client.js';
 import { WorkspaceApp } from '../../../packages/ui/src/workspace-app.js';
+import type { TableHost } from '../../../packages/ui/src/table-app.js';
 
 declare global {
   interface Window {
-    rowweave: {
+    rowweave: TableHost & {
       connection(): Promise<Connection>;
-      confirmDiscard(): Promise<boolean>;
-      setDirty(value: boolean): Promise<void>;
-      onServiceExit(listener: () => void): () => void;
     };
   }
 }

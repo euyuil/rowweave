@@ -56,9 +56,9 @@ Each item may need more than one focused PR. Do not batch completed PRs while wa
 - [x] Relations, lookups, record picker, and record details/navigation.
   - [x] Single/multiple linked records, transactional reference constraints, primary labels, dependency-aware revisions, searchable/paged desktop picker, and linked details (SQLite/HTTP/client and offscreen desktop workflows).
   - [x] Typed read-only lookups, transactional field/view dependencies, query operators/projection/sorting, current computed values alongside retained drafts, and desktop configuration/details/duplication (77 Node tests and offscreen desktop workflows).
-- [ ] CSV import/export through service and desktop.
+- [x] CSV import/export through service and desktop.
   - [x] Service/client preview, explicit or name-based column mapping, typed/reference validation, atomic append, snapshot table/view export, and bounded file handling (88 Node regression tests; native spreadsheet verification remains deferred).
-  - [ ] Desktop file selection, mapping/preview, import feedback, and table/current-view export.
+  - [x] Desktop UTF-8 file selection, paged mapping/preview, conflict and uncertain-write recovery, import feedback, and table/current-view export with completed-file replacement (89 Node tests and full offscreen desktop workflows; final native spreadsheet checks remain pending).
 - [ ] SDK, CLI, HTTP reference, and standalone/remote connection workflow.
 - [ ] MCP protocol server and agent usage Skills.
 - [ ] Harness adapter and host integration verification.

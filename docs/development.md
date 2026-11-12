@@ -144,7 +144,7 @@ Tests create and remove isolated temporary databases. No test opens a working da
 
 ## Shared client
 
-CSV service endpoints and client methods provide preview, mapped atomic import, and table/view export. See [data-exchange.md](data-exchange.md) for the request format, value semantics, limits, and regression evidence. Desktop file selection and export controls follow in a separate change.
+CSV service endpoints and client methods provide preview, mapped atomic import, and table/view export. Desktop **Import CSV** and **Export CSV** use these same operations. See [data-exchange.md](data-exchange.md) for the workflow, request format, value semantics, limits, and regression evidence.
 
 `packages/client` exposes `createWorkspaceClient(connection)` for table, field, conversion, record, query, and saved-view operations. Its `table(id)` adapter supplies the host-independent `TableModel`; `createHttpClient` still selects the existing prototype table for the current desktop entry point. Requests support cancellation and never retry writes automatically.
 
