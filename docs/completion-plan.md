@@ -45,9 +45,10 @@ Each item may need more than one focused PR. Do not batch completed PRs while wa
 - [x] Service queries, filtering, sorting, search, and consistent pagination (SQLite/HTTP regression tests, including schema/data revision changes).
 - [x] Saved grid views and persistent column configuration (versioned HTTP operations, schema reconciliation, query dependencies, and migration regression tests).
 - [x] Workspace HTTP client, query-aware bounded cache, drafts keyed by record ID, and bounded draft undo/redo (cross-query, paste, conflict, cancellation, and real HTTP workflow tests).
-- [ ] Desktop workspace navigation and schema/record management.
+- [x] Desktop workspace navigation and schema/record management.
   - [x] Empty first workspace, table navigation/create/rename/delete, and draft-safe switching (automated desktop lifecycle tests).
   - [x] Typed record forms, details, duplication, and versioned batch deletion (automated desktop validation/conflict/lifecycle tests).
+  - [x] Typed field configuration, options/defaults/constraints, primary field/order, deletion, and conversion preview/application (automated desktop schema and concurrent conversion tests).
 - [ ] Typed grid editors, draft undo/redo, views, and clipboard workflows.
 - [ ] Relations, lookups, record picker, and record details/navigation.
 - [ ] CSV import/export through service and desktop.

@@ -74,6 +74,16 @@ test('invalid typed batches and constraints cannot partially change records or s
   assert.equal(service.createRecords(table.id, [{ values: {} }]).records[0]!.values[amount.id], 3);
 });
 
+test('number precision can return to automatic formatting without changing stored values', t => {
+  const service = new RecordService(fixture(t, null).open());
+  const table = service.createTable({ name: 'Amounts' });
+  const amount = addField(service, table, { name: 'Amount', type: 'number', precision: 2 });
+  const row = service.createRecords(table.id, [{ values: { [amount.id]: 1.23456 } }]).records[0]!;
+  const updated = service.updateField(table.id, amount.id, { expectedVersion: 2, precision: null });
+  assert.equal(updated.fields.find(field => field.id === amount.id)!.precision, undefined);
+  assert.deepEqual(service.getRecord(table.id, row.id), row);
+});
+
 test('record deletion is versioned, atomic and scoped without reusing record identities', t => {
   const data = fixture(t);
   const service = new RecordService(data.open());

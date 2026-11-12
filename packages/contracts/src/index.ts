@@ -55,7 +55,7 @@ export interface FieldCreate extends SchemaWrite {
   currency?: string;
 }
 
-export type FieldUpdate = SchemaWrite & Partial<Omit<FieldCreate, 'expectedVersion'>>;
+export type FieldUpdate = SchemaWrite & Partial<Omit<FieldCreate, 'expectedVersion' | 'precision'>> & { precision?: number | null };
 
 export interface FieldConversion extends SchemaWrite {
   field: Omit<FieldCreate, 'expectedVersion'>;

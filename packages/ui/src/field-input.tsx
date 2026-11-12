@@ -32,7 +32,7 @@ export function FieldInput({ field, value, onChange, disabled = false }: {
   return <div className="form-field">
     <div className="field-label"><label htmlFor={id}>{field.name}{field.required ? ' *' : ''}{field.type === 'datetime' ? ' (UTC)' : ''}</label>
       {!field.required && <button type="button" className="clear-value" disabled={disabled || value === null}
-        aria-label={`Clear ${field.name}`} onClick={() => onChange(null)}>Clear</button>}</div>
+        aria-label={`Clear ${field.name}`} onClick={() => { onChange(null); document.getElementById(id)!.focus(); }}>Clear</button>}</div>
     {input}
     {field.type === 'number' && field.numberFormat === 'percent' && <small>Enter a fraction: 0.5 displays as 50%.</small>}
     {value === null && <small>No value</small>}
