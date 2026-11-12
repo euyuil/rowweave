@@ -260,6 +260,29 @@ export class TableModel {
     }))), new Map(records.map((record, index) => [startRow + index, record])));
   }
 
+  async clearCells(rows: readonly number[], fieldIds: readonly string[]): Promise<void> {
+    if (!rows.length || !fieldIds.length) return;
+    if (rows.length > maxBatchRecords || rows.length * fieldIds.length > maxBatchCells) {
+      throw new Error('Clear up to 20,000 cells and 2,000 rows at a time.');
+    }
+    const generation = this.generation;
+    const values = fieldIds.map(id => {
+      const field = this.fields.find(field => field.id === id)!;
+      return { fieldId: id, value: parseTextValue(field, '') };
+    });
+    const loaded = new Map<number, RowRecord>();
+    for (let index = 0; index < rows.length;) {
+      const start = rows[index]!;
+      let count = 1;
+      while (rows[index + count] === start + count) count++;
+      const records = await this.readRange(start, count);
+      records.forEach((record, offset) => loaded.set(start + offset, record));
+      index += count;
+    }
+    if (generation !== this.generation) throw new Error('The query changed before clearing completed. Select the cells again.');
+    this.stage(rows.flatMap(row => values.map(value => ({ row, ...value }))), loaded);
+  }
+
   private resetPages(): void {
     this.generation++;
     for (const request of this.requests.values()) request.controller.abort();
