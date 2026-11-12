@@ -70,6 +70,7 @@ Each item may need more than one focused PR. Do not batch completed PRs while wa
   - [x] Portable RowWeave usage Skill with concrete MCP/CLI recipes, bounded reads, conflict/uncertain-write recovery, installation guidance and validated metadata.
 - [x] Harness adapter and host integration verification (installable Web-profile bundle, official module/slot/layout/renderer integration, typed workspace editing, draft-safe navigation, browser CSV download, failed-connection retention, and disposal/reload tests).
 - [ ] Complete cross-interface regression, migration/backup verification, production performance, and packaging.
+  - [x] Mixed-type pressure datasets and expanded production benchmarks (100 input samples per launch, reproducible view queries, raw outliers; [initial baseline](product-performance.md) identifies large-table paste/query work still required).
 - [ ] Final native-input checks and invitation for user end-to-end acceptance.
 
 ## Acceptance scenarios
