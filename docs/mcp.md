@@ -76,6 +76,8 @@ Both table resource templates are discoverable; resource listing includes curren
 
 ## Example workflow and recovery
 
+Install the optional [RowWeave usage Skill](agent-skills.md) to provide these conventions and concrete task recipes to a supporting agent host.
+
 1. List tables, read the chosen schema, and map requested names to stable IDs. Ask for clarification if names are ambiguous.
 2. Query a small page with only needed fields. Use nested filters/sorting in the service instead of downloading a table. Continue with the returned revision in `expectedRevision`.
 3. Submit typed values: JSON numbers/booleans, ISO dates/timestamps, option IDs for selects, record ID arrays for links. Omit computed lookups from writes. Preserve null versus empty text.
@@ -86,7 +88,7 @@ Tool failures use `isError: true` and JSON `{ "error": { "code", "message", "rec
 
 On a conflict, reread affected objects, reconcile the user's intended changes, and submit a newly reviewed write with current versions. On `CONNECTION_FAILED`, a mutation **may already have committed**: inspect current saved state before deciding whether to submit it again. The adapter never retries writes, and it provides no exactly-once/idempotency-key guarantee. Authentication failures require correcting connection settings, not repeatedly submitting data.
 
-Service limits still apply: 500 records per page, 2,000 records/20,000 cells per write batch, 10,000 UTF-16 code units per text value, and 32 MiB CSV. Incoming stdio messages are limited to 64 MiB including JSON encoding. Clients have their own response/context limits (the official client's default read buffer is 10 MiB). Use small query pages/projections and the [CLI](cli.md) for large CSV exchange instead of raising model context limits or passing local filesystem paths to MCP tools. No arbitrary file-access tool is provided.
+Service limits still apply: 500 records per page, 2,000 records/20,000 cells per write batch, 10,000 UTF-16 code units per text value, and 32 MiB CSV. Incoming stdio messages are limited to 64 MiB including JSON encoding. Clients have their own response/context limits (the official client's default read buffer is 10 MiB). Use small query pages/projections and the [CLI](../apps/cli/README.md) for large CSV exchange instead of raising model context limits or passing local filesystem paths to MCP tools. No arbitrary file-access tool is provided.
 
 ## Verification
 
