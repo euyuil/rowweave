@@ -10,7 +10,9 @@
   "packageManager": "npm@11.19.1",
   "scripts": {
     "check": "tsc --noEmit",
-    "build": "tsc && node scripts/build-renderer.mjs",
+    "build": "tsc && node scripts/build-renderer.mjs && npm run build:sdk",
+    "build:sdk": "node scripts/build-sdk.mjs",
+    "package:sdk": "npm run build:sdk && node scripts/package-sdk.mjs",
     "test": "npm run build && node --test \"dist/**/tests/*.test.js\"",
     "start:server": "node dist/apps/server/src/cli.js",
     "setup:desktop": "install-electron",

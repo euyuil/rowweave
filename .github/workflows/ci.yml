@@ -20,12 +20,21 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm test
+      - run: npm run package:sdk
+        if: runner.os == 'Linux'
       - run: npm run test:desktop
         if: runner.os == 'Windows'
       - run: npm run package:win
         if: runner.os == 'Windows'
       - run: npm run test:packaged
         if: runner.os == 'Windows'
+      - uses: actions/upload-artifact@v4
+        if: success() && runner.os == 'Linux'
+        with:
+          name: rowweave-typescript-sdk
+          path: release/sdk/*.tgz
+          if-no-files-found: error
+          retention-days: 14
       - uses: actions/upload-artifact@v4
         if: always() && runner.os == 'Windows'
         with:

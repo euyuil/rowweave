@@ -60,6 +60,8 @@ Each item may need more than one focused PR. Do not batch completed PRs while wa
   - [x] Service/client preview, explicit or name-based column mapping, typed/reference validation, atomic append, snapshot table/view export, and bounded file handling (88 Node regression tests; native spreadsheet verification remains deferred).
   - [x] Desktop UTF-8 file selection, paged mapping/preview, conflict and uncertain-write recovery, import feedback, and table/current-view export with completed-file replacement (89 Node tests and full offscreen desktop workflows; final native spreadsheet checks remain pending).
 - [ ] SDK, CLI, HTTP reference, and standalone/remote connection workflow.
+  - [x] Consumable ESM TypeScript SDK with complete declarations and HTTP API reference (90 Node tests, including offline archive installation and a real-service workflow from outside the repository).
+  - [ ] Machine-readable CLI, standalone/remote desktop connection settings, and backup/restore procedures.
 - [ ] MCP protocol server and agent usage Skills.
 - [ ] Harness adapter and host integration verification.
 - [ ] Complete cross-interface regression, migration/backup verification, production performance, and packaging.
