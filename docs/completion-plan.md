@@ -39,7 +39,7 @@ The comparison with 钉钉 AI 表格 and 飞书多维表格 concerns schema flex
 Each item may need more than one focused PR. Do not batch completed PRs while waiting for the whole release.
 
 - [x] Prototype: bounded grid, persistence, editing, packaging, and baseline measurements ([validation.md](validation.md)).
-- [ ] Multi-table storage migration, schema contracts, and table/field operations.
+- [x] Multi-table storage migration, schema contracts, and text table/field operations (SQLite/HTTP regression tests; typed configuration and desktop workflows follow below).
 - [ ] Typed validation, record creation/deletion, defaults, and schema conversion.
 - [ ] Service queries, saved views, filtering, sorting, and search.
 - [ ] Desktop workspace navigation and schema/record management.

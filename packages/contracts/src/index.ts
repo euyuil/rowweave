@@ -7,8 +7,33 @@ export interface Field {
 export interface Table {
   id: string;
   name: string;
+  version: number;
+  primaryFieldId: string;
   fields: Field[];
   total: number;
+}
+
+export interface TableCreate {
+  name: string;
+}
+
+export interface SchemaWrite {
+  expectedVersion: number;
+}
+
+export interface TableUpdate extends SchemaWrite {
+  name?: string;
+  primaryFieldId?: string;
+  fieldOrder?: string[];
+}
+
+export interface FieldCreate extends SchemaWrite {
+  name: string;
+  type: 'text';
+}
+
+export interface FieldUpdate extends SchemaWrite {
+  name: string;
 }
 
 export interface RowRecord {
@@ -42,3 +67,4 @@ export interface BatchResult {
 export const maxBatchRecords = 2_000;
 export const maxBatchCells = 20_000;
 export const maxTextLength = 10_000;
+export const maxFields = 200;
