@@ -87,6 +87,25 @@
 .rowweave-app .drawer-dialog .relation-input { min-width: 0; }
 .rowweave-app .drawer-dialog .dialog-actions { bottom: -24px; margin: auto -24px -24px; padding: 16px 24px; flex-wrap: wrap; border-top: 1px solid #e5eaf1; }
 .rowweave-app .record-save-status { flex: 1; align-self: center; font-size: 12px; color: #69768b; }
+.rowweave-app .drawer-body > form[hidden] { display: none; }
+.rowweave-app .record-sections { display: flex; gap: 8px; border-bottom: 1px solid #e5eaf1; margin-bottom: 16px; padding: 12px 0; position: sticky; top: -18px; background: #fff; z-index: 2; }
+.rowweave-app .record-sections button[aria-pressed="true"] { background: #edf3ff; border-color: #96b7ed; color: #234c88; }
+.rowweave-app .record-history { min-width: 0; }
+.rowweave-app .history-toolbar, .rowweave-app .history-pagination, .rowweave-app .history-restore-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+.rowweave-app .history-toolbar p { font-weight: 600; margin: 0; }
+.rowweave-app .history-list { list-style: none; margin: 14px 0; padding: 0; display: grid; gap: 5px; }
+.rowweave-app .history-list button { display: flex; width: 100%; justify-content: space-between; gap: 12px; text-align: left; padding: 9px 12px; }
+.rowweave-app .history-list button[aria-pressed="true"] { background: #edf3ff; border-color: #96b7ed; }
+.rowweave-app .history-list time { font-size: 12px; color: #69768b; }
+.rowweave-app .history-pagination { margin-bottom: 20px; }
+.rowweave-app .history-comparison { max-width: 100%; overflow-x: auto; margin: 12px 0; }
+.rowweave-app .history-comparison table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 12px; }
+.rowweave-app .history-comparison th, .rowweave-app .history-comparison td { text-align: left; vertical-align: top; border: 1px solid #e5eaf1; padding: 9px; overflow-wrap: anywhere; }
+.rowweave-app .history-comparison th { background: #f7f9fc; font-weight: 500; }
+.rowweave-app .history-comparison pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 160px; overflow-y: auto; font: inherit; }
+.rowweave-app .history-confirmation { margin-top: 18px; padding: 14px; border: 1px solid #96b7ed; border-radius: 8px; background: #f7faff; }
+.rowweave-app .history-confirmation h3 { margin-top: 0; }
+.rowweave-app .history-draft-note { padding: 10px; border-radius: 6px; background: #fff5d9; color: #654c19; font-size: 13px; }
 .rowweave-app .discard-confirmation { padding: 12px; border: 1px solid #e6c896; border-radius: 6px; background: #fff8eb; }
 .rowweave-app .discard-confirmation p { margin: 0 0 12px; }
 .rowweave-app .discard-confirmation > div { display: flex; gap: 8px; }
