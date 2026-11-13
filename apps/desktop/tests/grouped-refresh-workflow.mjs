@@ -68,17 +68,17 @@ export async function verifyGroupedRefresh(page) {
   const held = new Promise(resolve => { release = resolve; });
   const responseReady = new Promise(resolve => { arrived = resolve; });
   const settled = new Promise(resolve => { finished = resolve; });
-  const slowSummary = async route => {
+  const slowGroups = async route => {
     if (!intercept) return route.continue(); intercept = false;
     try { const response = await route.fetch(); arrived(); await held; await route.fulfill({ response }); }
     finally { finished(); }
   };
-  await page.route('**' + root + '/summary', slowSummary);
+  await page.route('**' + root + '/groups/query', slowGroups);
   try {
-    await update(records[503], { [name]: 'Remote Gamma' }); await waitForResponse(responseReady, 'group summary');
+    await update(records[503], { [name]: 'Remote Gamma' }); await waitForResponse(responseReady, 'group layout');
     await page.keyboard.press('Enter'); await editor.fill('保留分组输入');
     await editor.dispatchEvent('compositionstart');
-    release(); await waitForResponse(settled, 'released group summary');
+    release(); await waitForResponse(settled, 'released group layout');
     await page.waitForRequest(request => request.url().endsWith('/workspace/state') && request.postDataJSON()?.viewId === view.id);
     assert.equal(await editor.inputValue(), '保留分组输入');
     assert.equal(await editor.evaluate(element => element === document.activeElement), true);
@@ -89,8 +89,8 @@ export async function verifyGroupedRefresh(page) {
     await waitCell(5, 'Remote Gamma');
   } finally {
     release();
-    try { if (!intercept) await waitForResponse(settled, 'group summary cleanup'); }
-    finally { await page.unroute('**' + root + '/summary', slowSummary); }
+    try { if (!intercept) await waitForResponse(settled, 'group layout cleanup'); }
+    finally { await page.unroute('**' + root + '/groups/query', slowGroups); }
   }
   table = await call(root);
   table = await call(root + '/fields/' + status, 'PATCH', { expectedVersion: table.version,
@@ -105,16 +105,16 @@ export async function verifyGroupedRefresh(page) {
     query: { filter: { conjunction: 'and', conditions: [{ fieldId: status, operator: 'neq', value: 'planned' }] } } });
   await waitCell(0, '▸ Backlog · 0 records'); await waitCell(2, 'Beta');
   let outage = true;
-  const failedSummary = route => outage ? route.fulfill({ status: 503, contentType: 'application/json',
-    body: JSON.stringify({ error: { code: 'SUMMARY_UNAVAILABLE', message: 'Synthetic group outage' } }) }) : route.continue();
-  await page.route('**' + root + '/summary', failedSummary);
+  const failedGroups = route => outage ? route.fulfill({ status: 503, contentType: 'application/json',
+    body: JSON.stringify({ error: { code: 'GROUPS_UNAVAILABLE', message: 'Synthetic group outage' } }) }) : route.continue();
+  await page.route('**' + root + '/groups/query', failedGroups);
   try {
     await update(records[502], { [status]: 'done' });
     await page.getByText('Could not check for updates: Synthetic group outage', { exact: true }).waitFor();
     assert.equal(await cellText(1), '▾ Doing · 1 record'); assert.equal(await cellText(2), 'Beta');
     assert.equal(await page.evaluate(() => document.querySelector('canvas') === window.groupRefreshCanvas), true);
     outage = false; await waitCell(1, '▾ Doing · 0 records'); await waitCell(2, '▾ Done · 4 records');
-  } finally { await page.unroute('**' + root + '/summary', failedSummary); }
+  } finally { await page.unroute('**' + root + '/groups/query', failedGroups); }
   await page.evaluate(() => { delete window.groupRefreshCanvas; });
   await page.getByRole('button', { name: 'Delete table', exact: true }).click();
   await dialog.getByRole('button', { name: 'Delete table', exact: true }).click(); await dialog.waitFor({ state: 'detached' });

@@ -90,7 +90,7 @@ test('format-17 migration preserves history without inventing old receipts and n
   migrated.updateBatch([{ id: row.id, expectedVersion: 1, values: { [table.primaryFieldId]: 'New value' } }], table.id);
   const batch = migrated.recordBatches(table.id, {}).batches[0]!;
   const backup = join(dirname(data.path), 'backup.sqlite'), restoredPath = join(dirname(data.path), 'restored.sqlite');
-  await backupWorkspace(data.path, backup); assert.equal((await restoreWorkspace(backup, restoredPath)).version, 28);
+  await backupWorkspace(data.path, backup); assert.equal((await restoreWorkspace(backup, restoredPath)).version, 29);
   const restoredStore = new SqliteRecordStore(restoredPath);
   try {
     const restored = new RecordService(restoredStore);

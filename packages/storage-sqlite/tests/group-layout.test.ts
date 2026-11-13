@@ -157,9 +157,10 @@ test('calculated and linked scalar groups agree with record pages and follow dep
   const created = table.fields[5]!.id;
   const records = service.createRecords(table.id, [...linked.map(row => [row.id]), []].map(ids => ({ values: { [link]: ids } }))).records;
   for (const groupBy of [sum, double, serial, created]) {
-    const layout = service.queryGroups(table.id, { groupBy });
+    const view = service.createView(table.id, { name: 'By ' + groupBy, groupBy });
+    const layout = service.queryGroups(table.id, { viewId: view.id });
     for (const group of layout.groups.filter(group => group.count)) {
-      const page = service.queryRecords(table.id, { groupBy, offset: group.recordOffset, limit: group.count, fields: [groupBy],
+      const page = service.queryView(table.id, view.id, { offset: group.recordOffset, limit: group.count, fields: [groupBy],
         expectedRevision: layout.revision });
       assert.deepEqual(page.records.map(row => row.values[groupBy]), Array(group.count).fill(group.key));
     }

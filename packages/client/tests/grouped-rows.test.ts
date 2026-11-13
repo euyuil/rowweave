@@ -1,45 +1,43 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import type { Field, RecordSummary } from '../../contracts/src/index.js';
-import { GroupedRows } from '../src/grouped-rows.js';
+import type { Field, GroupLayout } from '../../contracts/src/index.js';
+import { GroupRows } from '../src/group-rows.js';
 import { fixture } from '../../storage-sqlite/tests/helpers.js';
 import { RecordService } from '../../core/src/record-service.js';
 import { TableModel } from '../src/table-model.js';
 
-test('group row mapping skips collapsed records and headers without materializing the dataset', () => {
+test('windowed group mapping keeps million-row offsets without materializing records', () => {
   const field: Field = { id: 'status', name: 'Status', type: 'singleSelect', required: false,
     options: [{ id: 'first', name: 'First' }, { id: 'second', name: 'Second' }, { id: 'empty', name: 'Empty' }] };
-  const summary: RecordSummary = { totals: { count: 1000004, values: [] }, revision: 1, schemaVersion: 1, groupCount: 3, offset: 0,
-    groups: [{ key: 'second', label: 'Second', count: 3, values: [] }, { key: null, label: '', count: 1, values: [] },
-      { key: 'first', label: 'First', count: 1000000, values: [] }] };
-  const expanded = new GroupedRows(field, summary, new Set());
-  assert.equal(expanded.rowCount, 1000008);
-  assert.equal(expanded.at(0)?.kind, 'group');
-  assert.deepEqual(expanded.at(1000000), { kind: 'record', index: 999999 });
-  assert.equal(expanded.at(1000001)?.kind, 'group');
-  assert.deepEqual(expanded.pasteIndices(1000000, 3), [999999, 1000000, 1000001]);
-  const collapsed = new GroupedRows(field, summary, new Set(['"first"']));
-  assert.equal(collapsed.rowCount, 8);
-  assert.deepEqual(collapsed.indices(0, 8), [1000000, 1000001, 1000002, 1000003]);
-  assert.equal(collapsed.count(0, 8), 4);
-  assert.deepEqual(collapsed.at(2), { kind: 'record', index: 1000000 });
-  assert.equal(expanded.position(999999), 1000000);
-  assert.equal(collapsed.position(999999), undefined);
-  assert.equal(collapsed.position(1000000), 2);
-  assert.equal(collapsed.position(1000003), 7);
-  assert.equal(collapsed.position(1000004), undefined);
-  assert.equal(collapsed.position(-1), undefined);
-  assert.deepEqual(collapsed.pasteIndices(4, 2), [1000002, 1000003]);
-  assert.throws(() => collapsed.pasteIndices(0, 1), /headings/);
-  assert.throws(() => collapsed.pasteIndices(7, 2), /expanded groups/);
-  assert.equal(collapsed.at(8), undefined);
-  assert.equal(new GroupedRows(field, summary, new Set(['"first"', '"second"', 'null'])).count(0, 8), 0);
+  const layout: GroupLayout = { revision: 1, schemaVersion: 1, totalRecords: 1000004, totalGroups: 4,
+    totalRows: 8, offset: 0, window: 'displayRows', groups: [
+      { key: 'first', label: 'First', count: 1000000, recordOffset: 0, rowStart: 0, expandedOffset: 0, collapsed: true },
+      { key: 'second', label: 'Second', count: 3, recordOffset: 1000000, rowStart: 1, expandedOffset: 0, collapsed: false },
+      { key: 'empty', label: 'Empty', count: 0, recordOffset: 1000003, rowStart: 5, expandedOffset: 3, collapsed: false },
+      { key: null, label: '', count: 1, recordOffset: 1000003, rowStart: 6, expandedOffset: 3, collapsed: false },
+    ] };
+  const rows = new GroupRows(field, layout);
+  assert.equal(rows.rowCount, 8);
+  assert.deepEqual(rows.indices(0, 8), [1000000, 1000001, 1000002, 1000003]);
+  assert.equal(rows.count(0, 8), 4);
+  assert.deepEqual(rows.at(2), { kind: 'record', index: 1000000 });
+  assert.equal(rows.position(999999), undefined);
+  assert.equal(rows.position(1000000), 2); assert.equal(rows.position(1000003), 7);
+  assert.equal(rows.position(1000004), undefined); assert.equal(rows.position(-1), undefined);
+  assert.equal(rows.at(8), undefined);
+  const window = new GroupRows(field, layout, layout.groups.slice(1, 2));
+  assert.equal(window.count(1, 2), 1); assert.equal(window.count(1, 6), undefined);
+  assert.equal(window.at(6), undefined, 'Unloaded groups cannot reuse the preceding group offset.');
+  assert.equal(window.before(8), 4, 'Global totals remain available beyond the cached window.');
 });
 
-test('checkbox grouping keeps false, true and null distinct', () => {
-  const field: Field = { id: 'done', name: 'Done', type: 'checkbox', required: false };
-  const rows = new GroupedRows(field, { totals: { count: 3, values: [] }, revision: 1, schemaVersion: 1, groupCount: 3, offset: 0,
-    groups: [true, null, false].map(key => ({ key, label: '', count: 1, values: [] })) }, new Set(['false']));
+test('checkbox grouping keeps false, true and null distinct', t => {
+  const service = new RecordService(fixture(t, null).open());
+  let table = service.createTable({ name: 'Checkbox groups' });
+  table = service.createField(table.id, { expectedVersion: table.version, name: 'Done', type: 'checkbox' });
+  const field = table.fields[1]!;
+  service.createRecords(table.id, [true, null, false].map(value => ({ values: { [field.id]: value } })));
+  const rows = new GroupRows(field, service.queryGroups(table.id, { groupBy: field.id, collapse: { defaultCollapsed: false, exceptions: [false] } }));
   assert.deepEqual(rows.groups.map(group => group.label), ['Unchecked', 'Checked', 'No value']);
   assert.deepEqual(rows.indices(0, rows.rowCount), [1, 2]);
 });
