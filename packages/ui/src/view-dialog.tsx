@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import type { GridView, RowHeight, SortRule, Table, ViewColumn } from '../../contracts/src/index.js';
 import type { WorkspaceApi } from '../../client/src/http-client.js';
-import { Dialog } from './dialog.js';
+import { Dialog, type DialogAnchor } from './dialog.js';
 import { QueryEditor } from './query-editor.js';
 import { filterDraft, filterValue } from './filter-draft.js';
 
-export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, onSaved }: {
-  kind: 'create' | 'edit' | 'delete' | 'query' | 'display'; view: GridView; search: string; table: Table; api: WorkspaceApi;
+export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, onSaved, anchor }: {
+  kind: 'create' | 'edit' | 'delete' | 'filter' | 'sort' | 'display'; view: GridView; search: string; table: Table; api: WorkspaceApi;
+  anchor?: DialogAnchor | undefined;
   setDirty(value: boolean): void; onClose(): void; onSaved(view: GridView | undefined): void;
 }) {
   const [name, setName] = useState(kind === 'create' ? 'New view' : view.name);
@@ -21,7 +22,7 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const deleting = kind === 'delete';
-  const queryOnly = kind === 'query';
+  const queryOnly = kind === 'filter' || kind === 'sort';
   const displayOnly = kind === 'display';
   const visibleCount = columns.filter(column => !column.hidden).length;
   const fields = new Map(table.fields.map(field => [field.id, field]));
@@ -32,7 +33,7 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
     setColumns(next);
     setDirty(true);
   };
-  return <Dialog title={kind === 'create' ? 'Create view' : deleting ? 'Delete view' : queryOnly ? 'Filter and sort' : displayOnly ? 'Display settings' : 'View settings'} onClose={onClose} busy={busy} wide={!deleting}>
+  return <Dialog title={kind === 'create' ? 'Create view' : deleting ? 'Delete view' : kind === 'filter' ? 'Filters' : kind === 'sort' ? 'Sort' : displayOnly ? 'Display settings' : 'View settings'} onClose={onClose} busy={busy} wide={!deleting} anchor={queryOnly ? anchor : undefined}>
     <form onChange={() => setDirty(true)} onKeyDown={event => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's' && !event.nativeEvent.isComposing) {
         event.preventDefault();
@@ -50,7 +51,8 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
         const config = { name, ...display, type, ...(type === 'board' ? { groupBy } : {}), query: { filter: filterValue(filter, table.fields), sort, search: savedSearch } };
         if (deleting) await api.deleteView(table.id, view.id, view.version);
         else if (kind === 'create') result = await api.createView(table.id, config);
-        else result = await api.updateView(table.id, view.id, { ...(queryOnly ? { query: config.query } : displayOnly ? display : config), expectedVersion: view.version });
+        else result = await api.updateView(table.id, view.id, { ...(queryOnly ? { query: { ...view.query,
+          ...(kind === 'filter' ? { filter: config.query.filter } : { sort }) } } : displayOnly ? display : config), expectedVersion: view.version });
         setDirty(false);
         onSaved(result);
       })().catch(error => { setError(error instanceof Error ? error.message : 'The view could not be saved.'); setBusy(false); });
@@ -65,8 +67,8 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
           </select></label>}</div>
           {type === 'board' && !groupBy && <p className="form-note">Add a single-select field to use a board view.</p>}
         </>}
-        {!displayOnly && <><label className="form-field">Saved search<input value={savedSearch} onChange={event => setSavedSearch(event.target.value)} /></label>
-        <QueryEditor fields={table.fields} filter={filter} sort={sort}
+        {!displayOnly && <>{!queryOnly && <label className="form-field">Saved search<input value={savedSearch} onChange={event => setSavedSearch(event.target.value)} /></label>}
+        <QueryEditor fields={table.fields} filter={filter} sort={sort} section={queryOnly ? kind : undefined}
           onFilter={value => { setFilter(value); setDirty(true); }} onSort={value => { setSort(value); setDirty(true); }} /></>}
         {!queryOnly && <><h3>Display</h3>
         {type === 'grid' && <><div className="form-row">

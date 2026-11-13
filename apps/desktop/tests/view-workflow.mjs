@@ -44,6 +44,7 @@ export async function verifyViewWorkflow(page) {
   await page.getByRole('button', { name: 'Reload', exact: true }).click();
   await page.getByText('3 records · 2 fields', { exact: true }).waitFor();
   const tabs = page.getByRole('tablist', { name: 'Views', exact: true });
+  await page.waitForFunction(() => document.querySelector('[role="tab"][aria-selected="true"]')?.getAttribute('aria-disabled') === 'false');
   await tabs.getByRole('tab', { name: 'All records', exact: true }).focus();
   await page.keyboard.press('ArrowRight');
   assert.equal(await tabs.getByRole('tab', { name: 'Reverse', exact: true }).evaluate(element => element === document.activeElement), true);
@@ -51,6 +52,7 @@ export async function verifyViewWorkflow(page) {
   await page.keyboard.press('Enter');
   await page.getByRole('tabpanel', { name: 'Reverse', exact: true }).waitFor();
   await tabs.getByRole('tab', { name: 'Reverse', exact: true }).waitFor({ state: 'visible' });
+  await page.waitForFunction(() => document.querySelector('[role="tab"][aria-selected="true"]')?.getAttribute('aria-disabled') === 'false');
   await page.keyboard.press('Home');
   await page.keyboard.press('Enter');
   await page.getByRole('tabpanel', { name: 'All records', exact: true }).waitFor();

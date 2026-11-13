@@ -20,6 +20,7 @@ import { FieldForm } from './field-form.js';
 import { ColumnActions, type ColumnAction } from './column-actions.js';
 import { BoardView } from './board-view.js';
 import { ViewTabs } from './view-tabs.js';
+import type { DialogAnchor } from './dialog.js';
 import './table-app.css';
 
 export interface TableHost {
@@ -52,7 +53,8 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   const [view, setView] = useState<GridView>();
   const [search, setSearch] = useState('');
   const [searchComposing, setSearchComposing] = useState(false);
-  const [viewAction, setViewAction] = useState<'create' | 'edit' | 'delete' | 'query' | 'display'>();
+  const [viewAction, setViewAction] = useState<'create' | 'edit' | 'delete' | 'filter' | 'sort' | 'display'>();
+  const [queryAnchor, setQueryAnchor] = useState<DialogAnchor>();
   const currentView = useRef<GridView>();
   const appliedSearch = useRef('');
   const viewRequest = useRef(0);
@@ -433,7 +435,12 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     </div>
       <div className="view-toolbar">
         <button disabled={!view || locked} onClick={() => setViewAction('edit')}>View settings</button>
-        <button disabled={!view || locked} onClick={() => setViewAction('query')}>Filter &amp; sort</button>
+        <button aria-label="Filters" aria-haspopup="dialog" aria-expanded={viewAction === 'filter'}
+          disabled={!view || locked || searchComposing} onClick={event => { setQueryAnchor(event.currentTarget.getBoundingClientRect()); setViewAction('filter'); }}>
+          Filters{view?.query.filter && (view.query.filter.conditions.length > 0 || view.query.filter.conjunction === 'or') && <span className="query-badge" aria-hidden="true">On</span>}</button>
+        <button aria-label="Sort" aria-haspopup="dialog" aria-expanded={viewAction === 'sort'}
+          disabled={!view || locked || searchComposing} onClick={event => { setQueryAnchor(event.currentTarget.getBoundingClientRect()); setViewAction('sort'); }}>
+          Sort{!!view?.query.sort?.length && <span className="query-badge" aria-hidden="true">{view.query.sort.length}</span>}</button>
         <button disabled={!view || locked} onClick={() => setViewAction('display')}>Display</button>
         <button disabled={!view || recordActionsLocked || searchComposing} onClick={() => setSummarizing(true)}>Summarize</button>
         <button disabled={!view || locked || views.length < 2} onClick={() => setViewAction('delete')}>Delete view</button>
@@ -527,11 +534,11 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       disabled={recordActionsLocked} onAction={changeColumn} onClose={() => { setColumnAction(undefined); grid.current?.focus(); }} />}
     {editingField && table && <FieldForm table={table} field={editingField} api={api} setDirty={setFormDirty}
       onClose={() => setEditingField(undefined)} onSaved={async () => { setEditingField(undefined); await refreshAfterWrite('Schema'); }} />}
-    {viewAction && view && table && <ViewDialog kind={viewAction} view={view} search={search} table={table} api={api} setDirty={setFormDirty}
+    {viewAction && view && table && <ViewDialog kind={viewAction} view={view} search={search} table={table} api={api} setDirty={setFormDirty} anchor={queryAnchor}
       onClose={() => setViewAction(undefined)} onSaved={saved => {
         setViewAction(undefined);
         currentView.current = saved;
-        appliedSearch.current = saved?.query.search ?? '';
+        if (viewAction !== 'filter' && viewAction !== 'sort') appliedSearch.current = saved?.query.search ?? '';
         void refreshAfterWrite('View');
       }} />}
   </section>;

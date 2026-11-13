@@ -9,18 +9,18 @@ const operatorNames: Record<FilterOperator, string> = {
   isEmpty: 'is empty', isNotEmpty: 'is not empty', hasAny: 'has any of',
 };
 
-export function QueryEditor({ fields, filter, sort, onFilter, onSort }: {
-  fields: Field[]; filter: GroupDraft; sort: SortRule[];
+export function QueryEditor({ fields, filter, sort, onFilter, onSort, section }: {
+  fields: Field[]; filter: GroupDraft; sort: SortRule[]; section?: 'filter' | 'sort' | undefined;
   onFilter(value: GroupDraft): void; onSort(value: SortRule[]): void;
 }) {
   const count = filterCount(filter);
   return <>
-    <section className="query-section" aria-label="Filters"><div className="query-heading"><h3>Filters</h3>
+    {section !== 'sort' && <section className="query-section" aria-label="Filters"><div className="query-heading"><h3>Filters</h3>
       <button type="button" disabled={!filter.conditions.length && filter.conjunction === 'and'} onClick={() => onFilter({ conjunction: 'and', conditions: [] })}>Clear filters</button></div>
       <FilterGroupEditor fields={fields} group={filter} onChange={onFilter} remaining={100 - count} />
       <small>{count} / 100 conditions</small>
-    </section>
-    <section className="query-section" aria-label="Sorting"><div className="query-heading"><h3>Sorting</h3>
+    </section>}
+    {section !== 'filter' && <section className="query-section" aria-label="Sorting"><div className="query-heading"><h3>Sorting</h3>
       <button type="button" disabled={!sort.length} onClick={() => onSort([])}>Clear sorting</button></div>
       <p className="form-note">Earlier rules take priority. Records with equal values keep their original order.</p>
       {sort.map((rule, index) => <div className="sort-rule" role="group" aria-label={`Sort ${index + 1}`} key={index}>
@@ -38,7 +38,7 @@ export function QueryEditor({ fields, filter, sort, onFilter, onSort }: {
       <button type="button" disabled={sort.length === fields.length} onClick={() => onSort([...sort, {
         fieldId: fields.find(field => !sort.some(rule => rule.fieldId === field.id))!.id, direction: 'asc',
       }])}>Add sort</button>
-    </section>
+    </section>}
   </>;
 }
 

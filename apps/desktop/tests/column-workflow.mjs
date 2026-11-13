@@ -82,7 +82,7 @@ export async function verifyColumnWorkflow(page) {
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   await page.getByText('All changes saved', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
-  await page.getByRole('button', { name: 'Filter & sort', exact: true }).click();
+  await page.getByRole('button', { name: 'Filters', exact: true }).click();
   assert.equal(await page.getByLabel('View name', { exact: true }).count(), 0);
   await page.getByRole('button', { name: 'Clear filters', exact: true }).click();
   await page.getByRole('button', { name: 'Add condition to group 1', exact: true }).click();

@@ -21,7 +21,7 @@ This iteration keeps the existing Windows desktop, standalone service and shared
 The next bounded iteration improves the existing workflows' layout and interaction. Each item is a separate PR with automated UI acceptance and screenshot review. It adds no data types, host integrations, automation runtime or collaboration scope.
 
 - [x] Compact workspace navigation with visible, keyboard-accessible view tabs and more room for records. Focused and full desktop workflows passed, including retained drafts/search, selected-view persistence, keyboard activation and 13 views at 1024 × 768. The narrow-window and populated-view screenshots were visually reviewed.
-- [ ] Contextual filter and sort controls that preserve view versions, query drafts and visible table context.
+- [x] Contextual filter and sort controls that preserve view versions, query drafts and visible table context. Focused and full desktop workflows passed, including nested typed filters, independent rule saves, temporary search, retained grid drafts, cancellation/focus, empty OR badges and concurrent-update errors. Both 1024 × 768 panel screenshots were visually reviewed.
 - [ ] Record details in a side panel with clear field/value hierarchy and explicit save/discard behavior.
 - [ ] Field configuration near its column, with bounded scrolling, conversion feedback and preserved schema safeguards.
 
