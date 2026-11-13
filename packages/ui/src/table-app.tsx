@@ -8,6 +8,7 @@ import { isReadOnlyField, maxBatchCells, maxBatchRecords, type CellValue, type F
 import type { TableModel } from '../../client/src/table-model.js';
 import { ApiFailure, queryForView, type WorkspaceApi } from '../../client/src/http-client.js';
 import { cellDisplay, cellText } from '../../client/src/cell-values.js';
+import { prepareBoardSnapshot, type BoardSnapshot, type BoardWindow } from '../../client/src/board-refresh.js';
 import { parseTextValue } from '../../core/src/field-values.js';
 import { CellEditor, EditorContext, type EditableCell, type EditorHandle } from './cell-editor.js';
 import { drawSelectCell } from './select-values.js';
@@ -24,6 +25,7 @@ import { SummaryDialog } from './summary-dialog.js';
 import { FieldForm } from './field-form.js';
 import { ColumnActions, type ColumnAction } from './column-actions.js';
 import { BoardView } from './board-view.js';
+import { captureBoardFocus } from './board-focus.js';
 import { ViewTabs } from './view-tabs.js';
 import { useGroupedRows } from './use-grouped-rows.js';
 import { refreshSelection } from './refresh-selection.js';
@@ -91,6 +93,17 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   const [summarizing, setSummarizing] = useState(false);
   const [notice, setNotice] = useState<string>();
   const [externalUpdate, setExternalUpdate] = useState<'pending' | 'missing'>();
+  const [preparedBoard, setPreparedBoard] = useState<{ generation: number; snapshot: BoardSnapshot }>();
+  const boardWindows = useRef(new Map<string | null, BoardWindow>());
+  const boardWindowRevision = useRef(0);
+  const boardDragging = useRef(false);
+  const boardWindowChanged = useCallback((lane: string | null, window: BoardWindow | undefined) => {
+    const previous = boardWindows.current.get(lane);
+    if (previous?.offset === window?.offset && previous?.near === window?.near) return;
+    if (window) boardWindows.current.set(lane, window); else boardWindows.current.delete(lane);
+    boardWindowRevision.current++;
+  }, []);
+  const boardDragChanged = useCallback((active: boolean) => { boardDragging.current = active; }, []);
   const [refreshFailure, setRefreshFailure] = useState<string>();
   const knownViewsRevision = useRef<number>();
   const interaction = useRef(0);
@@ -112,7 +125,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   const pending = model.pendingCells;
   canRefresh.current = () => {
     const workspace = rootHost.current?.closest('.rowweave-app'), active = document.activeElement;
-    return ready && !locked && !busyRef.current && !activeEditor.current && !selectionReads.current && !pointerActive.current &&
+    return ready && !locked && !busyRef.current && !activeEditor.current && !selectionReads.current && !pointerActive.current && !boardDragging.current &&
       !model.saving && !model.pendingCells && !model.canUndo && !model.canRedo && !formDirty && !searchComposing && search === appliedSearch.current &&
       !workspace?.querySelector('dialog[open]') &&
       !(active instanceof Element && workspace?.contains(active) && active.closest('input, textarea, select, [contenteditable="true"]'));
@@ -218,27 +231,39 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       state.table.view?.dateContext !== model.dateContext;
     if (!changed) { setExternalUpdate(undefined); return; }
     setExternalUpdate('pending');
-    if (previousView.type !== 'grid' || !canRefresh.current()) return;
+    if (!canRefresh.current()) return;
     const loaded = state.table.viewsRevision === knownViewsRevision.current ? views : await api.listViews(tableId, signal);
     const selected = loaded.find(view => view.id === previousView.id) ?? loaded[0]!;
-    if (selected.type !== 'grid') return;
     const text = selected.id === previousView.id && appliedSearch.current !== (previousView.query.search ?? '')
       ? appliedSearch.current : selected.query.search ?? '';
     if (generation !== model.queryVersion || activity !== interaction.current || !canRefresh.current()) return;
     let groupRefresh: Awaited<ReturnType<typeof grouping.prepareRefresh>> | undefined;
+    let boardRefresh: BoardSnapshot | undefined;
+    const windowRevision = boardWindowRevision.current;
     const snapshot = await model.prepareRefresh(queryForView(selected, text), { start: visible.y, count: visible.height + 5, signal,
       ...(selected.groupBy ? { selectRows: async (table: Table, first: QueryPage, signal: AbortSignal) => {
+        if (selected.type === 'board') {
+          const windows = previousView.type === 'board' && previousView.id === selected.id && previousView.groupBy === selected.groupBy
+            ? [...boardWindows.current.values()] : [];
+          boardRefresh = await prepareBoardSnapshot(api, table, selected, first, text, windows, signal);
+          return [];
+        }
         groupRefresh = await grouping.prepareRefresh(table, selected, first, text, signal);
         return groupRefresh.rows.indices(visible.y, Math.min(visible.height + 5, maxBatchRecords));
       } } : {}),
     });
     if (signal.aborted || generation !== model.queryVersion || activity !== interaction.current || previousView !== currentView.current || !canRefresh.current()) return;
-    const retained = refreshSelection(selection, model, snapshot, grouping.rows, groupRefresh?.rows);
+    if (previousView.type === 'board' && windowRevision !== boardWindowRevision.current) return;
+    const retained = previousView.type === 'grid' && selected.type === 'grid'
+      ? refreshSelection(selection, model, snapshot, grouping.rows, groupRefresh?.rows)
+      : { selection: { columns: CompactSelection.empty(), rows: CompactSelection.empty() }, cleared: false };
     const wasStale = model.stale;
-    // External-store notifications and group state must render together to keep the grid mounted.
+    const restoreBoardFocus = captureBoardFocus(rootHost.current!);
+    // External-store notifications and view state must render together to keep the content mounted.
     flushSync(() => {
       if (!model.commitRefresh(snapshot)) return;
       if (groupRefresh) grouping.commitRefresh(groupRefresh.summary, selected, text);
+      setPreparedBoard(boardRefresh ? { generation: model.queryVersion, snapshot: boardRefresh } : undefined);
       currentView.current = selected;
       appliedSearch.current = text;
       knownViewsRevision.current = state.table!.viewsRevision;
@@ -248,6 +273,8 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       if (retained.cleared) setNotice('Changes were loaded. The previous selection was cleared; select records again before editing.');
       localStorage.setItem(`rowweave.view.${tableId}`, selected.id);
     });
+    if (restoreBoardFocus?.()) setNotice('Changes were loaded. The focused record is outside the visible view.');
+    if (restoreBoardFocus && selected.type === 'grid') grid.current?.focus();
   };
 
   useEffect(() => {
@@ -272,7 +299,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     const touch = () => { interaction.current++; };
     const start = () => { touch(); pointerActive.current = true; };
     const finish = () => { pointerActive.current = false; };
-    const events = ['keydown', 'input', 'paste', 'copy', 'compositionstart', 'compositionend'];
+    const events = ['keydown', 'input', 'paste', 'copy', 'compositionstart', 'compositionend', 'wheel', 'scroll'];
     for (const event of events) workspace.addEventListener(event, touch, true);
     workspace.addEventListener('pointerdown', start, true); workspace.addEventListener('dragstart', start, true);
     const endings = ['pointerup', 'pointercancel', 'dragend', 'drop'];
@@ -577,8 +604,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     {notice && <div role="status" className="notice-banner"><span>{notice}</span><button onClick={() => setNotice(undefined)}>Dismiss</button></div>}
     {externalUpdate && <div role="status" className="notice-banner">{externalUpdate === 'missing'
       ? 'This table was deleted elsewhere. Visible edits are retained. Choose another table when ready.'
-      : view?.type !== 'grid' ? 'Updates are available. Use Refresh view to load them.'
-        : 'Updates are available. Finish editing to load them automatically, or use Refresh view to keep cell drafts. Reload resets local undo history.'}</div>}
+      : 'Updates are available. Finish editing to load them automatically, or use Refresh view to keep cell drafts. Reload resets local undo history.'}</div>}
     {!offline && refreshFailure && <div role="status" className="notice-banner">Could not check for updates: {refreshFailure}</div>}
     <ViewTabs views={views} selected={view?.id} disabled={!ready || locked} panelId={`table-view-${tableId}`}
       onSelect={selected => void applyView(selected)} onCreate={() => setViewAction('create')} />
@@ -622,6 +648,8 @@ export function TableApp({ tableId, model, api, host, onManage }: {
         <small>Click a group heading or press Enter to expand or collapse.</small>
       </div>}
       {ready && table && view?.type === 'board' ? <BoardView table={table} view={view} search={appliedSearch.current} generation={queryVersion} api={api}
+        revision={model.dataRevision!} dateContext={model.dateContext} onWindow={boardWindowChanged} onDragChange={boardDragChanged}
+        prepared={preparedBoard?.generation === queryVersion ? preparedBoard.snapshot : undefined}
         disabled={recordActionsLocked} onOpen={record => void openBoardRecord(record)} onRefresh={() => void reload()}
         onCreate={lane => setRecordAction({ kind: 'create', records: [], initialValues: { [view.groupBy!]: lane } })} onMove={moveBoardRecord} />
         : <div className="grid-host" aria-busy={locked || !ready || (grouping.enabled && !grouping.rows)} ref={gridHost} onCopyCapture={event => {

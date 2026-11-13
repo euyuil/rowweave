@@ -47,9 +47,17 @@ Active editors, composition, pointer gestures, clipboard reads, local drafts and
 
 Grouped grids prepare their summary and visible records together against the same data revision and date context. Counts, group positions and record values change in one commit while the grid stays mounted. Collapse choices follow stable option keys within the same view and grouping field. Selection maps visual group positions through record UUIDs; a record moved into a collapsed group or outside the prepared window clears selection explicitly. Adding/removing grouping and changing saved filters use the same guarded transition. A failed summary leaves the previous groups and records available.
 
-Boards currently detect changes and offer **Refresh view**; their automatic cache replacement is still required in the [workflow gap plan](gap-closure-plan.md).
+## Automatic board refresh
 
-Verification covers atomic client snapshots, cancellation, late responses, bounded paging, relative-date rollover, undo/redo protection and real service conflicts. Automated desktop acceptance covers UUID selection after sorting, schema/view changes, forms, Chinese composition events, in-flight reads, narrow-window editor alignment, failed reads, deleted views/tables and polling cleanup. Installed Harness acceptance checks refreshing while a host input retains focus. These checks do not establish native IME behavior; that remains a final-candidate check.
+Boards use the same idle checks and polling interval. A candidate combines a complete matching summary with 25-card pages for currently nearby columns, projected to the title, grouping field and up to three displayed card fields. Every read uses the same schema/data/view/date guards. Failed reads retain the previous counts and cards. A changed lane window or interaction invalidates a pending candidate before it can replace a newer page.
+
+Automatic updates retain the mounted columns, per-column page positions and horizontal/vertical scrolling. Deleting the last records on a page clamps that column to its last valid page. Option renames keep their stable column identity; changing the grouping field resets its windows. A focused card follows its record UUID into another loaded column. If it leaves the visible pages, focus moves to the board with an explicit notice. Unrelated host input never receives a focus change.
+
+Record forms, composition, focused move selectors and active drag gestures postpone automatic replacement. A failed move still requires an explicit refresh before another move; automatic reads never replay the write or clear that requirement. Grid/board transitions and external schema/filter changes use the same guarded snapshots. Initial columns in a newly selected board load on demand.
+
+Regression coverage includes nearby-page projection, deletion clamping, changed revisions, cancellation and date rollover. Desktop acceptance checks cross-column focus, retained pages/scrolling, delayed responses during paging, form/composition and drag protection, read failures/recovery, offscreen moves and grid/board transitions. Future view families must implement the same refresh safeguards as part of the [workflow gap plan](gap-closure-plan.md).
+
+Shared verification covers atomic client snapshots, cancellation, late responses, bounded paging, relative-date rollover, undo/redo protection and real service conflicts. Automated desktop acceptance covers UUID selection after sorting, schema/view changes, forms, Chinese composition events, in-flight reads, narrow-window editor alignment, failed reads, deleted views/tables and polling cleanup. Installed Harness acceptance checks refreshing while a host input retains focus. These checks do not establish native IME behavior; that remains a final-candidate check.
 
 ## Automatic table-list refresh
 

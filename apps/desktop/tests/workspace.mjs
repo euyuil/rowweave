@@ -17,6 +17,7 @@ import { verifySummaryWorkflow } from './summary-workflow.mjs';
 import { verifyColumnWorkflow } from './column-workflow.mjs';
 import { verifyDisplayWorkflow } from './display-workflow.mjs';
 import { verifyBoardWorkflow } from './board-workflow.mjs';
+import { verifyBoardRefresh } from './board-refresh-workflow.mjs';
 import { verifyFormulaWorkflow } from './formula-workflow.mjs';
 import { verifyDateFormulaWorkflow } from './date-formula-workflow.mjs';
 import { verifyArrayFormulaWorkflow } from './array-formula-workflow.mjs';
@@ -289,6 +290,7 @@ try {
   await verifyAttachmentWorkflow(page, application);
   await verifyDisplayWorkflow(page);
   await verifyBoardWorkflow(page);
+  await verifyBoardRefresh(page);
   await verifyFormulaWorkflow(page);
   await verifyDateFormulaWorkflow(page);
   await verifyArrayFormulaWorkflow(page);
