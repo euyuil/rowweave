@@ -394,7 +394,12 @@ export function TableApp({ tableId, model, api, host, onManage }: {
         await new Promise(resolve => setTimeout(resolve, 0));
       }
       const previousBatch = model.lastSavedBatchId;
+      const previousQuery = model.queryVersion;
       await model.save();
+      if (model.queryVersion !== previousQuery) {
+        setSelection({ columns: CompactSelection.empty(), rows: CompactSelection.empty() });
+        setNotice('Changes saved. The selection was cleared; select records again before editing.');
+      }
       if (model.lastSavedBatchId !== previousBatch) setSavedAction(model.lastSavedBatchId ? { batchId: model.lastSavedBatchId, redo: false } : undefined);
     } catch (failure) { report(failure); }
   }, [model, offline, report]);

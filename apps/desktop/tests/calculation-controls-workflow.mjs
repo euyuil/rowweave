@@ -49,9 +49,11 @@ export async function verifyCalculationControls(page, application) {
   };
   await page.route('**/calculations/status', statusRoute);
   try {
-    const bounds = await page.locator('canvas').first().boundingBox();
     const editor = page.getByRole('textbox', { name: 'Cell value', exact: true });
     const openName = async () => {
+      await dialog.waitFor({ state: 'detached' });
+      await page.waitForFunction(() => document.querySelector('.grid-host')?.getAttribute('aria-busy') === 'false');
+      const bounds = await page.locator('canvas').first().boundingBox();
       await page.mouse.click(bounds.x + 100, bounds.y + 58);
       await page.waitForFunction(() => document.querySelector('canvas')?.contains(document.activeElement) || !!document.querySelector('.rowweave-cell-editor'));
       if (!await editor.count()) await page.keyboard.press('Enter');
