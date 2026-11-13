@@ -7,6 +7,8 @@ import type { CheckedSummary } from '../../core/src/record-summary.js';
 import type { RecordSummary, RecordHistoryQuery, RecordHistoryPage, RecordChangeDetail, RecordRestore, RecordTrashPage } from '../../contracts/src/index.js';
 import { RecordHistory, type HistoryContext } from './record-history.js';
 import type { RecordBatchPage, RecordBatchChanges } from '../../contracts/src/index.js';
+import { maxBatchCells, type RecordBatchUndoResult } from '../../contracts/src/index.js';
+import { restoredBatchValues } from '../../core/src/record-batch.js';
 import { tableId, type BatchResult, type CellValue, type ConversionPreview, type DeleteResult, type Field, type GridView, type QueryPage, type RecordDelete, type RecordPage, type RecordUpdate, type RowRecord, type Table } from '../../contracts/src/index.js';
 import { ServiceError, type RecordStore } from '../../core/src/record-service.js';
 import type { CheckedQuery } from '../../core/src/record-query.js';
@@ -440,6 +442,10 @@ export class SqliteRecordStore implements RecordStore {
   private finishRecordWrite(tableId: string, ids: string[], linked: { records: ChangedRecords }): Set<string> {
     const seeds = new Map(linked.records);
     seeds.set(tableId, new Set([...seeds.get(tableId) ?? [], ...ids]));
+    return this.finishRecordWrites(seeds);
+  }
+
+  private finishRecordWrites(seeds: ChangedRecords): Set<string> {
     const versioned = new Set([...seeds.values()].flatMap(ids => [...ids]));
     const result = new ConnectedCalculations(this.db).run(seeds, versioned, this.lookups, id => this.getTable(id));
     this.relations.bumpRevisions([...seeds.keys(), ...result.tables]);
@@ -488,7 +494,7 @@ export class SqliteRecordStore implements RecordStore {
           if (result.issues.length < 20) result.issues.push({ row: row.row, code: error.code, message: error.message });
         }
       }
-      if (apply && result.total) this.finishRecordWrite(table.id, created, this.relations.write(table, links));
+      if (apply && result.total) this.finishRecordWrite(table.id, created, this.relations.write(table.fields, links));
       return result;
     }, apply ? 'IMMEDIATE' : 'DEFERRED', { recordWrite: apply });
   }
@@ -554,7 +560,7 @@ export class SqliteRecordStore implements RecordStore {
       insert.run(id, table.id, position++, version, JSON.stringify(result.values), JSON.stringify(result.formulaErrors ?? {}));
       return { id, version, ...result };
     });
-    const linked = this.relations.write(table, records);
+    const linked = this.relations.write(table.fields, records);
     for (const record of records) if (linked.values.has(record.id)) record.values = linked.values.get(record.id)!;
     const computed = this.finishRecordWrite(table.id, records.map(record => record.id), linked);
     return { records: this.lookups.hydrate(table, this.relations.hydrate(table, records.map(record => computed.has(record.id) ? this.readRecord(table.id, record.id) : record))) };
@@ -614,6 +620,60 @@ export class SqliteRecordStore implements RecordStore {
     return this.transaction(() => this.history.batchChanges(id, batchId, query), 'DEFERRED');
   }
 
+  undoRecordBatch(id: string, batchId: string): RecordBatchUndoResult {
+    return this.transaction(() => {
+      const changes = this.history.undoChanges(id, batchId);
+      const tables = new Map([...new Set(changes.map(change => change.tableId))].map(id => [id, this.getTable(id)]));
+      const fields = new Map([...tables].map(([id, table]) => [id, table.fields.filter(field => field.type !== 'lookup' && field.type !== 'formula')]));
+      const cells = changes.reduce((sum, change) => sum + (change.beforeVersion === null ? 0 : fields.get(change.tableId)!.length), 0);
+      if (cells > maxBatchCells) throw new ServiceError('INVALID_BATCH', `Undo at most ${maxBatchCells} writable cells in one complete batch.`);
+      const current = new Map<string, RowRecord>();
+      const read = this.db.prepare('SELECT id, version, values_json, formula_errors_json FROM records WHERE id = ? AND table_id = ?');
+      for (const change of changes) {
+        if (change.afterVersion === null) this.history.checkDeleted(change.tableId, change.recordId, change.id);
+        else {
+          const stored = read.get(change.recordId, change.tableId) as unknown as StoredRecord | undefined;
+          if (!stored || stored.version !== change.afterVersion) throw new ServiceError('VERSION_CONFLICT', `Record ${change.recordId} changed after this batch. Review the newer changes before undoing.`, 409);
+          current.set(stored.id, this.decode(stored));
+        }
+      }
+      const deleting = new Set(changes.filter(change => change.beforeVersion === null).map(change => change.recordId));
+      const positions = new Map<string, number>();
+      const calculations = new Map([...tables].map(([id, table]) => [id, compileFormulas(table, { skipLinked: true })]));
+      const insert = this.db.prepare('INSERT INTO records (id, table_id, position, version, values_json, formula_errors_json) VALUES (?, ?, ?, ?, ?, ?)');
+      const update = this.db.prepare('UPDATE records SET version = ?, values_json = ?, formula_errors_json = ? WHERE id = ?');
+      const writes = changes.map(change => {
+        const table = tables.get(change.tableId)!;
+        if (deleting.has(change.recordId)) return { id: change.recordId, values: Object.fromEntries(table.fields.filter(field => field.type === 'relation').map(field => [field.id, [] as string[]])) };
+        const existing = current.get(change.recordId);
+        const before = this.history.beforeValues(change.id, fields.get(table.id)!.map(field => field.id));
+        const values = restoredBatchValues(table, before, existing?.values);
+        const calculated = calculations.get(table.id)!({ ...existing?.values, ...values }, existing?.formulaErrors);
+        const version = (existing?.version ?? change.beforeVersion!) + 1;
+        if (existing) update.run(version, JSON.stringify(calculated.values), JSON.stringify(calculated.formulaErrors ?? {}), change.recordId);
+        else {
+          const position = positions.get(table.id) ?? (this.db.prepare('SELECT COALESCE(MAX(position), -1) AS last FROM records WHERE table_id = ?').get(table.id)!['last'] as number) + 1;
+          insert.run(change.recordId, table.id, position, version, JSON.stringify(calculated.values), JSON.stringify(calculated.formulaErrors ?? {}));
+          positions.set(table.id, position + 1);
+        }
+        return { id: change.recordId, values };
+      });
+      const linked = this.relations.write([...fields.values()].flat(), writes, deleting);
+      if (deleting.size) {
+        this.relations.removeRecords([...deleting]);
+        const remove = this.db.prepare('DELETE FROM records WHERE id = ?');
+        for (const id of deleting) remove.run(id);
+      }
+      const seeds = new Map(linked.records);
+      for (const change of changes) {
+        const ids = seeds.get(change.tableId) ?? new Set<string>(); ids.add(change.recordId); seeds.set(change.tableId, ids);
+      }
+      this.finishRecordWrites(seeds);
+      for (const change of changes) this.history.markRestored(change.recordId, change.id);
+      return { batchId: this.history.currentBatchId(), undoneBatchId: batchId };
+    }, 'IMMEDIATE', { recordWrite: true, undoOf: batchId });
+  }
+
   private writeBatch(updates: RecordUpdate[], id: string, schemaVersion: number): BatchResult {
     const read = this.db.prepare('SELECT id, version, values_json, formula_errors_json FROM records WHERE id = ? AND table_id = ?');
     const write = this.db.prepare('UPDATE records SET values_json = ?, formula_errors_json = ?, version = version + 1 WHERE id = ? AND table_id = ?');
@@ -635,7 +695,7 @@ export class SqliteRecordStore implements RecordStore {
       write.run(JSON.stringify(record.values), JSON.stringify(record.formulaErrors ?? {}), record.id, id);
       return record;
     });
-    const linked = this.relations.write(table, updates);
+    const linked = this.relations.write(table.fields, updates);
     for (const record of records) if (linked.values.has(record.id)) record.values = linked.values.get(record.id)!;
     const computed = this.finishRecordWrite(id, records.map(record => record.id), linked);
     return { records: this.lookups.hydrate(table, this.relations.hydrate(table, records.map(record => computed.has(record.id) ? this.readRecord(id, record.id) : record))) };

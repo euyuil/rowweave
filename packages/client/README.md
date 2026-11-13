@@ -105,4 +105,6 @@ All request/response interfaces and service limit constants are exported alongsi
 
 `recordBatches` lists transaction receipts affecting a table; `recordBatchChanges` pages through all affected tables' change metadata. Receipts preserve the original change count when a related table is later deleted. Compare `recordCount` with `remainingCount` before treating a batch as complete. `recordWrite` distinguishes record mutations from schema side effects. Receipt history starts at workspace format 18; older individual record history remains readable.
 
+`undoRecordBatch(tableId, batchId)` reverses a reviewed complete saved record operation across all affected tables. Current versions, schema constraints and deletion dependencies apply; one conflict rolls back the entire undo. The result's `batchId` identifies the new transaction and can itself be undone for redo. See [saved undo limits and concurrency rules](https://github.com/euyuil/rowweave/blob/main/docs/record-history.md#undo-a-saved-batch). The SDK never retries uncertain writes automatically.
+
 The repository's package regression installs the actual archive offline into an isolated application, checks its public TypeScript declarations, and runs a schema/record/view/CSV workflow against a real temporary service.

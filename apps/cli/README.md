@@ -72,6 +72,7 @@ History queries accept `{ limit?, before? }`; use returned `nextBefore` for cont
 | `records trash` | Table ID | `{ limit?, before? }`; defaults to `{}` |
 | `records batches` | Table ID | `{ limit?, before? }`; bounded transaction receipts |
 | `records batch-changes` | Table ID, batch ID | `{ limit?, before? }`; metadata for all affected tables |
+| `records undo-batch` | Table ID, batch ID | None; inspect the complete batch first; returns the new undo batch ID |
 | `records restore-deleted` | Table ID | Array of `{ id, deletionId, values? }`; latest deletion IDs required, optional writable values repair current-schema conflicts |
 | `records query` | Table ID | RecordQuery; defaults to `{}` |
 | `records summarize` | Table ID | SummaryRequest; defaults to `{}` for the whole-table count |
