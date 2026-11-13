@@ -20,7 +20,7 @@ const field = z.strictObject({
   options: z.array(z.strictObject({ id: id.exactOptional(), name: z.string(), color: z.string().exactOptional() })).exactOptional(),
   numberFormat: z.enum(['decimal', 'currency', 'percent']).exactOptional(), precision: z.number().int().exactOptional(), currency: z.string().exactOptional(),
   relation: z.strictObject({ tableId: id, multiple: z.boolean() }).exactOptional(),
-  formula: z.strictObject({ expression: z.string().min(1).max(4096), resultType: z.enum(['number', 'text', 'checkbox']) }).exactOptional(),
+  formula: z.strictObject({ expression: z.string().min(1).max(4096), resultType: z.enum(['number', 'text', 'checkbox', 'date', 'datetime']) }).exactOptional(),
   lookup: z.strictObject({ relationFieldId: id, fieldId: id, operation: z.enum(['values', 'count', 'sum', 'average', 'min', 'max']).exactOptional() }).exactOptional(),
 });
 export const fieldCreate = field.extend({ ...expectedVersion,

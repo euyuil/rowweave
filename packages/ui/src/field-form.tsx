@@ -144,6 +144,7 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved, ancho
         {type === 'formula' && <>
           <label className="form-field">Result type<select aria-label="Result type" value={resultType} onChange={event => setResultType(event.target.value as typeof resultType)}>
             <option value="number">Number</option><option value="text">Text</option><option value="checkbox">Checkbox</option>
+            <option value="date">Date</option><option value="datetime">Date and time (UTC)</option>
           </select></label>
           <label className="form-field">Formula<textarea ref={formulaInput} aria-label="Formula" rows={4} required maxLength={4096} value={expression}
             placeholder={'["Quantity"] * ["Price"]'} onChange={event => setExpression(event.target.value)} /></label>
@@ -161,6 +162,8 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved, ancho
           <details className="form-note"><summary>Formula help</summary>
             <p>Use + − * / %, comparisons == != &gt; &gt;= &lt; &lt;=, parentheses, numbers, double-quoted text, TRUE, FALSE and NULL.</p>
             <p>Functions: IF, COALESCE, CONCAT, LOWER, UPPER, TRIM, LEN, ROUND, ABS, AND, OR and NOT.</p>
+            <p>Dates: DATE(year, month, day), DATEVALUE, DATETIMEVALUE, YEAR, MONTH, DAY, WEEKDAY, HOUR, MINUTE, SECOND, DATEADD(value, amount, unit) and DATEDIFF(start, end, unit). Timestamps use UTC. Units: "year", "month", "week", "day", "hour", "minute", "second".</p>
+            <p>Example: DATEADD(["Start date"], 7, "day") with a Date result. DATETIMEVALUE converts a date to UTC midnight. Month/year additions clamp to the last valid day; WEEKDAY uses Monday = 1.</p>
             <p>Example: ROUND(["Subtotal"] * (1 + ["Tax rate"]), 2). Numeric linked summaries can be used as inputs. Record links, arrays of looked-up values and multiple-select values are unavailable in formulas.</p>
           </details>
         </>}

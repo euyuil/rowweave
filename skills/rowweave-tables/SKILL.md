@@ -49,6 +49,6 @@ MCP service failures have `isError: true`; inspect the JSON error in text conten
 
 Finish with the table/view affected, committed counts or IDs as useful, and any unresolved conflicts, incomplete batches or unverified writes. Distinguish saved data from proposed changes.
 
-For formula fields, use `type: "formula"` and `formula: { expression, resultType }`, with `resultType` number/text/checkbox and field-ID references such as `["<field-id>"]`. Formulas accept bounded same-record scalar expressions and are read-only; check returned `formulaErrors`. See `docs/formulas.md` for supported operators, functions and null semantics.
+For formula fields, use `type: "formula"` and `formula: { expression, resultType }`, with `resultType` number/text/checkbox/date/datetime and field-ID references such as `["<field-id>"]`. Formulas accept bounded same-record scalar expressions and are read-only; check returned `formulaErrors`. Date functions include DATE, DATEVALUE, DATETIMEVALUE, component extraction, DATEADD and DATEDIFF; timestamps use UTC. Date results can use ordinary date filters. See `docs/formulas.md` for supported operators, functions, units and null semantics.
 
 For linked numeric totals, configure a lookup with `operation` count/sum/average/min/max and a numeric target. Omitted operation (or values) retains the array. Count ignores nulls; other empty summaries are null. Check `formulaErrors`, use source revision guards between pages, and never write computed values. See `docs/linked-summaries.md`.

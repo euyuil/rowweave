@@ -1,5 +1,8 @@
 import { isLookupSummary, maxTextLength, type CellValue, type Field, type ScalarValue, type Table } from '../../contracts/src/index.js';
 import { ServiceError } from './errors.js';
+import { CalculationError, calculationError } from './calculation-error.js';
+import { calculateDateFunction, dateFunctionArities } from './date-formulas.js';
+import { validateValue } from './field-values.js';
 
 type Expression = { kind: 'literal'; value: ScalarValue } | { kind: 'reference'; id: string }
   | { kind: 'operation'; name: string; args: Expression[] };
@@ -44,6 +47,7 @@ export function rewriteFormulaReferences(source: string, resolve: (reference: st
 }
 
 const arities: Record<string, [number, number]> = {
+  ...dateFunctionArities,
   IF: [3, 3], COALESCE: [2, 20], CONCAT: [1, 20], LOWER: [1, 1], UPPER: [1, 1],
   TRIM: [1, 1], LEN: [1, 1], ROUND: [1, 2], ABS: [1, 1], AND: [2, 20], OR: [2, 20], NOT: [1, 1],
 };
@@ -111,8 +115,6 @@ function parse(source: string): { expression: Expression; references: Set<string
   return { expression: result, references };
 }
 
-class CalculationError extends Error {}
-const calculationError = (message: string): never => { throw new CalculationError(message); };
 function number(value: ScalarValue): number {
   return typeof value === 'number' ? value : calculationError('Expected a number.');
 }
@@ -149,6 +151,7 @@ function evaluate(node: Expression, values: Record<string, CellValue>, errors: R
   if (name === '==' || name === '!=') return name === '==' ? a === b : a !== b;
   if (name === 'CONCAT') return bounded(inputs.map(value => value === null ? '' : String(value)).join(''));
   if (inputs.some(value => value === null)) return null;
+  if (dateFunctionArities[name]) return calculateDateFunction(name, inputs);
   switch (name) {
     case '+': return bounded(number(a) + number(b));
     case '-': return bounded(number(a) - number(b));
@@ -185,9 +188,18 @@ export function compileFormula(field: Field) {
   const parsed = parse(field.formula!.expression);
   return { references: parsed.references, calculate(values: Record<string, CellValue>, errors: Record<string, string>) {
     try {
-      const value = bounded(evaluate(parsed.expression, values, errors));
-      const expected = { text: 'string', number: 'number', checkbox: 'boolean' }[field.formula!.resultType];
+      let value = bounded(evaluate(parsed.expression, values, errors));
+      const resultType = field.formula!.resultType;
+      const expected = { text: 'string', number: 'number', checkbox: 'boolean', date: 'string', datetime: 'string' }[resultType];
       if (value !== null && typeof value !== expected) calculationError(`Expected a ${field.formula!.resultType} result.`);
+      if (resultType === 'date' || resultType === 'datetime') {
+        try { value = validateValue({ ...field, type: resultType }, value) as ScalarValue; }
+        catch (error) {
+          if (!(error instanceof ServiceError)) throw error;
+          calculationError('Expected a valid ' + resultType + ' result.');
+        }
+        if (typeof value === 'string' && !/^\d{4}-/.test(value)) calculationError('Date results must have a year between 0000 and 9999.');
+      }
       return { value };
     } catch (error) {
       if (!(error instanceof CalculationError)) throw error;

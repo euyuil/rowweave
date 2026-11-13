@@ -37,7 +37,7 @@ export interface Field {
   currency?: string;
   relation?: { tableId: string; multiple: boolean; inverseFieldId?: string };
   lookup?: { relationFieldId: string; fieldId: string; operation?: 'values' | 'count' | 'sum' | 'average' | 'min' | 'max' };
-  formula?: { expression: string; resultType: 'number' | 'text' | 'checkbox' };
+  formula?: { expression: string; resultType: 'number' | 'text' | 'checkbox' | 'date' | 'datetime' };
   // Resolved from the current target schema; not writable field configuration.
   lookupResult?: Field;
 }
