@@ -8,7 +8,7 @@ import type { RecordSummary } from '../../contracts/src/index.js';
 import { tableId, type BatchResult, type CellValue, type ConversionPreview, type DeleteResult, type Field, type GridView, type QueryPage, type RecordDelete, type RecordPage, type RecordUpdate, type RowRecord, type Table } from '../../contracts/src/index.js';
 import { ServiceError, type RecordStore } from '../../core/src/record-service.js';
 import type { CheckedQuery } from '../../core/src/record-query.js';
-import { defaultView, reconcileView } from '../../core/src/grid-views.js';
+import { defaultView, groupedViewQuery, reconcileView } from '../../core/src/grid-views.js';
 import { migrate } from './migrations.js';
 import { querySql } from './query-sql.js';
 import { syncQueryIndexes } from './query-indexes.js';
@@ -306,7 +306,7 @@ export class SqliteRecordStore implements RecordStore {
       const target = this.getTable(field.relation!.tableId);
       return [target.id, target];
     }));
-    return { current, sql: querySql(current, query, targets) };
+    return { current, sql: querySql(current, { ...query, ...(view?.type === 'grid' && view.groupBy ? { groupBy: view.groupBy } : {}) }, targets) };
   }
 
   queryRecords(table: Table, query: CheckedQuery, view?: GridView): QueryPage {
@@ -368,7 +368,7 @@ export class SqliteRecordStore implements RecordStore {
       const next = reconcileView(view, table);
       if (JSON.stringify(next) !== JSON.stringify(view)) this.writeView({ ...next, version: view.version + 1 });
     }
-    syncQueryIndexes(this.db, table, this.listViews(table.id).map(view => view.query));
+    syncQueryIndexes(this.db, table, this.listViews(table.id).map(groupedViewQuery));
   }
 
   private syncLookupViews(changed: Table, write: boolean): void {
@@ -393,7 +393,7 @@ export class SqliteRecordStore implements RecordStore {
       }
       const saved = { ...view, version: expectedVersion === undefined ? 1 : expectedVersion + 1 };
       this.writeView(saved);
-      syncQueryIndexes(this.db, table, this.listViews(table.id).map(view => view.query));
+      syncQueryIndexes(this.db, table, this.listViews(table.id).map(groupedViewQuery));
       return saved;
     });
   }
@@ -404,7 +404,7 @@ export class SqliteRecordStore implements RecordStore {
       if (view.version !== expectedVersion) throw new ServiceError('VIEW_CONFLICT', 'This view changed. Reload before deleting again.', 409);
       if (this.listViews(id).length === 1) throw new ServiceError('LAST_VIEW', 'Keep at least one view in the table.');
       this.db.prepare('DELETE FROM views WHERE table_id = ? AND id = ?').run(id, viewId);
-      syncQueryIndexes(this.db, this.getTable(id), this.listViews(id).map(view => view.query));
+      syncQueryIndexes(this.db, this.getTable(id), this.listViews(id).map(groupedViewQuery));
     });
   }
 

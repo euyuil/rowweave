@@ -100,10 +100,19 @@ export function querySql(table: Pick<Table, 'id' | 'fields'>, query: CheckedQuer
     clauses.push(`(${table.fields.map(field => `instr(lower(CAST(${display(field)} AS TEXT)), lower(${search})) > 0`).join(' OR ')})`);
   }
   const countParameters = { ...parameters };
-  const order = (query.sort ?? []).flatMap(sort => {
+  const order: string[] = [];
+  if (query.groupBy) {
+    const field = fields.get(query.groupBy)!;
+    const value = raw(field);
+    order.push(`(${value} IS NULL) ASC`);
+    order.push(field.type === 'singleSelect' && field.options!.length
+      ? `(CASE ${value} ${field.options!.map((option, index) => `WHEN ${sqlLiteral(option.id)} THEN ${index}`).join(' ')} END) ASC`
+      : `${value} ASC`);
+  }
+  order.push(...(query.sort ?? []).filter(sort => sort.fieldId !== query.groupBy).flatMap(sort => {
     const expression = display(fields.get(sort.fieldId)!, forIndex ? '' : 'r', true);
     return [`(${expression} IS NULL) ASC`, `${expression} COLLATE NOCASE ${sort.direction === 'asc' ? 'ASC' : 'DESC'}`];
-  });
+  }));
   order.push(forIndex ? 'position ASC' : 'r.position ASC');
   return { where: clauses.join(' AND '), order: order.join(', '), parameters, countParameters };
 }

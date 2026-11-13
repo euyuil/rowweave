@@ -20,6 +20,7 @@ import { FieldForm } from './field-form.js';
 import { ColumnActions, type ColumnAction } from './column-actions.js';
 import { BoardView } from './board-view.js';
 import { ViewTabs } from './view-tabs.js';
+import { useGroupedRows } from './use-grouped-rows.js';
 import type { DialogAnchor } from './dialog.js';
 import './table-app.css';
 
@@ -53,7 +54,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   const [view, setView] = useState<GridView>();
   const [search, setSearch] = useState('');
   const [searchComposing, setSearchComposing] = useState(false);
-  const [viewAction, setViewAction] = useState<'create' | 'edit' | 'delete' | 'filter' | 'sort' | 'display'>();
+  const [viewAction, setViewAction] = useState<'create' | 'edit' | 'delete' | 'filter' | 'sort' | 'display' | 'group'>();
   const [queryAnchor, setQueryAnchor] = useState<DialogAnchor>();
   const currentView = useRef<GridView>();
   const appliedSearch = useRef('');
@@ -87,6 +88,48 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   const busyRef = useRef(false);
   const locked = busy || model.saving || offline;
   const pending = model.pendingCells;
+  const grouping = useGroupedRows(model, api, view, appliedSearch.current);
+  const gridRowCount = grouping.enabled ? grouping.rows?.rowCount ?? 0 : model.rowCount;
+  const recordIndex = (row: number) => {
+    if (!grouping.enabled) return row;
+    const mapped = grouping.rows?.at(row);
+    return mapped?.kind === 'record' ? mapped.index : undefined;
+  };
+  const recordIndices = (start: number, count: number) => grouping.enabled ? grouping.rows?.indices(start, count) ?? []
+    : Array.from({ length: count }, (_, index) => start + index);
+  const selectionCount = (selected: GridSelection, includeColumns = false) => {
+    if (selected.rows.length) return selected.rows.length - (grouping.rows?.groups.filter(group => selected.rows.hasIndex(group.start)).length ?? 0);
+    const start = includeColumns && selected.columns.length ? 0 : selected.current?.range.y ?? 0;
+    const count = includeColumns && selected.columns.length ? gridRowCount : selected.current?.range.height ?? 0;
+    return grouping.enabled ? grouping.rows?.count(start, count) ?? 0 : count;
+  };
+  const selectedIndices = (selected: GridSelection, includeColumns = false) => selected.rows.length
+    ? selected.rows.toArray().flatMap(row => { const index = recordIndex(row); return index === undefined ? [] : [index]; })
+    : recordIndices(includeColumns && selected.columns.length ? 0 : selected.current?.range.y ?? 0,
+      includeColumns && selected.columns.length ? gridRowCount : selected.current?.range.height ?? 0);
+  const readIndices = async (indices: number[]) => {
+    const records: RowRecord[] = [];
+    for (let index = 0; index < indices.length;) {
+      const start = indices[index]!;
+      let count = 1;
+      while (indices[index + count] === start + count) count++;
+      records.push(...await model.readRange(start, count));
+      index += count;
+    }
+    return records;
+  };
+  const collapseGroups = (keys: ReadonlySet<string>) => {
+    if (locked || activeEditor.current) return;
+    grouping.collapse(keys);
+    setSelection({ columns: CompactSelection.empty(), rows: CompactSelection.empty() });
+  };
+  const toggleGroup = (row: number) => {
+    const mapped = grouping.rows?.at(row);
+    if (mapped?.kind !== 'group') return;
+    const keys = new Set(grouping.rows!.groups.filter(group => group.collapsed).map(group => group.key));
+    if (keys.has(mapped.group.key)) keys.delete(mapped.group.key); else keys.add(mapped.group.key);
+    collapseGroups(keys);
+  };
 
   const report = useCallback((failure: unknown) => {
     setError(failure instanceof Error ? failure.message : 'The operation failed. Please try again.');
@@ -159,14 +202,14 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   }, [ready, view?.type]);
 
   useEffect(() => {
-    if (!ready || offline || view?.type === 'board') return;
+    if (!ready || offline || view?.type === 'board' || (grouping.enabled && !grouping.rows)) return;
     let active = true;
     const timer = setTimeout(() => {
-      void model.readRange(visible.y, Math.min(visible.height + 5, maxBatchRecords))
+      void readIndices(recordIndices(visible.y, Math.min(visible.height + 5, maxBatchRecords)))
         .catch(failure => { if (active) report(failure); });
     }, 30);
     return () => { active = false; clearTimeout(timer); };
-  }, [ready, offline, visible, model, report, queryVersion, view?.type]);
+  }, [ready, offline, visible, model, report, queryVersion, view?.type, grouping.rows, grouping.enabled]);
 
   const save = useCallback(async () => {
     if (busyRef.current || offline || model.saving) return;
@@ -212,15 +255,21 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     busyRef.current = true;
     setBusy(true);
     setError(undefined);
-    try { await model.paste(target[1], target[0], cells); }
+    try {
+      if (cells.length > maxBatchRecords) throw new Error('Paste up to 2,000 records at a time.');
+      if (grouping.enabled) {
+        if (!grouping.rows) throw new Error('Wait for the groups to load.');
+        await model.pasteRows(grouping.rows.pasteIndices(target[1], cells.length), target[0], cells);
+      } else await model.paste(target[1], target[0], cells);
+    }
     catch (failure) { report(failure); }
     finally { busyRef.current = false; setBusy(false); }
-  }, [model, offline, report]);
+  }, [model, offline, report, grouping.rows, grouping.enabled]);
 
   const clearSelection = async (selected: GridSelection) => {
     if (busyRef.current || model.saving || offline || model.stale) return;
     const range = selected.current?.range;
-    const rowCount = selected.rows.length || (selected.columns.length ? model.rowCount : range?.height ?? 0);
+    const rowCount = selectionCount(selected, true);
     const columnCount = selected.rows.length ? fields.length : selected.columns.length || range?.width || 0;
     if (!rowCount || !columnCount) return;
     if (rowCount > maxBatchRecords || rowCount * columnCount > maxBatchCells) {
@@ -231,8 +280,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     setBusy(true);
     setError(undefined);
     try {
-      const rows = selected.rows.length ? selected.rows.toArray()
-        : Array.from({ length: rowCount }, (_, index) => (selected.columns.length ? 0 : range!.y) + index);
+      const rows = selectedIndices(selected, true);
       const columns = selected.rows.length ? fields.map(field => field.id)
         : selected.columns.length ? selected.columns.toArray().map(index => fields[index]!.id)
           : fields.slice(range!.x, range!.x + columnCount).map(field => field.id);
@@ -249,7 +297,6 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     setError(undefined);
     try {
       await loadView(discardDrafts);
-      await model.readRange(visible.y, Math.min(visible.height + 5, maxBatchRecords));
       setSelection({ columns: CompactSelection.empty(), rows: CompactSelection.empty() });
       setReady(true);
     } catch (failure) { report(failure); }
@@ -257,8 +304,8 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   };
 
   const table = model.table;
-  const selectedCount = selection.rows.length || selection.current?.range.height || 0;
-  const recordActionsLocked = locked || !ready || model.stale || pending > 0 || editorDirty;
+  const selectedCount = selectionCount(selection);
+  const recordActionsLocked = locked || !ready || model.stale || pending > 0 || editorDirty || (grouping.enabled && !grouping.rows);
   const openColumnActions = (column: number, bounds: Rectangle) => {
     if (column < 0) return;
     if (recordActionsLocked || busyRef.current || !view) {
@@ -322,16 +369,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     setError(undefined);
     try {
       const generation = model.queryVersion;
-      const indices = selection.rows.length ? selection.rows.toArray()
-        : Array.from({ length: selectedCount }, (_, index) => selection.current!.range.y + index);
-      const records: RowRecord[] = [];
-      for (let index = 0; index < indices.length;) {
-        const start = indices[index]!;
-        let count = 1;
-        while (indices[index + count] === start + count) count++;
-        records.push(...await model.readRange(start, count));
-        index += count;
-      }
+      const records = await readIndices(selectedIndices(selection));
       if (generation !== model.queryVersion) throw new Error('The view changed. Select the records again.');
       if (kind !== 'delete') records[0] = await readCurrentRecord(records[0]!);
       setRecordAction({ kind, records });
@@ -347,9 +385,17 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     finally { busyRef.current = false; setBusy(false); }
   };
   const getCellContent = useCallback(([column, row]: readonly [number, number]): GridCell => {
+    const mapped = grouping.rows?.at(row);
+    if (mapped?.kind === 'group') {
+      const end = (view!.frozenColumns || fields.length) - 1;
+      const label = `${mapped.group.collapsed ? '▸' : '▾'} ${mapped.group.label} · ${mapped.group.count.toLocaleString()} ${mapped.group.count === 1 ? 'record' : 'records'}`;
+      return { kind: GridCellKind.Text, data: '', displayData: column <= end ? label : '', allowOverlay: false, readonly: true,
+        ...(column <= end ? { span: [0, end] as const } : {}) };
+    }
+    const index = recordIndex(row);
     const field = fields[column];
-    return gridCell(model.getRecord(row), field, locked || model.stale, row);
-  }, [model, fields, locked, revision]);
+    return gridCell(index === undefined ? undefined : model.getRecord(index), field, locked || model.stale, index ?? row);
+  }, [model, fields, locked, revision, grouping.rows, grouping.enabled, view]);
 
   const getCellsForSelection = (rectangle: Rectangle, signal: AbortSignal) => async () => {
     if (rectangle.height > maxBatchRecords || rectangle.width * rectangle.height > maxBatchCells) {
@@ -357,16 +403,16 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       return [];
     }
     try {
-      const records = await model.readRange(rectangle.y, rectangle.height);
+      await readIndices(recordIndices(rectangle.y, rectangle.height));
       if (signal.aborted) return [];
-      return records.map((record, index) => Array.from({ length: rectangle.width }, (_, x) =>
-        gridCell(record, fields[rectangle.x + x], locked, rectangle.y + index)));
+      return Array.from({ length: rectangle.height }, (_, index) => Array.from({ length: rectangle.width }, (_, x) =>
+        getCellContent([rectangle.x + x, rectangle.y + index])));
     } catch (failure) { report(failure); return []; }
   };
 
   const copySelection = async () => {
     const range = selection.current?.range;
-    const rowCount = selection.rows.length || (selection.columns.length ? model.rowCount : range?.height ?? 0);
+    const rowCount = selectionCount(selection, true);
     const columnCount = selection.rows.length ? fields.length : selection.columns.length || range?.width || 0;
     if (!rowCount || !columnCount) return;
     if (rowCount > maxBatchRecords || rowCount * columnCount > maxBatchCells) {
@@ -375,20 +421,11 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     }
     try {
       const generation = model.queryVersion;
-      const rows = selection.rows.length ? selection.rows.toArray()
-        : Array.from({ length: rowCount }, (_, index) => (selection.columns.length ? 0 : range!.y) + index);
       const columns = selection.rows.length ? fields
         : selection.columns.length ? selection.columns.toArray().map(index => fields[index]!)
           : fields.slice(range!.x, range!.x + columnCount);
-      const records: RowRecord[] = [];
-      for (let index = 0; index < rows.length;) {
-        const start = rows[index]!;
-        let count = 1;
-        while (rows[index + count] === start + count) count++;
-        records.push(...await model.readRange(start, count));
-        if (generation !== model.queryVersion) return;
-        index += count;
-      }
+      const records = await readIndices(selectedIndices(selection, true));
+      if (generation !== model.queryVersion) return;
       // Excel collapses line breaks in the grid library's HTML representation.
       // Quoted TSV preserves literal cell contents without an HTML interpretation.
       await navigator.clipboard.writeText(serializeClipboard(records.map(record =>
@@ -399,7 +436,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   const status = offline ? 'Service unavailable' : !ready ? 'Loading table…' : model.saving ? 'Saving…' : busy ? 'Loading rows…'
     : editorDirty ? 'Editing cell…'
     : pending ? `${pending.toLocaleString()} unsaved ${pending === 1 ? 'cell' : 'cells'}` : 'All changes saved';
-  const message = error ?? model.error;
+  const message = error ?? model.error ?? grouping.error;
   return <section className="table-workspace" ref={rootHost}>
     <section className="table-heading">
       <div className="table-title"><h1>{table?.name ?? 'Loading table…'}</h1>
@@ -442,16 +479,25 @@ export function TableApp({ tableId, model, api, host, onManage }: {
           disabled={!view || locked || searchComposing} onClick={event => { setQueryAnchor(event.currentTarget.getBoundingClientRect()); setViewAction('sort'); }}>
           Sort{!!view?.query.sort?.length && <span className="query-badge" aria-hidden="true">{view.query.sort.length}</span>}</button>
         <button disabled={!view || locked} onClick={() => setViewAction('display')}>Display</button>
+        {view?.type === 'grid' && <button aria-label="Groups" aria-haspopup="dialog" aria-expanded={viewAction === 'group'} disabled={locked}
+          onClick={event => { setQueryAnchor(event.currentTarget.getBoundingClientRect()); setViewAction('group'); }}>
+          Groups{view.groupBy && <span className="query-badge" aria-hidden="true">1</span>}</button>}
         <button disabled={!view || recordActionsLocked || searchComposing} onClick={() => setSummarizing(true)}>Summarize</button>
         <button disabled={!view || locked || views.length < 2} onClick={() => setViewAction('delete')}>Delete view</button>
         <input type="search" aria-label="Search records" placeholder="Search records…" value={search}
           disabled={!ready || model.saving || offline} onChange={event => setSearch(event.target.value)}
           onCompositionStart={() => setSearchComposing(true)} onCompositionEnd={() => setSearchComposing(false)} />
       </div>
+      {grouping.enabled && <div className="group-tools" aria-label="Record groups">
+        <span>Grouped by {model.table?.fields.find(field => field.id === view!.groupBy)?.name}</span>
+        <button disabled={locked || editorDirty || !grouping.rows} onClick={() => collapseGroups(new Set(grouping.rows!.groups.map(group => group.key)))}>Collapse all</button>
+        <button disabled={locked || editorDirty || !grouping.rows} onClick={() => collapseGroups(new Set())}>Expand all</button>
+        <small>Click a group heading or press Enter to expand or collapse.</small>
+      </div>}
       {ready && table && view?.type === 'board' ? <BoardView table={table} view={view} search={appliedSearch.current} generation={queryVersion} api={api}
         disabled={recordActionsLocked} onOpen={record => void openBoardRecord(record)} onRefresh={() => void reload()}
         onCreate={lane => setRecordAction({ kind: 'create', records: [], initialValues: { [view.groupBy!]: lane } })} onMove={moveBoardRecord} />
-        : <div className="grid-host" aria-busy={locked || !ready} ref={gridHost} onCopyCapture={event => {
+        : <div className="grid-host" aria-busy={locked || !ready || (grouping.enabled && !grouping.rows)} ref={gridHost} onCopyCapture={event => {
         if (!gridHost.current?.querySelector('canvas')?.contains(document.activeElement)) return;
         event.preventDefault();
         event.stopPropagation();
@@ -467,13 +513,19 @@ export function TableApp({ tableId, model, api, host, onManage }: {
           void runPaste([x, y], parseClipboard(event.clipboardData.getData('text/plain')));
         } catch (failure) { report(failure); }
       }}>
-        {ready && table ? <EditorContext.Provider value={editorBridge}><DataEditor
-          ref={grid} onCellClicked={() => grid.current?.focus()}
-          width={size.width} height={size.height} rows={model.rowCount}
+        {ready && table && (!grouping.enabled || grouping.rows) ? <EditorContext.Provider value={editorBridge}><DataEditor
+          ref={grid} onCellClicked={([, row], event) => {
+            if (grouping.rows?.at(row)?.kind === 'group') { event.preventDefault(); toggleGroup(row); }
+            grid.current?.focus();
+          }}
+          width={size.width} height={size.height} rows={gridRowCount}
           columns={columns}
           onHeaderMenuClick={openColumnActions}
           onHeaderContextMenu={(column, event) => { event.preventDefault(); openColumnActions(column, event.bounds); }}
           onKeyDown={event => {
+            if ((event.key === 'Enter' || event.key === ' ') && selection.current && grouping.rows?.at(selection.current.cell[1])?.kind === 'group') {
+              event.cancel(); event.preventDefault(); toggleGroup(selection.current.cell[1]); return;
+            }
             if ((event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) && selection.current && event.bounds) {
               event.cancel();
               event.preventDefault();
@@ -491,7 +543,8 @@ export function TableApp({ tableId, model, api, host, onManage }: {
           onVisibleRegionChanged={region => setVisible(previous =>
             previous.y === region.y && previous.height === region.height ? previous : { y: region.y, height: region.height })}
           gridSelection={selection} onGridSelectionChange={setSelection}
-          rowMarkers="both" rowHeight={view!.rowHeight} freezeColumns={view!.frozenColumns} headerHeight={40} rangeSelect="rect" rowSelectionMode="multi"
+          rowMarkers={grouping.enabled ? 'checkbox' : 'both'} rowHeight={view!.rowHeight} freezeColumns={view!.frozenColumns} headerHeight={40} rangeSelect="rect" rowSelectionMode="multi"
+          getRowThemeOverride={row => grouping.rows?.at(row)?.kind === 'group' ? { bgCell: '#edf2fa', textDark: '#244570' } : undefined}
           cellActivationBehavior="double-click"
           keybindings={{ paste: false, copy: false }}
           onDelete={selected => { void clearSelection(selected); return false; }}
@@ -499,8 +552,9 @@ export function TableApp({ tableId, model, api, host, onManage }: {
           onCellsEdited={edits => {
             if (locked) return true;
             try {
-              model.applyEdits(edits.filter(edit => edit.value.kind === GridCellKind.Text || edit.value.kind === GridCellKind.Boolean).map(edit => ({
-                row: edit.location[1], fieldId: fields[edit.location[0]]!.id,
+              model.applyEdits(edits.filter(edit => recordIndex(edit.location[1]) !== undefined &&
+                (edit.value.kind === GridCellKind.Text || edit.value.kind === GridCellKind.Boolean)).map(edit => ({
+                row: recordIndex(edit.location[1])!, fieldId: fields[edit.location[0]]!.id,
                 value: edit.value.kind === GridCellKind.Boolean ? edit.value.data ?? null
                   : parseTextValue(fields[edit.location[0]]!, edit.value.kind === GridCellKind.Text ? edit.value.data : ''),
               })));
@@ -511,7 +565,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
           theme={{ accentColor: '#315cbe', accentLight: '#eef3ff', bgHeader: '#f5f7fb',
             bgCell: '#ffffff', textDark: '#17243b', borderColor: '#e5eaf1', baseFontStyle: '14px',
             fontFamily: 'Segoe UI, Microsoft YaHei, sans-serif' }}
-        /></EditorContext.Provider> : <div className="loading-state" role="status">{message ? 'Could not load the table. Try Reload.' : 'Opening your workspace…'}</div>}
+        /></EditorContext.Provider> : <div className="loading-state" role="status">{message ? 'Could not load the table. Try Reload.' : grouping.enabled ? 'Loading groups…' : 'Opening your workspace…'}</div>}
       </div>}
     </section>
     <footer><span role="status" className={pending ? 'pending-status' : ''}>{status}</span>

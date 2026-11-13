@@ -84,6 +84,24 @@ test('MCP and CLI create paired fields and update the same relationship from eit
   assert.equal((await call('records_update', { tableId: source.id, records: [{ id: task.id, expectedVersion: 1, values: { [link.id]: [project.id] } }] })).isError, true);
 });
 
+test('MCP saves grouped grids and exposes matching records, summaries and removable grouping', async t => {
+  const { environment } = await setup(t);
+  const { json, call } = await connect(t, environment);
+  let table = await json<Table>('tables_create', { name: 'Grouped tasks' });
+  table = await json<Table>('fields_create', { tableId: table.id, input: { expectedVersion: table.version, name: 'Status', type: 'singleSelect',
+    options: [{ id: 'planned', name: 'Z planned' }, { id: 'done', name: 'A done' }] } });
+  const status = table.fields[1]!.id;
+  const view = await json<GridView>('views_create', { tableId: table.id, input: { name: 'By status', type: 'grid', groupBy: status } });
+  await json('records_create', { tableId: table.id, records: [null, 'done', 'planned'].map(value => ({ values: { [status]: value } })) });
+  const result = await json<QueryPage>('views_query', { tableId: table.id, viewId: view.id, query: {} });
+  assert.deepEqual(result.records.map(record => record.values[status]), ['planned', 'done', null]);
+  const summary = await json<{ groupCount: number }>('records_summarize', { tableId: table.id, input: { viewId: view.id, groupBy: status } });
+  assert.equal(summary.groupCount, 3);
+  const clear = await json<GridView>('views_update', { tableId: table.id, viewId: view.id, input: { expectedVersion: view.version, groupBy: null } });
+  assert.equal(clear.groupBy, undefined);
+  assert.equal((await call('views_update', { tableId: table.id, viewId: view.id, input: { expectedVersion: view.version, groupBy: status } })).isError, true);
+});
+
 test('MCP formulas over linked summaries stay consistent after CLI target edits', async t => {
   const { environment, service } = await setup(t);
   const { json, call } = await connect(t, environment);

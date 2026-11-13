@@ -106,6 +106,10 @@ Numeric lookup summaries are also formula inputs. The storage dependency plan or
 
 Lookup fields can return count/sum/average/min/max through the existing relationship. See [linked summaries](linked-summaries.md) for configuration, null/error semantics and API usage. The SQLite lookup expression is shared by hydration, filters, sorting, search and grouped summary queries. Format 11 preserves existing array lookups and blocks incompatible older applications.
 
+### Grouped grids
+
+See [grouped table records](grouped-records.md) for saved grouping, editing and interface semantics. Grid grouping currently accepts single-select and checkbox fields. SQLite orders each view by group and then its record sort, including CSV exports; the client combines revision-checked group counts with the existing paged model. Visual headings never become record identities. Format 14 preserves earlier workspaces and protects grouped view configuration from incompatible older applications.
+
 ### Read-only lookups
 
 Add a **Lookup** field, choose an existing linked-record field, and select an ordinary field in its target table. The service computes values from saved links in link order, preserving numbers, booleans, timestamps, text, select IDs, and nulls. Multiple-select values are flattened without deduplication; no links produce an empty array. A lookup cannot target another lookup or a linked-record field, become a primary display field, set defaults, or require values. This is a one-hop lookup; it can also read a saved scalar formula result.

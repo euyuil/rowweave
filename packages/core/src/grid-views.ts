@@ -13,11 +13,14 @@ export function parseView(table: Table, input: unknown, previous = defaultView(t
   const item = schemaObject(input);
   const type = item['type'] === undefined ? previous.type : item['type'];
   if (type !== 'grid' && type !== 'board') throw new ServiceError('INVALID_VIEW', 'Choose a grid or board view.');
-  const groupBy = item['groupBy'] === undefined ? previous.groupBy : item['groupBy'];
+  const groupBy = item['groupBy'] === undefined ? (type === previous.type ? previous.groupBy : undefined) : item['groupBy'];
   if (type === 'board' && (typeof groupBy !== 'string' || !table.fields.some(field => field.id === groupBy && field.type === 'singleSelect'))) {
     throw new ServiceError('INVALID_VIEW', 'A board needs a single-select grouping field. Choose another field or change the view to a grid.');
   }
-  if (type === 'grid' && item['groupBy'] !== undefined) throw new ServiceError('INVALID_VIEW', 'Grouping is only available for board views.');
+  if (type === 'grid' && groupBy != null && (typeof groupBy !== 'string' ||
+      !table.fields.some(field => field.id === groupBy && ['singleSelect', 'checkbox'].includes(field.type)))) {
+    throw new ServiceError('INVALID_VIEW', 'Group a grid by a single-select or checkbox field, or remove grouping.');
+  }
   const query = parseQuery(table, item['query'] === undefined ? previous.query : item['query']);
   const saved: ViewQuery = {};
   if (query.filter) saved.filter = query.filter;
@@ -49,7 +52,11 @@ export function parseView(table: Table, input: unknown, previous = defaultView(t
   const { groupBy: _previousGroup, ...base } = previous;
   return { ...base, name: item['name'] === undefined ? previous.name : schemaName(item['name']), query: saved, columns,
     rowHeight: rowHeight as RowHeight, frozenColumns: frozenColumns as number, type,
-    ...(type === 'board' ? { groupBy: groupBy as string } : {}) };
+    ...(groupBy == null ? {} : { groupBy: groupBy as string }) };
+}
+
+export function groupedViewQuery(view: GridView): ViewQuery & { groupBy?: string } {
+  return { ...view.query, ...(view.type === 'grid' && view.groupBy ? { groupBy: view.groupBy } : {}) };
 }
 
 export function reconcileView(view: GridView, table: Table): GridView {

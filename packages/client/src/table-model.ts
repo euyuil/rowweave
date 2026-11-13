@@ -62,6 +62,7 @@ export class TableModel {
 
   getSnapshot = () => this.revision;
   get queryVersion(): number { return this.generation; }
+  get dataRevision(): number | undefined { return this.queryRevision; }
   get canUndo(): boolean { return !this.saving && this.undoStack.length > 0; }
   get canRedo(): boolean { return !this.saving && this.redoStack.length > 0; }
   get fields(): Field[] { return this.visibleFields; }
@@ -303,21 +304,42 @@ export class TableModel {
   }
 
   async paste(startRow: number, startColumn: number, cells: readonly (readonly string[])[]): Promise<void> {
+    if (!Number.isSafeInteger(startRow) || startRow < 0 || cells.length > maxBatchRecords) {
+      throw new Error('The pasted rectangle exceeds the table or batch limits.');
+    }
+    await this.pasteRows(Array.from({ length: cells.length }, (_, index) => startRow + index), startColumn, cells);
+  }
+
+  async pasteRows(rows: readonly number[], startColumn: number, cells: readonly (readonly string[])[]): Promise<void> {
     const fields = this.fields;
-    if (!this.table || !Number.isSafeInteger(startRow) || startRow < 0 ||
+    if (!this.table || rows.length !== cells.length || new Set(rows).size !== rows.length ||
+        rows.some(row => !Number.isSafeInteger(row) || row < 0 || row >= this.rowCount) ||
         !Number.isSafeInteger(startColumn) || startColumn < 0 || !cells.length ||
-        cells.length > maxBatchRecords || startRow + cells.length > this.rowCount ||
+        cells.length > maxBatchRecords ||
         cells.some(row => startColumn + row.length > fields.length) ||
         cells.reduce((n, row) => n + row.length, 0) > maxBatchCells) {
       throw new Error('The pasted rectangle exceeds the table or batch limits.');
     }
     const generation = this.generation;
-    const records = await this.readForEditing(startRow, cells.length);
+    const records = await this.readRowsForEditing(rows);
     if (generation !== this.generation) throw new Error('The query changed before paste completed. Paste again into the current view.');
     this.stage(cells.flatMap((row, y) => row.map((value, x) => ({
-      row: startRow + y, fieldId: fields[startColumn + x]!.id,
+      row: rows[y]!, fieldId: fields[startColumn + x]!.id,
       value: parseTextValue(fields[startColumn + x]!, value),
-    }))), new Map(records.map((record, index) => [startRow + index, record])));
+    }))), records);
+  }
+
+  private async readRowsForEditing(rows: readonly number[]): Promise<Map<number, RowRecord>> {
+    const loaded = new Map<number, RowRecord>();
+    for (let index = 0; index < rows.length;) {
+      const start = rows[index]!;
+      let count = 1;
+      while (rows[index + count] === start + count) count++;
+      const records = await this.readForEditing(start, count);
+      records.forEach((record, offset) => loaded.set(start + offset, record));
+      index += count;
+    }
+    return loaded;
   }
 
   async clearCells(rows: readonly number[], fieldIds: readonly string[]): Promise<void> {
@@ -330,15 +352,7 @@ export class TableModel {
       const field = this.fields.find(field => field.id === id)!;
       return { fieldId: id, value: parseTextValue(field, '') };
     });
-    const loaded = new Map<number, RowRecord>();
-    for (let index = 0; index < rows.length;) {
-      const start = rows[index]!;
-      let count = 1;
-      while (rows[index + count] === start + count) count++;
-      const records = await this.readForEditing(start, count);
-      records.forEach((record, offset) => loaded.set(start + offset, record));
-      index += count;
-    }
+    const loaded = await this.readRowsForEditing(rows);
     if (generation !== this.generation) throw new Error('The query changed before clearing completed. Select the cells again.');
     this.stage(rows.flatMap(row => values.map(value => ({ row, ...value }))), loaded);
   }
