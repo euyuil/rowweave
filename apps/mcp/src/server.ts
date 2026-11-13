@@ -47,6 +47,8 @@ export function createMcpServer(api: WorkspaceApi): McpServer {
   const field = z.strictObject(schemas.fieldId);
   const view = z.strictObject(schemas.viewId);
   const attachment = table.extend({ attachmentId: z.string() });
+  tool('calculations_refresh', 'Recalculate saved NOW/TODAY formulas and their dependents using one service clock. Returns the evaluation time and changed counts; advances record versions and table revisions but preserves user edit times and history. Writes are not retried.',
+    z.strictObject({}), 'change', () => api.refreshCalculations());
   tool('formulas_preview', 'Validate a draft formula and calculate it against one real saved record, without writing schema or data. Omit recordId for the first record; sample is null for an empty table. Use fieldId when editing an existing formula to check its dependencies.',
     table.extend({ input: schemas.formulaPreview }), 'read', a => api.previewFormula(a.tableId, a.input));
   tool('attachments_upload', 'Upload real file bytes into this table. Returns immutable metadata, ID and SHA-256; use the CLI for large files. Does not edit records.', table.extend({ input: z.strictObject({

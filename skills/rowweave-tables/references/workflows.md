@@ -106,6 +106,8 @@ When updating a view, send its current version, not the table's version. A tempo
 
 ## Formula preview
 
+Current-time functions use a captured service minute: `NOW()` returns a UTC timestamp, and `TODAY()` or `TODAY("Asia/Shanghai")` returns a calendar date. Use MCP `calculations_refresh` or CLI `rowweave calculations refresh` to update stored clock formulas and dependents explicitly. Inspect `evaluatedAt`, `changedRecords` and `changedTableIds`, then reread before writing. Refresh advances changed record versions without changing user edit times or creating undo receipts. A draft preview does not refresh stored values.
+
 Before adding or updating a formula, use MCP `formulas_preview` or CLI `rowweave formulas preview <table-id> --input request.json`. Send `{ expectedVersion, formula: { expression, resultType }, fieldId?, recordId? }` as the input. Use current schema UUID references and include `fieldId` when editing an existing formula so dependency checks cover that field. The first saved record is the default sample; choose a specific record ID when useful. Inspect both `sample.value` and `sample.error`; an empty table returns `sample: null`. Preview does not save data, advance versions or reserve the schema. Saving still validates all dependencies and recalculates all records.
 
 ## CSV preview, import and export

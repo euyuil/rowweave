@@ -88,7 +88,17 @@ Units are case-insensitive "year", "month", "week", "day", "hour", "minute" or "
 
 Use DATEADD(["Start"], 7, "day") with a Date result for a due date, or DATEADD(DATETIMEVALUE(["Start"]), 9, "hour") with a Date and time result for 09:00 UTC. Use field UUIDs instead of names through API/CLI/MCP. Null inputs stay null. Invalid arguments, arithmetic overflow and a result that does not match the chosen type produce visible calculation errors.
 
-These functions are deterministic from saved inputs. Current-time functions and their refresh policy remain a separate item in the [active delivery plan](gap-closure-plan.md). Format 25 gates date formula semantics so an older service cannot reopen the workspace and calculate them incorrectly; upgrading preserves existing values and versions.
+These date functions are deterministic from their inputs. Format 25 gates date formula semantics so an older service cannot reopen the workspace and calculate them incorrectly; upgrading preserves existing values and versions.
+
+## Current time and explicit refresh
+
+`NOW()` returns the service calculation time as a UTC timestamp rounded down to the minute. `TODAY()` returns its UTC calendar date; `TODAY("Asia/Shanghai")`, for example, uses that named time zone's calendar date. Named zones use the runtime's IANA data. Invalid zones and fixed numeric offsets produce calculation errors; a null zone produces null. Choose a Date and time result for NOW and a Date result for TODAY, or combine them with other date functions.
+
+One record batch, schema change or refresh uses one captured service clock. Normal saves recalculate affected records and dependencies. During idle time, stored values remain at their last evaluation. Explicitly refresh all clock formulas and dependents with SDK `refreshCalculations()`, CLI `rowweave calculations refresh`, MCP `calculations_refresh`, or HTTP `POST /calculations/refresh` with `{}`. The response contains `evaluatedAt` (the UTC minute snapshot), `changedRecords` and `changedTableIds`. A draft preview evaluates only its draft and never refreshes stored values.
+
+Refresh reads record bodies in pages of 100 and tracks affected IDs in temporary SQLite tables. Temporary storage and total work grow with affected data. Values/errors, lookups, filters, sorting and exports agree after the atomic commit. Each changed record advances its version at most once; data revisions advance, while schema versions and user creation/edit times stay unchanged. Identical results cause no record rewrite; a late failure rolls back every earlier page.
+
+Clock-only refresh does not create user-history snapshots or undo receipts. Its record-version changes can invalidate older edits or whole-operation undo; exact version protection still applies. Individual snapshot restoration using the current record version restores writable values and recalculates formulas at the current clock. Format 27 gates these semantics without rewriting existing data. Automatic scheduling and its status/control workflow remain required in the [active delivery plan](gap-closure-plan.md).
 
 ## Errors and consistency
 

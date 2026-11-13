@@ -16,6 +16,7 @@ interface Command {
 }
 
 export const commands: Record<string, Command> = {
+  'calculations refresh': { ids: 0, input: 'none', run: api => api.refreshCalculations() },
   'formulas preview': { ids: 1, input: 'required', run: (api, [id], input) => api.previewFormula(id!, input as FormulaPreviewRequest) },
   'attachments list': { ids: 1, input: 'optional', run: (api, [id], input) => api.listAttachments(id!, input as AttachmentQuery) },
   'attachments get': { ids: 2, input: 'none', run: (api, [id, attachment]) => api.getAttachment(id!, attachment!) },
@@ -59,6 +60,7 @@ Usage: rowweave <resource> <action> [table-id] [field/record/view-id] [options]
   tables   list | get | create | update | delete
   fields   create | update | delete | preview-conversion | apply-conversion
   formulas preview
+  calculations refresh
   records  get | query | summarize | create | update | delete | history | change | restore | trash | restore-deleted | batches | batch-changes | undo-batch
   views    list | get | create | update | delete | query
   csv      preview | import | export

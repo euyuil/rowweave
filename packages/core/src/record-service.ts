@@ -3,7 +3,7 @@ import { isReadOnlyField, maxPageSize, maxBatchRecords, maxBatchCells, maxFields
   type BatchResult, type CellValue, type ConversionPreview, type DeleteResult, type Field, type GridView, type QueryPage, type RecordDelete, type RecordPage, type RecordUpdate, type RowRecord, type Table, type ViewPage } from '../../contracts/src/index.js';
 import { schemaName, schemaObject, schemaVersion } from './schema-validation.js';
 import { parseField } from './field-schema.js';
-import type { FormulaPreview } from '../../contracts/src/index.js';
+import type { CalculationRefresh, FormulaPreview } from '../../contracts/src/index.js';
 import type { Attachment, AttachmentPage } from '../../contracts/src/index.js';
 import { parseAttachmentUpload, parseAttachmentQuery, type CheckedAttachmentUpload, type AttachmentFile } from './attachments.js';
 import { validateValue } from './field-values.js';
@@ -20,6 +20,7 @@ import type { CsvImportResult, CsvPreview } from '../../contracts/src/index.js';
 export { ServiceError } from './errors.js';
 
 export interface RecordStore {
+  refreshCalculations(): CalculationRefresh;
   previewFormula(table: Table, expectedVersion: number, field: Field, recordId?: string): FormulaPreview;
   uploadAttachment(tableId: string, input: CheckedAttachmentUpload): Attachment;
   listAttachments(tableId: string, query: ReturnType<typeof parseAttachmentQuery>): AttachmentPage;
@@ -59,6 +60,8 @@ export interface RecordStore {
 
 export class RecordService {
   constructor(private readonly store: RecordStore) {}
+
+  refreshCalculations(): CalculationRefresh { return this.store.refreshCalculations(); }
 
   uploadAttachment(tableId: string, input: unknown): Attachment { return this.store.uploadAttachment(tableId, parseAttachmentUpload(input)); }
   listAttachments(tableId: string, input: unknown): AttachmentPage { return this.store.listAttachments(tableId, parseAttachmentQuery(input)); }

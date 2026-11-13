@@ -65,6 +65,8 @@ Always use IDs returned by the service, including select-option IDs and linked-r
 
 ## Preview formulas
 
+`api.refreshCalculations()` explicitly updates stored NOW/TODAY results and their dependents across the workspace. It returns the captured minute, changed record count and affected table IDs. This atomic operation advances changed record versions, so reread before editing; it preserves user edit times and history. See [current-time semantics](../../docs/formulas.md#current-time-and-explicit-refresh).
+
 Use `api.previewFormula(tableId, { expectedVersion, formula: { expression, resultType }, fieldId?, recordId? })` to validate a draft and calculate it against one saved record without changing the workspace. Expressions reference field IDs. Include `fieldId` when editing an existing formula; omit `recordId` for the first saved record. An empty table returns `sample: null`; otherwise inspect `sample.value` and `sample.error`. Preview is informational and does not reserve the schema or records. See [formula preview semantics](../../docs/formulas.md#preview-before-saving).
 
 ## Query and exchange data

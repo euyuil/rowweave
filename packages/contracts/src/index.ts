@@ -94,6 +94,12 @@ export interface FormulaPreviewRequest extends SchemaWrite {
   formula: NonNullable<Field['formula']>;
 }
 
+export interface CalculationRefresh {
+  evaluatedAt: string;
+  changedRecords: number;
+  changedTableIds: string[];
+}
+
 export interface FormulaPreview {
   tableId: string;
   schemaVersion: number;

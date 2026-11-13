@@ -18,6 +18,10 @@ The authenticated file API stores immutable, table-scoped files up to 8 MiB insi
 | `GET /tables/:table/attachments/:attachment/content` | None | Original bytes / `downloadAttachment(id, attachmentId)` returns `Uint8Array` |
 | `DELETE /tables/:table/attachments/:attachment` | None | `{ deleted: attachmentId }` / `deleteAttachment(id, attachmentId)` |
 
+## Calculation refresh
+
+`POST /calculations/refresh` with `{}` atomically recalculates clock-dependent formulas and downstream dependencies across the workspace. SDK `refreshCalculations()`, CLI `calculations refresh` and MCP `calculations_refresh` share this operation. It returns `{ evaluatedAt, changedRecords, changedTableIds }`; `evaluatedAt` is the captured UTC minute. Changed record versions and data revisions advance, while user edit times and history remain unchanged. Existing stale writes/undo receipts remain subject to version checks. See [clock semantics and limits](formulas.md#current-time-and-explicit-refresh).
+
 ## Tables and schema
 
 In the paths below, `:table` and `:field` are stable IDs. Names are trimmed, non-empty strings up to 200 characters. Tables have `id`, `name`, schema `version`, data `revision`, `primaryFieldId`, ordered `fields`, and `total`. Table/schema changes return the complete updated Table.
