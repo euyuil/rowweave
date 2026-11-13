@@ -6,7 +6,7 @@ import { Dialog, type DialogAnchor } from './dialog.js';
 import { FieldInput } from './field-input.js';
 import { fromFormValue, toFormValue, type FormValue } from './field-input-values.js';
 import { rewriteFormulaReferences } from '../../core/src/formulas.js';
-import { isLookupSummary, isReadOnlyField, valueField } from '../../contracts/src/index.js';
+import { isReadOnlyField, valueField } from '../../contracts/src/index.js';
 
 export const fieldTypeNames: Record<FieldType, string> = {
   text: 'Text', multiline: 'Multiline text', url: 'URL', number: 'Number', autoNumber: 'Automatic number', checkbox: 'Checkbox', date: 'Date',
@@ -48,8 +48,7 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved, ancho
     if (!lookupTarget) return;
     setLookupField(current => lookupFields.some(candidate => candidate.id === current) ? current : lookupFields[0]?.id ?? '');
   }, [lookupTarget, lookupOperation]);
-  const formulaFields = table.fields.filter(candidate => candidate.id !== field?.id && !['relation', 'multiSelect', 'attachment'].includes(candidate.type) &&
-    (candidate.type !== 'lookup' || isLookupSummary(candidate)));
+  const formulaFields = table.fields.filter(candidate => candidate.id !== field?.id);
   const referenceName = (candidate: Field) => table.fields.filter(other => other.name === candidate.name).length > 1
     ? `${candidate.name} (${candidate.id})` : candidate.name;
   const [expression, setExpression] = useState(() => field?.formula
@@ -164,7 +163,8 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved, ancho
             <p>Functions: IF, COALESCE, CONCAT, LOWER, UPPER, TRIM, LEN, ROUND, ABS, AND, OR and NOT.</p>
             <p>Dates: DATE(year, month, day), DATEVALUE, DATETIMEVALUE, YEAR, MONTH, DAY, WEEKDAY, HOUR, MINUTE, SECOND, DATEADD(value, amount, unit) and DATEDIFF(start, end, unit). Timestamps use UTC. Units: "year", "month", "week", "day", "hour", "minute", "second".</p>
             <p>Example: DATEADD(["Start date"], 7, "day") with a Date result. DATETIMEVALUE converts a date to UTC midnight. Month/year additions clamp to the last valid day; WEEKDAY uses Monday = 1.</p>
-            <p>Example: ROUND(["Subtotal"] * (1 + ["Tax rate"]), 2). Numeric linked summaries can be used as inputs. Record links, arrays of looked-up values and multiple-select values are unavailable in formulas.</p>
+            <p>Arrays: ARRAY, ARRAYLEN, ARRAYCOUNT, ARRAYJOIN, ARRAYUNIQUE, ARRAYCOMPACT, ARRAYGET, ARRAYCONTAINS, ARRAYSUM, ARRAYAVERAGE, ARRAYMIN and ARRAYMAX. Use these with linked records, lookup values, multiple-select values or attachment IDs. ARRAYGET positions start at 1.</p>
+            <p>Examples: ROUND(["Subtotal"] * (1 + ["Tax rate"]), 2); ARRAYLEN(["Related records"]); ARRAYJOIN(ARRAYUNIQUE(["Linked names"]), ", "). Empty numeric summaries stay empty; ARRAYCOUNT counts non-null items. Final formula results must be one value of the selected result type.</p>
           </details>
         </>}
         {type === 'lookup' && <>

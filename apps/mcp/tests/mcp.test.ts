@@ -62,6 +62,24 @@ async function setup(t: Context) {
   return { service, server, token, environment };
 }
 
+test('MCP and CLI share array formulas over stable selection IDs without direct calculated writes', async t => {
+  const { environment } = await setup(t), { json } = await connect(t, environment);
+  let table = await json<Table>('tables_create', { name: 'Array calculations' });
+  table = await json<Table>('fields_create', { tableId: table.id, input: { expectedVersion: table.version, name: 'Tags', type: 'multiSelect',
+    options: [{ name: 'Alpha' }, { name: 'Beta' }] } });
+  const tags = table.fields[1]!.id, ids = table.fields[1]!.options!.map(option => option.id);
+  table = await json<Table>('fields_create', { tableId: table.id, input: { expectedVersion: table.version, name: 'Count', type: 'formula',
+    formula: { expression: 'ARRAYLEN([' + tags + '])', resultType: 'number' } } });
+  const count = table.fields[2]!.id;
+  const row = (await json<BatchResult>('records_create', { tableId: table.id, records: [{ values: { [tags]: ids } }] })).records[0]!;
+  assert.equal(row.values[count], 2);
+  const result = await runFile(process.execPath, [resolve('apps/cli/dist/rowweave.js'), 'records', 'update', table.id, '--json', JSON.stringify([
+    { id: row.id, expectedVersion: row.version, values: { [tags]: [ids[1]] } },
+  ])], { env: { ...process.env, ...environment } });
+  assert.equal((JSON.parse(result.stdout) as BatchResult).records[0]!.values[count], 1);
+  assert.equal((await json<RowRecord>('records_get', { tableId: table.id, recordId: row.id })).values[count], 1);
+});
+
 test('MCP and CLI share date formula types, UTC values and source recalculation', async t => {
   const { environment } = await setup(t), { json } = await connect(t, environment);
   let table = await json<Table>('tables_create', { name: 'Date calculations' });

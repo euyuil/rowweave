@@ -42,8 +42,8 @@ export async function verifyConnectedFormulaWorkflow(page) {
   await page.getByLabel('Field name', { exact: true }).fill('Total');
   await page.getByLabel('Field type', { exact: true }).selectOption('formula');
   const picker = page.getByLabel('Insert field', { exact: true });
-  assert.equal(await picker.locator(`option[value="${array}"]`).count(), 0);
-  assert.equal(await picker.locator(`option[value="${link}"]`).count(), 0);
+  assert.equal(await picker.locator(`option[value="${array}"]`).count(), 1);
+  assert.equal(await picker.locator(`option[value="${link}"]`).count(), 1);
   await picker.selectOption(subtotal);
   assert.equal(await page.getByLabel('Formula', { exact: true }).inputValue(), '["Subtotal"]');
   await page.getByLabel('Formula', { exact: true }).fill('["Subtotal"] * 2');

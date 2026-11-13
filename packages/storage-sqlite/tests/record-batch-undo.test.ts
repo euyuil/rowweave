@@ -162,7 +162,7 @@ test('complete saved undo and its receipt survive restart, backup and format-18 
   const restarted = new RecordService(data.open()), result = restarted.undoRecordBatch(table.id, batch.id);
   assert.equal(restarted.getRecord(table.id, row.id).values[amount], 1);
   const backup = join(dirname(data.path), 'backup.sqlite'), restoredPath = join(dirname(data.path), 'restored.sqlite');
-  await backupWorkspace(data.path, backup); assert.equal((await restoreWorkspace(backup, restoredPath)).version, 25);
+  await backupWorkspace(data.path, backup); assert.equal((await restoreWorkspace(backup, restoredPath)).version, 26);
   const restoredStore = new SqliteRecordStore(restoredPath);
   try {
     const restored = new RecordService(restoredStore);

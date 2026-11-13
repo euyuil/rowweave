@@ -27,9 +27,38 @@ Choose a **Number**, **Text**, **Checkbox**, **Date**, or **Date and time (UTC)*
 | `ABS(number)`, `ROUND(number, precision?)` | Absolute value and decimal rounding (precision 0–10, default 0). Half ties round toward positive infinity; calculations use finite JavaScript numbers. |
 | `AND(a, b, …)`, `OR(a, b, …)`, `NOT(value)` | Boolean inputs; AND/OR evaluate all arguments. |
 
-Except equality, IF, COALESCE and CONCAT, an operation with a null input returns null. Equality distinguishes null from empty text. References to single-select fields return stable option IDs; dates and timestamps are strings. Formulas can reference other same-record formulas and numeric [linked summaries](linked-summaries.md). Raw linked-record fields, array lookups and multiple-select fields are not scalar inputs. Remove or update dependent formulas before deleting a referenced field. Circular dependencies, including chains across tables, and invalid syntax prevent the schema change.
+Except equality, IF, COALESCE and CONCAT, scalar operations with a null input return null. Equality distinguishes null from empty text. References to single-select fields return stable option IDs; dates and timestamps are strings. Formulas can reference other same-record formulas, numeric [linked summaries](linked-summaries.md), and collections through the array functions below. Remove or update dependent formulas before deleting a referenced field. Circular dependencies, including chains across tables, and invalid syntax prevent the schema change.
 
 Expressions allow at most 4,096 characters, 512 tokens and 40 nested parsing levels. Variadic functions accept up to 20 arguments. There is no JavaScript evaluation, property access, network access, current-time function or random function. The result text limit is 10,000 characters. Source type conversions may produce formula errors; they do not silently coerce inputs.
+
+## Array calculations
+
+Linked-record and attachment fields provide ordered arrays of stable record/file IDs. Multiple-select fields provide option IDs; renaming their labels does not change calculation inputs. Array lookups provide their typed values in link order, including nulls and repeated values. Use array functions to produce a single declared result. Intermediate arrays can pass through IF and COALESCE, but cannot be saved directly as a formula result or silently converted to text/numbers by scalar operators.
+
+| Function | Behavior |
+| --- | --- |
+| `ARRAY(value, ...)` | Construct 0–20 scalar items, including null. Nested arrays are rejected. `ARRAY()` is an empty collection. |
+| `ARRAYLEN(values)` | Count all positions, including null values. |
+| `ARRAYCOUNT(values)` | Count non-null items, including zero, false and empty text. |
+| `ARRAYGET(values, position)` | Select a positive, one-based whole-number position. A position beyond the array returns null. |
+| `ARRAYCONTAINS(values, item)` | Match a scalar by both type and value, including null. The number 1 does not match the text "1". |
+| `ARRAYUNIQUE(values)` | Keep the first occurrence of each typed value, preserving order and retaining one null. |
+| `ARRAYCOMPACT(values)` | Remove only nulls. Zero, false and empty text remain. |
+| `ARRAYJOIN(values, separator?)` | Join scalar text representations; the default separator is ", ". Null contributes empty text, retaining its position. Use ARRAYCOMPACT first to omit null positions. |
+| `ARRAYSUM(values)`, `ARRAYAVERAGE(values)`, `ARRAYMIN(values)`, `ARRAYMAX(values)` | Numeric summaries skip nulls. Any other nonnumeric item is an error. Empty/all-null arrays return null; use COALESCE when zero is intended. |
+
+A null source array produces null. An empty array has length/count zero, joins to empty text, and does not contain any value. ARRAYGET with a null position and ARRAYJOIN with a null separator also return null; ARRAYCONTAINS can explicitly test for a null member. Arrays are limited to 40,000 items and joined text to 10,000 characters. Oversized results fail explicitly, with no silent truncation. Numeric summaries reject non-finite results.
+
+Examples in the editor:
+
+```text
+ARRAYLEN(COALESCE(["Tasks"], ARRAY()))
+ARRAYSUM(["Linked amounts"])
+ARRAYJOIN(ARRAYUNIQUE(["Linked names"]), ", ")
+DATEADD(ARRAYGET(["Linked dates"], 1), 7, "day")
+```
+
+Collection formulas recalculate in the same write transaction as their inputs. In particular, raw relation calculations run after both sides of a two-way link have been updated, so creation, reverse edits, deletion, restoration and saved undo cannot leave counts stale. Array lookup inputs remain derived; only the final formula values/errors are stored. Linked calculation errors propagate rather than being counted as successful empty items. Format 26 gates these evaluation and dependency semantics while preserving existing data.
 
 ## Date calculations
 
