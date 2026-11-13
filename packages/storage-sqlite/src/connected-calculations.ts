@@ -38,7 +38,7 @@ export class ConnectedCalculations {
       if (!node) throw new ServiceError('INVALID_FORMULA', 'A calculation references a missing field. Remove its dependent fields first.');
       visiting.add(id);
       for (const dependency of node.dependencies) visit(dependency);
-      node.linked = !!node.formula && node.dependencies.some(id => this.nodes.get(id)!.field.type === 'lookup' || this.nodes.get(id)!.linked);
+      node.linked = !!node.formula && node.dependencies.some(id => ['lookup', 'relation'].includes(this.nodes.get(id)!.field.type) || this.nodes.get(id)!.linked);
       visiting.delete(id);
       visited.add(id);
       if (node.formula || node.field.type === 'lookup') this.ordered.push(node);

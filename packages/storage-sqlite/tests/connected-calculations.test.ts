@@ -123,9 +123,13 @@ test('lookup configuration, local conversions, empty links and CSV writes keep c
   assert.equal(record.formulaErrors, undefined);
   schema = service.updateField(orders.id, subtotal, { expectedVersion: schema.version, lookup: { relationFieldId: link, fieldId: amount, operation: 'count' } });
   assert.equal(service.getRecord(orders.id, record.id).values[total], 0);
-  const before = service.getTable(orders.id);
-  assert.throws(() => service.updateField(orders.id, subtotal, { expectedVersion: schema.version, lookup: { relationFieldId: link, fieldId: amount, operation: 'values' } }), /scalar/);
-  assert.deepEqual(service.getTable(orders.id), before);
+  schema = service.updateField(orders.id, subtotal, { expectedVersion: schema.version, lookup: { relationFieldId: link, fieldId: amount, operation: 'values' } });
+  const arrayResult = service.getRecord(orders.id, record.id);
+  assert.equal(arrayResult.values[total], null); assert.match(arrayResult.formulaErrors![total]!, /single value/);
+  service.updateField(orders.id, total, { expectedVersion: schema.version, formula: { expression: 'COALESCE(ARRAYSUM([' + subtotal + ']), 0) * (1 + [' + rate + '])', resultType: 'number' } });
+  assert.equal(service.getRecord(orders.id, record.id).values[total], 0);
+  assert.equal(service.getRecord(orders.id, record.id).formulaErrors, undefined);
+  assert.equal(service.queryRecords(orders.id, { search: 'Imported' }).records[0]!.values[total], 11);
 });
 
 test('reciprocal edits and deletion recalculate formulas on the opposite record', t => {

@@ -1,8 +1,9 @@
-import { isLookupSummary, maxTextLength, type CellValue, type Field, type ScalarValue, type Table } from '../../contracts/src/index.js';
+import { maxTextLength, type CellValue, type Field, type ScalarValue, type Table } from '../../contracts/src/index.js';
 import { ServiceError } from './errors.js';
 import { CalculationError, calculationError } from './calculation-error.js';
 import { calculateDateFunction, dateFunctionArities } from './date-formulas.js';
 import { validateValue } from './field-values.js';
+import { arrayFunctionArities, calculateArrayFunction, scalarFormulaValue } from './array-formulas.js';
 
 type Expression = { kind: 'literal'; value: ScalarValue } | { kind: 'reference'; id: string }
   | { kind: 'operation'; name: string; args: Expression[] };
@@ -48,6 +49,7 @@ export function rewriteFormulaReferences(source: string, resolve: (reference: st
 
 const arities: Record<string, [number, number]> = {
   ...dateFunctionArities,
+  ...arrayFunctionArities,
   IF: [3, 3], COALESCE: [2, 20], CONCAT: [1, 20], LOWER: [1, 1], UPPER: [1, 1],
   TRIM: [1, 1], LEN: [1, 1], ROUND: [1, 2], ABS: [1, 1], AND: [2, 20], OR: [2, 20], NOT: [1, 1],
 };
@@ -130,23 +132,25 @@ function bounded(value: ScalarValue): ScalarValue {
   return value;
 }
 
-function evaluate(node: Expression, values: Record<string, CellValue>, errors: Record<string, string>): ScalarValue {
+function evaluate(node: Expression, values: Record<string, CellValue>, errors: Record<string, string>): CellValue {
   if (node.kind === 'literal') return node.value;
   if (node.kind === 'reference') {
     if (errors[node.id]) calculationError('A referenced calculation has an error.');
-    return (values[node.id] ?? null) as ScalarValue;
+    return values[node.id] ?? null;
   }
   const { name, args } = node;
   const arg = (index: number) => evaluate(args[index]!, values, errors);
   if (name === 'IF') {
     const condition = arg(0);
-    return condition === null ? null : arg(boolean(condition) ? 1 : 2);
+    return condition === null ? null : arg(boolean(scalarFormulaValue(condition)) ? 1 : 2);
   }
   if (name === 'COALESCE') {
     for (let i = 0; i < args.length; i++) { const value = arg(i); if (value !== null) return value; }
     return null;
   }
-  const inputs = args.map(child => evaluate(child, values, errors));
+  const evaluated = args.map(child => evaluate(child, values, errors));
+  if (arrayFunctionArities[name]) return calculateArrayFunction(name, evaluated);
+  const inputs = evaluated.map(scalarFormulaValue);
   const a = inputs[0]!, b = inputs[1]!;
   if (name === '==' || name === '!=') return name === '==' ? a === b : a !== b;
   if (name === 'CONCAT') return bounded(inputs.map(value => value === null ? '' : String(value)).join(''));
@@ -188,7 +192,7 @@ export function compileFormula(field: Field) {
   const parsed = parse(field.formula!.expression);
   return { references: parsed.references, calculate(values: Record<string, CellValue>, errors: Record<string, string>) {
     try {
-      let value = bounded(evaluate(parsed.expression, values, errors));
+      let value = bounded(scalarFormulaValue(evaluate(parsed.expression, values, errors)));
       const resultType = field.formula!.resultType;
       const expected = { text: 'string', number: 'number', checkbox: 'boolean', date: 'string', datetime: 'string' }[resultType];
       if (value !== null && typeof value !== expected) calculationError(`Expected a ${field.formula!.resultType} result.`);
@@ -223,11 +227,8 @@ export function compileFormulas(table: Pick<Table, 'fields'>, options: { skipLin
     for (const reference of formula.references) {
       const field = fields.get(reference);
       if (!field) fail(`Formula references a missing field: ${reference}. Remove or update its dependent formulas first.`);
-      if (['relation', 'multiSelect', 'attachment'].includes(field!.type) || (field!.type === 'lookup' && !isLookupSummary(field!))) {
-        fail(`${field!.name}: formulas require scalar fields or numeric linked summaries.`);
-      }
       if (formulas.has(reference)) visit(reference);
-      if (field!.type === 'lookup' || linked.has(reference)) linked.add(id);
+      if (field!.type === 'lookup' || field!.type === 'relation' || linked.has(reference)) linked.add(id);
     }
     visiting.delete(id);
     visited.add(id);
