@@ -14,9 +14,9 @@ Numeric formulas are valid targets. Sum, average, minimum and maximum inherit th
 | `0` | 1 | 0 | 0 | 0 | 0 |
 | Only nulls, or no linked records | 0 | No value | No value | No value | No value |
 
-Count measures numeric values, not the number of links. All operations ignore nulls and retain zero. A linked formula error or an overflowing calculation produces no value and an explicit error, rather than a partial successful total. CSV export rejects selected calculation errors. Filters, sorting, search and the **Summarize** dialog use the current scalar results, with normal null semantics. Pagination revision checks detect changes to the target table; target edits do not change the source record's version because they do not modify its saved links or values.
+Count measures numeric values, not the number of links. All operations ignore nulls and retain zero. A linked formula error or an overflowing calculation produces no value and an explicit error, rather than a partial successful total. CSV export rejects selected calculation errors. Filters, sorting, search and the **Summarize** dialog use the current scalar results, with normal null semantics. Pagination revision checks detect changes to the target table. A lookup alone does not rewrite source records; a changed stored formula that uses it advances the source record's version.
 
-The operation follows one relationship. Lookup targets cannot themselves be lookups or linked-record fields. Same-record formulas cannot reference a lookup. Delete dependent fields before removing their link/target; a formula used by a numeric summary must retain its numeric result type. Incompatible saved filters prevent a configuration change atomically.
+The operation follows one relationship. Lookup targets cannot themselves be lookups or linked-record fields. A [formula](formulas.md) can use a scalar summary, and another table can summarize that formula's numeric result. All dependencies must be acyclic; changes propagate transactionally through the chain. Array lookups remain unsupported formula inputs. Delete dependent fields before removing their link/target; a formula used by a numeric summary must retain its numeric result type. Incompatible saved filters prevent a configuration change atomically.
 
 ## Interfaces
 

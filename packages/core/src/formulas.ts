@@ -1,4 +1,4 @@
-import { maxTextLength, type CellValue, type Field, type ScalarValue, type Table } from '../../contracts/src/index.js';
+import { isLookupSummary, maxTextLength, type CellValue, type Field, type ScalarValue, type Table } from '../../contracts/src/index.js';
 import { ServiceError } from './errors.js';
 
 type Expression = { kind: 'literal'; value: ScalarValue } | { kind: 'reference'; id: string }
@@ -131,7 +131,7 @@ function bounded(value: ScalarValue): ScalarValue {
 function evaluate(node: Expression, values: Record<string, CellValue>, errors: Record<string, string>): ScalarValue {
   if (node.kind === 'literal') return node.value;
   if (node.kind === 'reference') {
-    if (errors[node.id]) calculationError('A referenced formula has an error.');
+    if (errors[node.id]) calculationError('A referenced calculation has an error.');
     return (values[node.id] ?? null) as ScalarValue;
   }
   const { name, args } = node;
@@ -181,10 +181,27 @@ function evaluate(node: Expression, values: Record<string, CellValue>, errors: R
   }
 }
 
-export function compileFormulas(table: Pick<Table, 'fields'>): (values: Record<string, CellValue>) => { values: Record<string, CellValue>; formulaErrors?: Record<string, string> } {
+export function compileFormula(field: Field) {
+  const parsed = parse(field.formula!.expression);
+  return { references: parsed.references, calculate(values: Record<string, CellValue>, errors: Record<string, string>) {
+    try {
+      const value = bounded(evaluate(parsed.expression, values, errors));
+      const expected = { text: 'string', number: 'number', checkbox: 'boolean' }[field.formula!.resultType];
+      if (value !== null && typeof value !== expected) calculationError(`Expected a ${field.formula!.resultType} result.`);
+      return { value };
+    } catch (error) {
+      if (!(error instanceof CalculationError)) throw error;
+      return { value: null, error: error.message };
+    }
+  } };
+}
+
+export function compileFormulas(table: Pick<Table, 'fields'>, options: { skipLinked?: boolean } = {}):
+  (values: Record<string, CellValue>, previousErrors?: Record<string, string>) => { values: Record<string, CellValue>; formulaErrors?: Record<string, string> } {
   const fields = new Map(table.fields.map(field => [field.id, field]));
-  const formulas = new Map(table.fields.filter(field => field.type === 'formula').map(field => [field.id, parse(field.formula!.expression)]));
-  const ordered: Array<{ field: Field; expression: Expression }> = [];
+  const formulas = new Map(table.fields.filter(field => field.type === 'formula').map(field => [field.id, compileFormula(field)]));
+  const ordered: string[] = [];
+  const linked = new Set<string>();
   const visited = new Set<string>(), visiting = new Set<string>();
   function visit(id: string): void {
     if (visited.has(id)) return;
@@ -194,27 +211,25 @@ export function compileFormulas(table: Pick<Table, 'fields'>): (values: Record<s
     for (const reference of formula.references) {
       const field = fields.get(reference);
       if (!field) fail(`Formula references a missing field: ${reference}. Remove or update its dependent formulas first.`);
-      if (['relation', 'lookup', 'multiSelect'].includes(field!.type)) fail(`${field!.name}: formulas require same-record scalar fields.`);
+      if (['relation', 'multiSelect'].includes(field!.type) || (field!.type === 'lookup' && !isLookupSummary(field!))) {
+        fail(`${field!.name}: formulas require scalar fields or numeric linked summaries.`);
+      }
       if (formulas.has(reference)) visit(reference);
+      if (field!.type === 'lookup' || linked.has(reference)) linked.add(id);
     }
     visiting.delete(id);
     visited.add(id);
-    ordered.push({ field: fields.get(id)!, expression: formula.expression });
+    ordered.push(id);
   }
   for (const id of formulas.keys()) visit(id);
-  return values => {
-    const errors: Record<string, string> = {};
-    for (const { field, expression } of ordered) {
-      try {
-        const result = bounded(evaluate(expression, values, errors));
-        const expected = { text: 'string', number: 'number', checkbox: 'boolean' }[field.formula!.resultType];
-        if (result !== null && typeof result !== expected) calculationError(`Expected a ${field.formula!.resultType} result.`);
-        values[field.id] = result;
-      } catch (error) {
-        if (!(error instanceof CalculationError)) throw error;
-        values[field.id] = null;
-        errors[field.id] = error.message;
-      }
+  return (values, previousErrors = {}) => {
+    const errors: Record<string, string> = options.skipLinked
+      ? Object.fromEntries(Object.entries(previousErrors).filter(([id]) => linked.has(id))) : {};
+    for (const id of ordered) {
+      if (options.skipLinked && linked.has(id)) continue;
+      const result = formulas.get(id)!.calculate(values, errors);
+      values[id] = result.value;
+      if (result.error) errors[id] = result.error;
     }
     return { values, ...(Object.keys(errors).length ? { formulaErrors: errors } : {}) };
   };

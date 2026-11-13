@@ -52,7 +52,7 @@ export class Relations {
       this.validateTargets(field, value);
       direct.set(key(change.id, field.id), { recordId: change.id, field, ids: (value ?? []) as string[] });
     }
-    if (!direct.size) return { tables: [], values: new Map<string, Record<string, CellValue>>() };
+    if (!direct.size) return { records: new Map<string, Set<string>>(), values: new Map<string, Record<string, CellValue>>() };
     const states = new Map(direct);
     const fields = new Map(table.fields.map(field => [field.id, field]));
     const readIds = this.db.prepare('SELECT target_record_id FROM relation_edges WHERE source_record_id = ? AND field_id = ? ORDER BY position');
@@ -93,7 +93,7 @@ export class Relations {
       affected.set(state.recordId, values);
     }
     const alreadyWritten = new Set(changes.map(change => change.id));
-    const tables = new Set<string>();
+    const records = new Map<string, Set<string>>();
     const updatedValues = new Map<string, Record<string, CellValue>>();
     const read = this.db.prepare('SELECT table_id, values_json FROM records WHERE id = ?');
     const update = this.db.prepare('UPDATE records SET values_json = ?, version = version + ? WHERE id = ?');
@@ -101,7 +101,10 @@ export class Relations {
       const row = read.get(id)!;
       const values = { ...JSON.parse(row['values_json'] as string) as Record<string, CellValue>, ...changed };
       update.run(JSON.stringify(values), alreadyWritten.has(id) ? 0 : 1, id);
-      tables.add(row['table_id'] as string);
+      const tableId = row['table_id'] as string;
+      const ids = records.get(tableId) ?? new Set<string>();
+      ids.add(id);
+      records.set(tableId, ids);
       if (alreadyWritten.has(id)) updatedValues.set(id, values);
     }
     const remove = this.db.prepare('DELETE FROM relation_edges WHERE source_record_id = ? AND field_id = ?');
@@ -110,7 +113,7 @@ export class Relations {
       remove.run(state.recordId, state.field.id);
       for (const [position, id] of state.ids.entries()) insert.run(state.recordId, state.field.id, id, position);
     }
-    return { tables: [...tables], values: updatedValues };
+    return { records, values: updatedValues };
   }
 
   detachFields(table: Table, before: Table): string[] {
@@ -176,7 +179,7 @@ export class Relations {
     this.db.prepare('DELETE FROM field_relations WHERE field_id IN (SELECT id FROM fields WHERE table_id = ?)').run(tableId);
   }
 
-  deleteRecords(table: Table, ids: string[]): string[] {
+  deleteRecords(table: Table, ids: string[]) {
     const selected = JSON.stringify(ids);
     if (this.db.prepare(`SELECT 1 FROM fields f, json_each(f.definition_json, '$.defaultValue') choice
       WHERE json_extract(f.definition_json, '$.type') = 'relation'
@@ -189,6 +192,6 @@ export class Relations {
     if (this.db.prepare('SELECT 1 FROM relation_edges WHERE target_record_id IN (SELECT value FROM json_each(?)) LIMIT 1').get(selected)) {
       throw new ServiceError('RELATION_DEPENDENCY', 'Unlink these records from other records before deleting them.', 409);
     }
-    return affected.tables;
+    return affected;
   }
 }
