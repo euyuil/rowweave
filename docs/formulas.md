@@ -1,6 +1,6 @@
 # Formula fields
 
-Use a **Formula** field to calculate an amount, build a label, or flag a record. In **Manage fields → Add field**, select **Formula**, choose its result type, and enter an expression. **Insert field** inserts a reference at the cursor. For example:
+Use a **Formula** field to calculate an amount, plan a date, build a label, or flag a record. In **Manage fields → Add field**, select **Formula**, choose its result type, and enter an expression. **Insert field** inserts a reference at the cursor. For example:
 
 ```text
 ["Quantity"] * ["Price"]
@@ -13,7 +13,7 @@ The editor displays names; the service stores field UUID references. Renaming or
 
 ## Language
 
-Choose a **Number**, **Text**, or **Checkbox** result. A non-null result must have that type; there is no implicit text-to-number conversion. Number results use the same decimal, currency, percent and precision settings as ordinary numbers.
+Choose a **Number**, **Text**, **Checkbox**, **Date**, or **Date and time (UTC)** result. A non-null result must have that type; there is no implicit text-to-number conversion. Number results use the same decimal, currency, percent and precision settings as ordinary numbers. Date results validate calendar dates; timestamp results validate explicit-zone ISO timestamps and normalize to UTC. They support the same ordered/relative-date filters, sorting, grouping and lookup operations as ordinary date/time values.
 
 | Construct | Behavior |
 | --- | --- |
@@ -30,6 +30,26 @@ Choose a **Number**, **Text**, or **Checkbox** result. A non-null result must ha
 Except equality, IF, COALESCE and CONCAT, an operation with a null input returns null. Equality distinguishes null from empty text. References to single-select fields return stable option IDs; dates and timestamps are strings. Formulas can reference other same-record formulas and numeric [linked summaries](linked-summaries.md). Raw linked-record fields, array lookups and multiple-select fields are not scalar inputs. Remove or update dependent formulas before deleting a referenced field. Circular dependencies, including chains across tables, and invalid syntax prevent the schema change.
 
 Expressions allow at most 4,096 characters, 512 tokens and 40 nested parsing levels. Variadic functions accept up to 20 arguments. There is no JavaScript evaluation, property access, network access, current-time function or random function. The result text limit is 10,000 characters. Source type conversions may produce formula errors; they do not silently coerce inputs.
+
+## Date calculations
+
+Date inputs are strings in the same formats as date/time fields: a valid Gregorian calendar date in YYYY-MM-DD form, or an ISO timestamp with seconds, up to three fractional digits and an explicit Z/UTC offset. No locale-dependent date parsing is used. Date/timestamp results use years 0000–9999. Timestamps are normalized to UTC before extracting calendar components or doing calendar arithmetic; the machine's local zone does not change a result.
+
+| Function | Behavior |
+| --- | --- |
+| DATE(year, month, day) | Construct a date from whole numbers. Invalid calendar combinations are errors, including February 29 in a non-leap year. |
+| DATEVALUE(value) | Return a date; timestamps use their UTC calendar date. |
+| DATETIMEVALUE(value) | Normalize a timestamp; a date becomes midnight UTC. |
+| YEAR(value), MONTH(value), DAY(value), WEEKDAY(value) | Extract calendar components. WEEKDAY uses Monday = 1 through Sunday = 7. |
+| HOUR(value), MINUTE(value), SECOND(value) | Extract UTC time components. A date alone is an error; convert it with DATETIMEVALUE when midnight is intended. |
+| DATEADD(value, amount, unit) | Add a signed whole number of units. Calendar month/year additions clamp to the last valid day. Dates retain date values; adding time units requires a timestamp. |
+| DATEDIFF(start, end, unit) | Count signed complete units, truncating incomplete units. Dates are midnight UTC. For months/years, count forward from the earlier endpoint with month-end clamping, then apply the sign, so swapping endpoints negates the result. |
+
+Units are case-insensitive "year", "month", "week", "day", "hour", "minute" or "second". A timestamp day is 24 hours in UTC; these functions do not interpret regional daylight-saving calendars. For example, DATEADD("2024-01-31", 1, "month") is 2024-02-29, while DATEADD("2024-02-29", 1, "year") is 2025-02-28. DATEDIFF("2024-02-29", "2024-01-31", "month") is -1.
+
+Use DATEADD(["Start"], 7, "day") with a Date result for a due date, or DATEADD(DATETIMEVALUE(["Start"]), 9, "hour") with a Date and time result for 09:00 UTC. Use field UUIDs instead of names through API/CLI/MCP. Null inputs stay null. Invalid arguments, arithmetic overflow and a result that does not match the chosen type produce visible calculation errors.
+
+These functions are deterministic from saved inputs. Current-time functions and their refresh policy remain a separate item in the [active delivery plan](gap-closure-plan.md). Format 25 gates date formula semantics so an older service cannot reopen the workspace and calculate them incorrectly; upgrading preserves existing values and versions.
 
 ## Errors and consistency
 

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { Temporal } from '@js-temporal/polyfill';
+import { Temporal } from '../../core/src/temporal.js';
 import type { FieldFilter, FilterGroup, Table } from '../../contracts/src/index.js';
 import { queryValueField } from '../../core/src/record-query.js';
 

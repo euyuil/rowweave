@@ -134,6 +134,8 @@ Deleting referenced records returns `RELATION_DEPENDENCY` until external links a
 
 The [formula guide](formulas.md) defines the language, UI workflow and API contract. The core parses bounded expressions and orders dependencies; SQLite materializes results/errors transactionally on every supported write path. Schema changes recalculate records without loading them into the renderer. Database format 10 adds an empty error map to existing records without changing their versions or saved views.
 
+Date formulas construct, extract and add/diff calendar values using the bundled Temporal implementation. Typed date and timestamp results share ordinary date filters, lookups, CSV and recovery; timestamps use UTC. Format 25 gates these calculation semantics without rewriting existing records. The field editor documents supported functions and units, and record details label timestamp results as UTC. [Date calculation rules](formulas.md#date-calculations) include month-end clamping, signed complete intervals and explicit errors.
+
 Numeric lookup summaries are also formula inputs. The storage dependency plan orders formulas and lookups across tables, rejects cycles, and uses indexed relation edges to recalculate affected records in batches inside the write transaction. Local-only formulas retain their ordinary calculation path. Lookup inputs remain derived; only formula results and errors are persisted. A changed dependent result advances its record version once per record mutation and invalidates affected query revisions. SQLite format 13 marks this write behavior so older applications cannot leave connected results stale; migration preserves existing data and versions.
 
 ### Linked numeric summaries

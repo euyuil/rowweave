@@ -53,8 +53,8 @@ export function parseField(input: Record<string, unknown>, previous?: Field): Fi
   }
   if (field.type === 'formula') {
     const formula = schemaObject(config['formula']);
-    if (typeof formula['expression'] !== 'string' || !['number', 'text', 'checkbox'].includes(formula['resultType'] as string)) {
-      throw new ServiceError('INVALID_SCHEMA', 'A formula requires an expression and a number, text or checkbox result type.');
+    if (typeof formula['expression'] !== 'string' || !['number', 'text', 'checkbox', 'date', 'datetime'].includes(formula['resultType'] as string)) {
+      throw new ServiceError('INVALID_SCHEMA', 'A formula requires an expression and a number, text, checkbox, date or datetime result type.');
     }
     if (field.required || (config['defaultValue'] !== undefined && config['defaultValue'] !== null)) {
       throw new ServiceError('INVALID_SCHEMA', 'Formulas are read-only and cannot require a value or set a default.');

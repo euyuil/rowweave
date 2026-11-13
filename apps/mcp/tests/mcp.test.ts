@@ -62,6 +62,26 @@ async function setup(t: Context) {
   return { service, server, token, environment };
 }
 
+test('MCP and CLI share date formula types, UTC values and source recalculation', async t => {
+  const { environment } = await setup(t), { json } = await connect(t, environment);
+  let table = await json<Table>('tables_create', { name: 'Date calculations' });
+  table = await json<Table>('fields_create', { tableId: table.id, input: { expectedVersion: table.version, name: 'Start', type: 'date' } });
+  const start = table.fields[1]!.id;
+  table = await json<Table>('fields_create', { tableId: table.id, input: { expectedVersion: table.version, name: 'Due', type: 'formula',
+    formula: { expression: 'DATEADD([' + start + '], 1, "day")', resultType: 'date' } } });
+  const due = table.fields[2]!.id;
+  table = await json<Table>('fields_create', { tableId: table.id, input: { expectedVersion: table.version, name: 'Midnight', type: 'formula',
+    formula: { expression: 'DATETIMEVALUE([' + due + '])', resultType: 'datetime' } } });
+  const midnight = table.fields[3]!.id;
+  const row = (await json<BatchResult>('records_create', { tableId: table.id, records: [{ values: { [start]: '2024-02-28' } }] })).records[0]!;
+  assert.equal(row.values[due], '2024-02-29'); assert.equal(row.values[midnight], '2024-02-29T00:00:00.000Z');
+  const result = await runFile(process.execPath, [resolve('apps/cli/dist/rowweave.js'), 'records', 'update', table.id, '--json', JSON.stringify([
+    { id: row.id, expectedVersion: row.version, values: { [start]: '2024-02-29' } },
+  ])], { env: { ...process.env, ...environment } });
+  assert.equal((JSON.parse(result.stdout) as BatchResult).records[0]!.values[due], '2024-03-01');
+  assert.equal((await json<RowRecord>('records_get', { tableId: table.id, recordId: row.id })).values[midnight], '2024-03-01T00:00:00.000Z');
+});
+
 test('MCP and CLI attach file IDs to records and preserve bytes after detaching and restoring', async t => {
   const { environment } = await setup(t), { json, call } = await connect(t, environment);
   let table = await json<Table>('tables_create', { name: 'Attachment workflow' });
