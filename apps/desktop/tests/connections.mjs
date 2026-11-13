@@ -62,6 +62,17 @@ async function createRecord(name) {
   await page.getByRole('dialog').waitFor({ state: 'detached' });
   await page.waitForFunction(() => document.querySelector('.grid-host')?.getAttribute('aria-busy') === 'false');
 }
+async function editFirstCell(value) {
+  const cell = page.locator('.dvn-scroller');
+  const position = { x: 100, y: 58 };
+  // The grid receives pointer input through its scroll overlay. Wait for its layout and selection.
+  await cell.click({ position });
+  await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === 'Open record' && !button.disabled));
+  await cell.dblclick({ position });
+  await page.getByRole('textbox', { name: 'Cell value', exact: true }).fill(value);
+  await page.keyboard.press('Enter');
+  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
+}
 
 try {
   if (packaged) {
@@ -101,12 +112,7 @@ try {
   await createRecord('Local saved value');
   assert.equal(await localProcesses(), 1);
 
-  const canvas = await page.locator('canvas').first().boundingBox();
-  // Let controlled selection commit between the two physical clicks.
-  await page.mouse.dblclick(canvas.x + 100, canvas.y + 58, { delay: 80 });
-  await page.getByRole('textbox', { name: 'Cell value', exact: true }).fill('Keep this draft');
-  await page.keyboard.press('Enter');
-  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
+  await editFirstCell('Keep this draft');
   await page.getByRole('button', { name: 'Connection', exact: true }).click();
   await page.getByText('Save or discard your workspace edits before changing the connection.', { exact: true }).waitFor();
   assert.equal(await page.getByRole('dialog').count(), 0);
@@ -166,11 +172,7 @@ try {
   assert.equal((await page.evaluate(() => window.rowweave.connectionState())).mode, 'remote');
   assert.equal(await localProcesses(), 0);
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-  const remoteCanvas = await page.locator('canvas').first().boundingBox();
-  await page.mouse.dblclick(remoteCanvas.x + 100, remoteCanvas.y + 58, { delay: 80 });
-  await page.getByRole('textbox', { name: 'Cell value', exact: true }).fill('Retained during outage');
-  await page.keyboard.press('Enter');
-  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
+  await editFirstCell('Retained during outage');
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   await page.getByRole('alert').filter({ hasText: 'Failed to fetch' }).waitFor();
   await page.getByText('1 unsaved cell', { exact: true }).waitFor();
