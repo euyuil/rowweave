@@ -33,4 +33,18 @@ const state = await client.workspaceState({ tableId, viewId }, abortController.s
 
 The SDK defaults to catalog-only state when the request is omitted. CLI: `rowweave workspace state`, optionally with `--input state-request.json` or `--input -`. MCP exposes the read-only `workspace_state` tool with optional `tableId` and `viewId` arguments.
 
-This endpoint provides detection only. A UI must retain drafts, active editors and composition state, and recheck those conditions immediately before applying fetched data. Keep using query schema/data/view/date-context guards when loading subsequent pages. Do not infer that a matching metadata response makes a later write conflict-free. Automatic desktop refresh is tracked separately in the [workflow gap plan](gap-closure-plan.md).
+This endpoint provides detection only. A UI must retain drafts, active editors and composition state, and recheck those conditions immediately before applying fetched data. Keep using query schema/data/view/date-context guards when loading subsequent pages. Do not infer that a matching metadata response makes a later write conflict-free.
+
+## Automatic grid refresh
+
+Desktop and Harness check the selected table and view after each two-second interval, with one check in flight. Leaving the table or disconnecting cancels its reads. Read failures keep visible data and show a notice; subsequent checks use a five-second interval until recovery. No check retries a write.
+
+For an ordinary ungrouped grid, changed records, schema, saved views and relative-date boundaries load automatically when editing is idle. The client prepares the first and visible pages in a bounded cache under schema, revision, view-version and date-context guards. It replaces the visible snapshot only after rechecking the current query, interaction state and local history. A failed or obsolete read leaves the existing snapshot intact.
+
+Active editors, composition, pointer gestures, clipboard reads, local drafts and undo/redo history postpone application. Open dialogs, record forms and focused workspace inputs also postpone application; an unrelated Harness host input keeps its text and focus while the table updates. A selected cell follows its record and field UUID when that record is in the fetched pages. Ranges remain selected only when their cached row and field identities still agree. Otherwise selection clears with an explicit notice before another edit can target changed positions. The grid stays mounted, and an editor follows its cell when a notice or window resize changes layout.
+
+**Refresh view** explicitly reloads saved data/settings while retaining cell drafts and their original versions; it resets local undo history. **Reload** or **Discard edits** discards local work with the existing confirmation. An external deletion retains the visible table and edits, with a notice to choose another table. Automatic reads never silently resolve stale-write conflicts.
+
+Grouped grids and boards currently detect changes and offer **Refresh view**; their automatic cache replacement and workspace table-list refresh are still required in the [workflow gap plan](gap-closure-plan.md).
+
+Verification covers atomic client snapshots, cancellation, late responses, bounded paging, relative-date rollover, undo/redo protection and real service conflicts. Automated desktop acceptance covers UUID selection after sorting, schema/view changes, forms, Chinese composition events, in-flight reads, narrow-window editor alignment, failed reads, deleted views/tables and polling cleanup. Installed Harness acceptance checks refreshing while a host input retains focus. These checks do not establish native IME behavior; that remains a final-candidate check.

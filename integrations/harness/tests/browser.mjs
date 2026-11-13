@@ -174,6 +174,16 @@ app.on('window-all-closed', () => app.quit());`);
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.getByRole('button', { name: 'Reload', exact: true }).click();
   await page.getByText('2 records · 2 fields', { exact: true }).waitFor();
+  await page.waitForFunction(() => document.querySelector('.grid-host')?.getAttribute('aria-busy') === 'false');
+  const hostDraft = page.getByRole('textbox', { name: 'Harness draft', exact: true });
+  await hostDraft.fill('Host draft 中文');
+  for (const value of [17.25, 12.5]) {
+    const current = records()[0];
+    service.updateBatch([{ id: current.id, expectedVersion: current.version, values: { [budgetId]: value } }], table.id);
+    await page.waitForFunction(value => document.querySelector('canvas [aria-rowindex="2"] [role="gridcell"][aria-colindex="2"]')?.textContent === String(value), value, { polling: 100 });
+    assert.equal(await hostDraft.inputValue(), 'Host draft 中文');
+    assert.equal(await hostDraft.evaluate(element => element === document.activeElement), true);
+  }
   await page.screenshot({ path: '.artifacts/desktop-harness-workspace.png' });
   await verifyCrossInterfaceWorkflow({ url: serviceServer.url, token }, page, table.id, process.argv.includes('--packaged'));
   await page.evaluate(() => {
