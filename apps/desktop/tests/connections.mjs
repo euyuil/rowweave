@@ -109,8 +109,7 @@ try {
   await page.getByText('Save or discard your workspace edits before changing the connection.', { exact: true }).waitFor();
   assert.equal(await page.getByRole('dialog').count(), 0);
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
-  await page.getByRole('button', { name: 'Save changes', exact: true }).waitFor({ state: 'visible' });
-  await page.waitForFunction(() => [...document.querySelectorAll('button')].find(button => button.textContent === 'Save changes')?.disabled);
+  await page.getByText('All changes saved', { exact: true }).waitFor();
 
   await settings(remoteUrl, 'incorrect'.repeat(8));
   await connect();
