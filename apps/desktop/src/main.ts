@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, safeStorage, type IpcMainInvokeEvent } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell, type IpcMainInvokeEvent } from 'electron';
 import { mkdirSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,6 +8,7 @@ import { createWorkspaceClient } from '../../../packages/client/src/http-client.
 import { connectionChoice, readConnectionSettings, writeConnectionSettings } from './connection-settings.js';
 import type { ConnectionResult, DesktopConnectionState } from './connection-types.js';
 import { startLocalService, type LocalService } from './local-service.js';
+import { webUrl } from '../../../packages/core/src/web-url.js';
 
 app.setName('RowWeave');
 if (process.env['ROWWEAVE_DATA_DIR']) {
@@ -138,6 +139,12 @@ void app.whenReady().then(async () => {
     ipcMain.handle('confirm-discard', event => {
       if (!trusted(event)) throw new Error('Untrusted request.');
       return confirmDiscard();
+    });
+    ipcMain.handle('open-url', async (event, input: unknown) => {
+      if (!trusted(event)) throw new Error('Untrusted request.');
+      const url = webUrl(input);
+      if (!url) throw new Error('Only valid HTTP and HTTPS links can be opened.');
+      await shell.openExternal(url);
     });
     ipcMain.handle('dirty', (event, value: unknown) => {
       if (!trusted(event) || typeof value !== 'boolean') throw new Error('Invalid edit state.');

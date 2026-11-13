@@ -32,6 +32,7 @@ Tables support up to 200 fields. Field definitions use `{ name, type, descriptio
 | Type | JSON cell value | Configuration |
 | --- | --- | --- |
 | `text`, `multiline` | String | Up to 10,000 characters; required text must not be blank. |
+| `url` | String or null | Absolute HTTP or HTTPS URL without credentials, whitespace, control characters or backslashes. Both entered and URL-encoded forms must fit 2,048 characters. Valid Unicode text is preserved as entered; empty text is invalid. |
 | `number` | Finite number | `numberFormat`: `decimal`, `currency`, or `percent`; optional `precision` 0–10, nullable on update to restore automatic precision; three-letter `currency` for currency presentation. Display formatting never rounds the stored value. |
 | `checkbox` | Boolean | `false` is a value, distinct from null. |
 | `date` | `YYYY-MM-DD` | Must be a valid calendar date. |
@@ -132,7 +133,7 @@ QueryPage is `{ offset, records, total, revision, schemaVersion }`. Offset defau
 Filters combine `and`/`or` groups with at most 100 conditions and four nested levels below the root. An empty AND matches all records; an empty OR matches none. Predicates use:
 
 - `eq`, `neq`: scalar equality/inequality, including null. For multiple-select/relation fields, use these only with null; use `hasAny` to match IDs.
-- `contains`: literal, case-insensitive substring matching for text/multiline fields.
+- `contains`: literal, case-insensitive substring matching for text, multiline and URL fields.
 - `gt`, `gte`, `lt`, `lte`: typed number/date/timestamp comparisons.
 - `relativeDate`: date/timestamp period with `relative: { period, timeZone, days? }` instead of `value`; see the [periods and time-zone contract](relative-date-filters.md).
 - `hasAny`: one or more existing option IDs or linked-record IDs (an empty list matches none).

@@ -82,6 +82,8 @@
 .rowweave-app .drawer-dialog .field-label { display: block; padding-top: 10px; font-size: 13px; color: #69768b; font-weight: 400; overflow-wrap: anywhere; }
 .rowweave-app .drawer-dialog .clear-value { display: block; margin-top: 8px; }
 .rowweave-app .drawer-dialog .form-field > small { grid-column: 2; }
+.rowweave-app .drawer-dialog .form-field > .external-link { grid-column: 2; }
+.external-link { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .rowweave-app .drawer-dialog .form-field > input, .rowweave-app .drawer-dialog .form-field > select, .rowweave-app .drawer-dialog .form-field > textarea { min-width: 0; width: 100%; }
 .rowweave-app .drawer-dialog .form-field > output { padding-top: 10px; overflow-wrap: anywhere; }
 .rowweave-app .drawer-dialog .relation-input { min-width: 0; }

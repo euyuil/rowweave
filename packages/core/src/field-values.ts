@@ -1,5 +1,6 @@
 import { maxTextLength, type CellValue, type Field } from '../../contracts/src/index.js';
 import { ServiceError } from './errors.js';
+import { webUrl } from './web-url.js';
 
 export function validateValue(field: Field, input: unknown): CellValue {
   if (field.type === 'lookup' || field.type === 'formula') throw new ServiceError('READ_ONLY_FIELD', `${field.name}: computed values are read-only.`);
@@ -9,6 +10,9 @@ export function validateValue(field: Field, input: unknown): CellValue {
     return null;
   }
   switch (field.type) {
+    case 'url':
+      if (!webUrl(input)) return invalid('use an absolute http:// or https:// URL up to 2,048 encoded characters, without credentials or spaces.');
+      return input as string;
     case 'text':
     case 'multiline':
       if (typeof input !== 'string' || input.length > maxTextLength) return invalid(`use text up to ${maxTextLength} characters.`);

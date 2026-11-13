@@ -7,7 +7,7 @@ export interface SelectOption {
   color?: string;
 }
 
-export type FieldType = 'text' | 'multiline' | 'number' | 'checkbox' | 'date' | 'datetime' | 'singleSelect' | 'multiSelect' | 'relation' | 'lookup' | 'formula';
+export type FieldType = 'text' | 'multiline' | 'url' | 'number' | 'checkbox' | 'date' | 'datetime' | 'singleSelect' | 'multiSelect' | 'relation' | 'lookup' | 'formula';
 
 export interface Field {
   id: string;
@@ -317,6 +317,7 @@ export interface BatchResult {
 export const maxBatchRecords = 2_000;
 export const maxBatchCells = 20_000;
 export const maxTextLength = 10_000;
+export const maxUrlLength = 2_048;
 export const maxFields = 200;
 
 export const maxCsvBytes = 32 * 1024 * 1024;

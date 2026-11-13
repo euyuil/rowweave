@@ -1,8 +1,9 @@
 import React, { useId } from 'react';
-import { isLookupSummary, type Field, type RecordLink } from '../../contracts/src/index.js';
+import { isLookupSummary, maxUrlLength, type Field, type RecordLink } from '../../contracts/src/index.js';
 import type { FormValue } from './field-input-values.js';
 import { RelationInput } from './relation-input.js';
 import { cellDisplay } from '../../client/src/cell-values.js';
+import { ExternalLink } from './external-link.js';
 
 export function FieldInput({ field, value, onChange, disabled = false, calculationError }: {
   field: Field; value: FormValue; onChange(value: FormValue, links?: RecordLink[]): void; disabled?: boolean; calculationError?: string | undefined;
@@ -38,6 +39,8 @@ export function FieldInput({ field, value, onChange, disabled = false, calculati
     input = <input {...common} value={scalar}
       type={field.type === 'date' ? 'date' : field.type === 'datetime' ? 'datetime-local' : 'text'}
       inputMode={field.type === 'number' ? 'decimal' : undefined}
+      autoCapitalize={field.type === 'url' ? 'none' : undefined} spellCheck={field.type === 'url' ? false : undefined}
+      maxLength={field.type === 'url' ? maxUrlLength : undefined} placeholder={field.type === 'url' ? 'https://example.com' : undefined}
       step={field.type === 'datetime' ? '0.001' : undefined}
       onChange={event => onChange(event.target.value)} />;
   }
@@ -46,7 +49,9 @@ export function FieldInput({ field, value, onChange, disabled = false, calculati
       {!field.required && field.type !== 'lookup' && field.type !== 'formula' && <button type="button" className="clear-value" disabled={disabled || value === null}
         aria-label={`Clear ${field.name}`} onClick={() => { onChange(null); document.getElementById(id)!.focus(); }}>Clear</button>}</div>
     {input}
+    {field.type === 'url' && <ExternalLink value={value} />}
     {field.description && <small id={descriptionId} className="field-description">{field.description}</small>}
+    {field.type === 'url' && <small>HTTP and HTTPS links only. Open links in your browser.</small>}
     {field.type === 'lookup' && <small>Updates after saving linked records.</small>}
     {field.type === 'formula' && <small>Updates when changes to its inputs are saved.</small>}
     {field.type === 'number' && field.numberFormat === 'percent' && <small>Enter a fraction: 0.5 displays as 50%.</small>}

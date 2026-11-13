@@ -5,6 +5,7 @@ import { TableModel } from '../../client/src/table-model.js';
 import { TableApp, type TableHost } from './table-app.js';
 import { Dialog } from './dialog.js';
 import { WorkspaceContext } from './workspace-context.js';
+import { ExternalLinkContext } from './external-link.js';
 
 type TableAction = { kind: 'create' } | { kind: 'rename' | 'delete'; table: Table };
 const message = (error: unknown) => error instanceof Error ? error.message : 'The operation failed.';
@@ -21,6 +22,7 @@ export function WorkspaceApp({ api, host, workspaceLabel = 'Local workspace', on
   const dirty = useRef({ table: false, form: false });
   const model = useMemo(() => selected ? new TableModel(api.table(selected)) : undefined, [api, selected]);
   const tableHost = useMemo<TableHost>(() => ({
+    openUrl: url => host.openUrl(url),
     confirmDiscard: () => host.confirmDiscard(),
     onServiceExit: listener => host.onServiceExit(listener),
     saveCsv: (name, csv) => host.saveCsv(name, csv),
@@ -79,7 +81,7 @@ export function WorkspaceApp({ api, host, workspaceLabel = 'Local workspace', on
     }
   };
 
-  return <WorkspaceContext.Provider value={api}><main className="rowweave-app">
+  return <WorkspaceContext.Provider value={api}><ExternalLinkContext.Provider value={tableHost.openUrl}><main className="rowweave-app">
     <header className="app-header">
       <div className="brand"><span className="brand-mark" aria-hidden="true">▦</span> RowWeave</div>
       <span className="workspace-label">{workspaceLabel}{onConnectionSettings && <button onClick={() => {
@@ -116,7 +118,7 @@ export function WorkspaceApp({ api, host, workspaceLabel = 'Local workspace', on
     {action && <TableDialog action={action} api={api} setDirty={setFormDirty}
       onClose={() => setAction(undefined)} onComplete={completed} />}
     {children}
-  </main></WorkspaceContext.Provider>;
+  </main></ExternalLinkContext.Provider></WorkspaceContext.Provider>;
 }
 
 function TableDialog({ action, api, onClose, onComplete, setDirty }: {

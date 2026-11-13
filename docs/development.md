@@ -61,6 +61,7 @@ SQLite stores relational table/field/view metadata and JSON record values, with 
 | Field type | JSON value and configuration |
 | --- | --- |
 | `text`, `multiline` | String up to 10,000 UTF-16 code units, or null. Empty strings remain distinct from null. |
+| `url` | Absolute HTTP/HTTPS URL or null, up to 2,048 characters including its encoded form. Credentials, whitespace, control characters and backslashes are rejected. Unicode text remains unchanged in storage, CSV and clipboard; opening uses the encoded URL. |
 | `number` | Finite JSON number. Optional `numberFormat`: `decimal`, `currency`, or `percent`; `precision`: 0–10; currency formatting requires a three-letter uppercase `currency` code. Formatting never rounds stored values. Percent values use fractions: `0.5` displays as 50%. |
 | `checkbox` | Boolean; false is a valid required value. |
 | `date` | Valid `YYYY-MM-DD` calendar date. |
@@ -71,6 +72,8 @@ SQLite stores relational table/field/view metadata and JSON record values, with 
 | `lookup` | Read-only array of scalar values from linked records. Configure `lookup: { relationFieldId, fieldId }`; returned `lookupResult` describes the current target field. |
 
 Select fields have up to 200 `options`, each with `name`, optional `color` (`#RRGGBB`), and optional `id` on creation. The service generates missing IDs. Retain returned IDs when renaming options. IDs and names must be unique within the field. Removing an option still used by a record is rejected atomically.
+
+URL fields support defaults, required values, text search, equality/substring/empty filters, sorting, CSV, lookups and text formula inputs. Forms and typed grid editors offer **Open link** only for valid values; this explicit action opens the system browser (a separate browser tab in Harness). Saving, querying, importing and previewing never fetch or open the address. Opening a draft link does not save the draft. Desktop IPC validates the address independently, and the application window continues to deny arbitrary navigation and child windows. Automated tests stub the actual browser opener, exercise both hosts and reject unsafe IPC requests; final-candidate acceptance checks the native browser handoff.
 
 Writable fields accept `required` and `defaultValue`. Defaults apply only when a new record omits that field; explicit null does not apply the default. Passing `defaultValue: null` clears a configured default. Required text must not be blank, required multi-select must contain an option, and required fields reject null. To add a required field to a populated table, add it as optional, populate it, then enable `required`; enabling it checks all existing values transactionally.
 

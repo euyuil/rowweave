@@ -27,6 +27,7 @@ import type { DialogAnchor } from './dialog.js';
 import './table-app.css';
 
 export interface TableHost {
+  openUrl(url: string): Promise<void>;
   confirmDiscard(): Promise<boolean>;
   setDirty(value: boolean): Promise<void>;
   onServiceExit(listener: () => void): () => void;
