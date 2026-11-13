@@ -4,7 +4,7 @@ import DataEditor, {
 } from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
 import { flushSync } from 'react-dom';
-import { isReadOnlyField, maxBatchCells, maxBatchRecords, type CellValue, type Field, type GridView, type QueryPage, type RecordLink, type RowRecord, type Table, type ViewUpdate } from '../../contracts/src/index.js';
+import { isReadOnlyField, maxBatchCells, maxBatchRecords, type CellValue, type Field, type GroupCollapse, type GridView, type QueryPage, type RecordLink, type RowRecord, type Table, type ViewUpdate } from '../../contracts/src/index.js';
 import type { TableModel } from '../../client/src/table-model.js';
 import { ApiFailure, queryForView, type WorkspaceApi } from '../../client/src/http-client.js';
 import { cellDisplay, cellText } from '../../client/src/cell-values.js';
@@ -29,6 +29,9 @@ import { captureBoardFocus } from './board-focus.js';
 import { ViewTabs } from './view-tabs.js';
 import { useGroupedRows } from './use-grouped-rows.js';
 import { refreshSelection } from './refresh-selection.js';
+import { selectionRanges } from './selection-ranges.js';
+import type { GroupReader } from '../../client/src/group-reader.js';
+import type { GroupRow } from '../../client/src/group-rows.js';
 import type { DialogAnchor } from './dialog.js';
 import './table-app.css';
 
@@ -53,6 +56,12 @@ function gridCell(record: RowRecord | undefined, field: Field | undefined, reado
     : field.type === 'relation' ? ((value ?? []) as string[]).map(id => record.links?.[field.id]?.find(link => link.id === id)?.label || id).join(', ') : cellDisplay(field, value);
   return { kind: GridCellKind.Text, data: text, copyData: text, displayData: display,
     allowOverlay: !readonly, readonly, field, rawValue: value, row, gridRow } as EditableCell;
+}
+
+function groupHeadingCell(group: GroupRow, column: number, end: number): GridCell {
+  const label = `${group.collapsed ? '▸' : '▾'} ${group.label} · ${group.count.toLocaleString()} ${group.count === 1 ? 'record' : 'records'}`;
+  return { kind: GridCellKind.Text, data: column <= end ? label : '', copyData: '', displayData: column <= end ? label : '', allowOverlay: false, readonly: true,
+    ...(column <= end ? { span: [0, end] as const } : {}) };
 }
 
 export function TableApp({ tableId, model, api, host, onManage }: {
@@ -123,32 +132,39 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   const busyRef = useRef(false);
   const locked = busy || model.saving || offline || transfers > 0;
   const pending = model.pendingCells;
+  const grouping = useGroupedRows(model, api, view, appliedSearch.current, visible);
   canRefresh.current = () => {
     const workspace = rootHost.current?.closest('.rowweave-app'), active = document.activeElement;
-    return ready && !locked && !busyRef.current && !activeEditor.current && !selectionReads.current && !pointerActive.current && !boardDragging.current &&
+    return ready && !locked && !grouping.pending && !busyRef.current && !activeEditor.current && !selectionReads.current && !pointerActive.current && !boardDragging.current &&
       !model.saving && !model.pendingCells && !model.canUndo && !model.canRedo && !formDirty && !searchComposing && search === appliedSearch.current &&
       !workspace?.querySelector('dialog[open]') &&
       !(active instanceof Element && workspace?.contains(active) && active.closest('input, textarea, select, [contenteditable="true"]'));
   };
-  const grouping = useGroupedRows(model, api, view, appliedSearch.current);
   const gridRowCount = grouping.enabled ? grouping.rows?.rowCount ?? 0 : model.rowCount;
   const recordIndex = (row: number) => {
     if (!grouping.enabled) return row;
     const mapped = grouping.rows?.at(row);
     return mapped?.kind === 'record' ? mapped.index : undefined;
   };
-  const recordIndices = (start: number, count: number) => grouping.enabled ? grouping.rows?.indices(start, count) ?? []
-    : Array.from({ length: count }, (_, index) => start + index);
-  const selectionCount = (selected: GridSelection, includeColumns = false) => {
-    if (selected.rows.length) return selected.rows.length - (grouping.rows?.groups.filter(group => selected.rows.hasIndex(group.start)).length ?? 0);
-    const start = includeColumns && selected.columns.length ? 0 : selected.current?.range.y ?? 0;
-    const count = includeColumns && selected.columns.length ? gridRowCount : selected.current?.range.height ?? 0;
-    return grouping.enabled ? grouping.rows?.count(start, count) ?? 0 : count;
+  const selectionCount = (selected: GridSelection) => {
+    let total = 0;
+    for (const range of selectionRanges(selected, gridRowCount)) {
+      const count = grouping.enabled ? grouping.rows?.count(range.start, range.count) : range.count;
+      if (count === undefined) return undefined;
+      total += count;
+    }
+    return total;
   };
-  const selectedIndices = (selected: GridSelection, includeColumns = false) => selected.rows.length
-    ? selected.rows.toArray().flatMap(row => { const index = recordIndex(row); return index === undefined ? [] : [index]; })
-    : recordIndices(includeColumns && selected.columns.length ? 0 : selected.current?.range.y ?? 0,
-      includeColumns && selected.columns.length ? gridRowCount : selected.current?.range.height ?? 0);
+  const selectionPlan = async (selected: GridSelection, includeColumns = false) => {
+    const ranges = selectionRanges(selected, gridRowCount, includeColumns);
+    if (!grouping.enabled) return { count: ranges.reduce((sum, range) => sum + range.count, 0),
+      indices: async () => ranges.flatMap(range => Array.from({ length: range.count }, (_, index) => range.start + index)) };
+    const reader = grouping.reader;
+    if (!reader || grouping.pending) throw new Error('Wait for the groups to load.');
+    const signal = new AbortController().signal;
+    const expanded = await reader.ranges(ranges, signal);
+    return { count: expanded.reduce((sum, range) => sum + range.count, 0), indices: () => reader.indices(expanded, signal) };
+  };
   const readIndices = async (indices: number[]) => {
     const records: RowRecord[] = [];
     for (let index = 0; index < indices.length;) {
@@ -160,22 +176,35 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     }
     return records;
   };
-  const collapseGroups = (keys: ReadonlySet<string>) => {
-    if (locked || activeEditor.current) return;
-    grouping.collapse(keys);
+  const collapseGroups = (choice: GroupCollapse) => {
+    if (locked || activeEditor.current || grouping.pending) return;
+    grouping.collapse(choice);
     setSelection({ columns: CompactSelection.empty(), rows: CompactSelection.empty() });
   };
   const toggleGroup = (row: number) => {
     const mapped = grouping.rows?.at(row);
     if (mapped?.kind !== 'group') return;
-    const keys = new Set(grouping.rows!.groups.filter(group => group.collapsed).map(group => group.key));
-    if (keys.has(mapped.group.key)) keys.delete(mapped.group.key); else keys.add(mapped.group.key);
-    collapseGroups(keys);
+    const keys = new Map(grouping.choice.exceptions.map(value => [JSON.stringify(value), value]));
+    if (keys.has(mapped.group.key)) keys.delete(mapped.group.key); else keys.set(mapped.group.key, mapped.group.value);
+    collapseGroups({ defaultCollapsed: grouping.choice.defaultCollapsed, exceptions: [...keys.values()] });
   };
 
   const report = useCallback((failure: unknown) => {
     setError(failure instanceof Error ? failure.message : 'The operation failed. Please try again.');
   }, []);
+
+  const cachedSelectedCount = selectionCount(selection);
+  const [resolvedSelection, setResolvedSelection] = useState<{ selection: GridSelection; reader: GroupReader; count: number }>();
+  const selectedCount = cachedSelectedCount ?? (resolvedSelection?.selection === selection && resolvedSelection.reader === grouping.reader ? resolvedSelection.count : undefined);
+  useEffect(() => {
+    const reader = grouping.reader;
+    if (cachedSelectedCount !== undefined || !reader || grouping.pending) return;
+    const controller = new AbortController();
+    void reader.ranges(selectionRanges(selection, gridRowCount), controller.signal).then(ranges => {
+      if (!controller.signal.aborted) setResolvedSelection({ selection, reader, count: ranges.reduce((sum, range) => sum + range.count, 0) });
+    }).catch(failure => { if (!controller.signal.aborted) report(failure); });
+    return () => controller.abort();
+  }, [selection, gridRowCount, grouping.reader, grouping.pending, cachedSelectedCount, report]);
 
   const loadView = useCallback(async (discard = false) => {
     const state = await api.workspaceState({ tableId });
@@ -248,7 +277,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
           boardRefresh = await prepareBoardSnapshot(api, table, selected, first, text, windows, signal);
           return [];
         }
-        groupRefresh = await grouping.prepareRefresh(table, selected, first, text, signal);
+        groupRefresh = await grouping.prepareRefresh(table, selected, first, text, signal, visible.y, Math.min(visible.height + 5, maxBatchRecords));
         return groupRefresh.rows.indices(visible.y, Math.min(visible.height + 5, maxBatchRecords));
       } } : {}),
     });
@@ -262,7 +291,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     // External-store notifications and view state must render together to keep the content mounted.
     flushSync(() => {
       if (!model.commitRefresh(snapshot)) return;
-      if (groupRefresh) grouping.commitRefresh(groupRefresh.summary, selected, text);
+      if (groupRefresh) grouping.commitRefresh(groupRefresh, selected, text);
       setPreparedBoard(boardRefresh ? { generation: model.queryVersion, snapshot: boardRefresh } : undefined);
       currentView.current = selected;
       appliedSearch.current = text;
@@ -342,14 +371,19 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   }, [ready, view?.type]);
 
   useEffect(() => {
-    if (!ready || offline || view?.type === 'board' || (grouping.enabled && !grouping.rows)) return;
-    let active = true;
+    if (!ready || offline || view?.type === 'board' || (grouping.enabled && (!grouping.reader || grouping.pending))) return;
+    const controller = new AbortController(), reader = grouping.reader, generation = model.queryVersion;
     const timer = setTimeout(() => {
-      void model.readViewport(recordIndices(visible.y, Math.min(visible.height + 5, maxBatchRecords)))
-        .catch(failure => { if (active) report(failure); });
+      void (async () => {
+        const count = Math.min(visible.height + 5, maxBatchRecords);
+        const rows = reader ? await reader.readWindow(visible.y, count, controller.signal) : undefined;
+        if (controller.signal.aborted || generation !== model.queryVersion) return;
+        await model.readViewport(rows ? rows.indices(visible.y, count) : Array.from({ length: count }, (_, index) => visible.y + index));
+        if (!controller.signal.aborted && generation === model.queryVersion && reader && rows) grouping.commitWindow(reader, rows);
+      })().catch(failure => { if (!controller.signal.aborted) report(failure); });
     }, 30);
-    return () => { active = false; clearTimeout(timer); };
-  }, [ready, offline, visible, model, report, queryVersion, view?.type, grouping.rows, grouping.enabled]);
+    return () => { controller.abort(); clearTimeout(timer); };
+  }, [ready, offline, visible, model, report, queryVersion, view?.type, grouping.reader, grouping.pending, grouping.enabled]);
 
   const save = useCallback(async () => {
     if (busyRef.current || offline || model.saving) return;
@@ -400,33 +434,30 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     try {
       if (cells.length > maxBatchRecords) throw new Error('Paste up to 2,000 records at a time.');
       if (grouping.enabled) {
-        if (!grouping.rows) throw new Error('Wait for the groups to load.');
-        await model.pasteRows(grouping.rows.pasteIndices(target[1], cells.length), target[0], cells);
+        if (!grouping.reader || grouping.pending) throw new Error('Wait for the groups to load.');
+        await model.pasteRows(await grouping.reader.pasteIndices(target[1], cells.length, new AbortController().signal), target[0], cells);
       } else await model.paste(target[1], target[0], cells);
     }
     catch (failure) { report(failure); }
     finally { busyRef.current = false; setBusy(false); }
-  }, [model, offline, report, grouping.rows, grouping.enabled]);
+  }, [model, offline, report, grouping.reader, grouping.pending, grouping.enabled]);
 
   const clearSelection = async (selected: GridSelection) => {
-    if (busyRef.current || model.saving || offline || model.stale) return;
+    if (busyRef.current || model.saving || offline || model.stale || grouping.pending || grouping.stale) return;
     const range = selected.current?.range;
-    const rowCount = selectionCount(selected, true);
     const columnCount = selected.rows.length ? fields.length : selected.columns.length || range?.width || 0;
-    if (!rowCount || !columnCount) return;
-    if (rowCount > maxBatchRecords || rowCount * columnCount > maxBatchCells) {
-      setError('Clear up to 20,000 cells and 2,000 rows at a time.');
-      return;
-    }
+    if (!columnCount) return;
     busyRef.current = true;
     setBusy(true);
     setError(undefined);
     try {
-      const rows = selectedIndices(selected, true);
+      const plan = await selectionPlan(selected, true);
+      if (!plan.count) return;
+      if (plan.count > maxBatchRecords || plan.count * columnCount > maxBatchCells) throw new Error('Clear up to 20,000 cells and 2,000 rows at a time.');
       const columns = selected.rows.length ? fields.map(field => field.id)
         : selected.columns.length ? selected.columns.toArray().map(index => fields[index]!.id)
           : fields.slice(range!.x, range!.x + columnCount).map(field => field.id);
-      await model.clearCells(rows, columns);
+      await model.clearCells(await plan.indices(), columns);
     } catch (failure) { report(failure); }
     finally { busyRef.current = false; setBusy(false); }
   };
@@ -446,8 +477,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   };
 
   const table = model.table;
-  const selectedCount = selectionCount(selection);
-  const recordActionsLocked = locked || !ready || model.stale || pending > 0 || editorDirty || (grouping.enabled && !grouping.rows);
+  const recordActionsLocked = locked || !ready || model.stale || pending > 0 || editorDirty || (grouping.enabled && (!grouping.rows || grouping.pending || grouping.stale));
   const openColumnActions = (column: number, bounds: Rectangle) => {
     if (column < 0) return;
     if (recordActionsLocked || busyRef.current || !view) {
@@ -505,13 +535,15 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   const openRecord = async (kind: RecordAction['kind']) => {
     if (recordActionsLocked || busyRef.current) return;
     if (kind === 'create') { setError(undefined); setRecordAction({ kind, records: [] }); return; }
-    if (selectedCount > maxBatchRecords) { setError('Select up to 2,000 records at a time.'); return; }
     busyRef.current = true;
     setBusy(true);
     setError(undefined);
     try {
       const generation = model.queryVersion;
-      const records = await readIndices(selectedIndices(selection));
+      const plan = await selectionPlan(selection);
+      if (!plan.count) return;
+      if (plan.count > maxBatchRecords) throw new Error('Select up to 2,000 records at a time.');
+      const records = await readIndices(await plan.indices());
       if (generation !== model.queryVersion) throw new Error('The view changed. Select the records again.');
       if (kind !== 'delete') records[0] = await readCurrentRecord(records[0]!);
       setRecordAction({ kind, records });
@@ -528,16 +560,11 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   };
   const getCellContent = useCallback(([column, row]: readonly [number, number]): GridCell => {
     const mapped = grouping.rows?.at(row);
-    if (mapped?.kind === 'group') {
-      const end = (view!.frozenColumns || fields.length) - 1;
-      const label = `${mapped.group.collapsed ? '▸' : '▾'} ${mapped.group.label} · ${mapped.group.count.toLocaleString()} ${mapped.group.count === 1 ? 'record' : 'records'}`;
-      return { kind: GridCellKind.Text, data: column <= end ? label : '', copyData: '', displayData: column <= end ? label : '', allowOverlay: false, readonly: true,
-        ...(column <= end ? { span: [0, end] as const } : {}) };
-    }
+    if (mapped?.kind === 'group') return groupHeadingCell(mapped.group, column, (view!.frozenColumns || fields.length) - 1);
     const index = recordIndex(row);
-    const field = fields[column];
-    return gridCell(index === undefined ? undefined : model.getRecord(index), field, locked || model.stale, index ?? row, row);
-  }, [model, fields, locked, revision, grouping.rows, grouping.enabled, view]);
+    return gridCell(index === undefined ? undefined : model.getRecord(index), fields[column],
+      locked || model.stale || grouping.pending || grouping.stale, index ?? row, row);
+  }, [model, fields, locked, revision, grouping.rows, grouping.enabled, grouping.pending, grouping.stale, view]);
 
   const getCellsForSelection = (rectangle: Rectangle, signal: AbortSignal) => async () => {
     if (rectangle.height > maxBatchRecords || rectangle.width * rectangle.height > maxBatchCells) {
@@ -545,37 +572,44 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       return [];
     }
     selectionReads.current++;
+    const generation = model.queryVersion;
     try {
-      await readIndices(recordIndices(rectangle.y, rectangle.height));
-      if (signal.aborted) return [];
-      return Array.from({ length: rectangle.height }, (_, index) => Array.from({ length: rectangle.width }, (_, x) =>
-        getCellContent([rectangle.x + x, rectangle.y + index])));
-    } catch (failure) { report(failure); return []; }
+      const rows = grouping.enabled ? await grouping.reader!.readWindow(rectangle.y, rectangle.height, signal) : undefined;
+      const indices = rows ? rows.indices(rectangle.y, rectangle.height)
+        : Array.from({ length: rectangle.height }, (_, index) => rectangle.y + index);
+      const records = await readIndices(indices);
+      if (signal.aborted || generation !== model.queryVersion) return [];
+      const byIndex = new Map(indices.map((index, position) => [index, records[position]!]));
+      return Array.from({ length: rectangle.height }, (_, index) => Array.from({ length: rectangle.width }, (_, x) => {
+        const row = rectangle.y + index, column = rectangle.x + x, mapped = rows?.at(row);
+        if (mapped?.kind === 'group') return groupHeadingCell(mapped.group, column, (view!.frozenColumns || fields.length) - 1);
+        const record = mapped?.kind === 'record' ? mapped.index : row;
+        return gridCell(byIndex.get(record), fields[column], true, record, row);
+      }));
+    } catch (failure) { if (!signal.aborted && generation === model.queryVersion) report(failure); return []; }
     finally { selectionReads.current--; }
   };
 
   const copySelection = async () => {
     const range = selection.current?.range;
-    const rowCount = selectionCount(selection, true);
     const columnCount = selection.rows.length ? fields.length : selection.columns.length || range?.width || 0;
-    if (!rowCount || !columnCount) return;
-    if (rowCount > maxBatchRecords || rowCount * columnCount > maxBatchCells) {
-      setError('Copy up to 20,000 cells and 2,000 rows at a time.');
-      return;
-    }
+    if (!columnCount) return;
     selectionReads.current++;
+    const generation = model.queryVersion;
     try {
-      const generation = model.queryVersion;
+      const plan = await selectionPlan(selection, true);
+      if (!plan.count) return;
+      if (plan.count > maxBatchRecords || plan.count * columnCount > maxBatchCells) throw new Error('Copy up to 20,000 cells and 2,000 rows at a time.');
       const columns = selection.rows.length ? fields
         : selection.columns.length ? selection.columns.toArray().map(index => fields[index]!)
           : fields.slice(range!.x, range!.x + columnCount);
-      const records = await readIndices(selectedIndices(selection, true));
+      const records = await readIndices(await plan.indices());
       if (generation !== model.queryVersion) return;
       // Excel collapses line breaks in the grid library's HTML representation.
       // Quoted TSV preserves literal cell contents without an HTML interpretation.
       await navigator.clipboard.writeText(serializeClipboard(records.map(record =>
         columns.map(field => record.formulaErrors?.[field.id] ? `#ERROR: ${record.formulaErrors[field.id]}` : cellText(field, record.values[field.id] ?? null)))));
-    } catch (failure) { report(failure); }
+    } catch (failure) { if (generation === model.queryVersion) report(failure); }
     finally { selectionReads.current--; }
   };
 
@@ -621,7 +655,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       <button disabled={recordActionsLocked || !view || searchComposing} onClick={() => setCsvAction('export')}>Export CSV</button>
       <span>{pending > 0 || editorDirty ? 'Save or discard grid edits to manage records.'
         : view?.type === 'board' ? 'Open a card to edit, or move it to another group.'
-          : selectedCount ? `${selectedCount.toLocaleString()} selected` : 'Select a row or cell to open a record.'}</span>
+          : selectedCount === undefined ? 'Loading selection…' : selectedCount ? `${selectedCount.toLocaleString()} selected` : 'Select a row or cell to open a record.'}</span>
     </div>
       <div className="view-toolbar">
         <button disabled={!view || locked} onClick={() => setViewAction('edit')}>View settings</button>
@@ -643,8 +677,8 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       </div>
       {grouping.enabled && <div className="group-tools" aria-label="Record groups">
         <span>Grouped by {model.table?.fields.find(field => field.id === view!.groupBy)?.name}</span>
-        <button disabled={locked || editorDirty || !grouping.rows} onClick={() => collapseGroups(new Set(grouping.rows!.groups.map(group => group.key)))}>Collapse all</button>
-        <button disabled={locked || editorDirty || !grouping.rows} onClick={() => collapseGroups(new Set())}>Expand all</button>
+        <button disabled={locked || editorDirty || grouping.pending || !grouping.rows} onClick={() => collapseGroups({ defaultCollapsed: true, exceptions: [] })}>Collapse all</button>
+        <button disabled={locked || editorDirty || grouping.pending || !grouping.rows} onClick={() => collapseGroups({ defaultCollapsed: false, exceptions: [] })}>Expand all</button>
         <small>Click a group heading or press Enter to expand or collapse.</small>
       </div>}
       {ready && table && view?.type === 'board' ? <BoardView table={table} view={view} search={appliedSearch.current} generation={queryVersion} api={api}
@@ -652,7 +686,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
         prepared={preparedBoard?.generation === queryVersion ? preparedBoard.snapshot : undefined}
         disabled={recordActionsLocked} onOpen={record => void openBoardRecord(record)} onRefresh={() => void reload()}
         onCreate={lane => setRecordAction({ kind: 'create', records: [], initialValues: { [view.groupBy!]: lane } })} onMove={moveBoardRecord} />
-        : <div className="grid-host" aria-busy={locked || !ready || (grouping.enabled && !grouping.rows)} ref={gridHost} onCopyCapture={event => {
+        : <div className="grid-host" aria-busy={locked || !ready || grouping.pending} ref={gridHost} onCopyCapture={event => {
         if (!gridHost.current?.querySelector('canvas')?.contains(document.activeElement)) return;
         event.preventDefault();
         event.stopPropagation();
@@ -711,7 +745,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
           onDelete={selected => { void clearSelection(selected); return false; }}
           smoothScrollX smoothScrollY
           onCellsEdited={edits => {
-            if (locked) return true;
+            if (locked || grouping.pending || grouping.stale) return true;
             try {
               model.applyEdits(edits.filter(edit => recordIndex(edit.location[1]) !== undefined &&
                 (edit.value.kind === GridCellKind.Text || edit.value.kind === GridCellKind.Boolean)).map(edit => ({

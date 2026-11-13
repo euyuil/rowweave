@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import type { GridView, RowHeight, SortRule, Table, ViewColumn } from '../../contracts/src/index.js';
+import { supportsScalarGrouping, type GridView, type RowHeight, type SortRule, type Table, type ViewColumn } from '../../contracts/src/index.js';
 import type { WorkspaceApi } from '../../client/src/http-client.js';
 import { Dialog, type DialogAnchor } from './dialog.js';
 import { QueryEditor } from './query-editor.js';
@@ -73,10 +73,10 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
         </>}
         {type === 'grid' && (groupOnly || (!queryOnly && !displayOnly)) && <>
           <label className="form-field">Group by<select aria-label="Grid group field" value={groupBy} onChange={event => setGroupBy(event.target.value)}>
-            <option value="">No grouping</option>{table.fields.filter(field => ['singleSelect', 'checkbox'].includes(field.type)).map(field =>
+            <option value="">No grouping</option>{table.fields.filter(supportsScalarGrouping).map(field =>
               <option key={field.id} value={field.id}>{field.name}</option>)}
           </select></label>
-          <p className="form-note">Single-select groups follow option order. Checkbox groups show unchecked, checked, then no value. Sorting applies within each group. Records move to their new group after saving.</p>
+          <p className="form-note">Empty values have their own group. Options follow their configured order; other values sort in ascending order. Sorting applies within each group. Records move to their new group after saving.</p>
         </>}
         {!displayOnly && !groupOnly && <>{!queryOnly && <label className="form-field">Saved search<input value={savedSearch} onChange={event => setSavedSearch(event.target.value)} /></label>}
         <QueryEditor fields={table.fields} filter={filter} sort={sort} section={queryOnly ? kind : undefined}

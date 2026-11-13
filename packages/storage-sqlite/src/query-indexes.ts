@@ -22,6 +22,7 @@ function definition(table: Pick<Table, 'id' | 'fields'>, query: IndexedQuery): s
   if (query.filter) visit(query.filter);
   if (!conditions.length && !query.sort?.length && !query.search && !query.groupBy) return;
   // SQLite expression/partial indexes cannot contain subqueries or read another table.
+  if (query.groupBy && fields.get(query.groupBy)!.type === 'lookup') return;
   if (conditions.some(condition => condition.operator === 'hasAny' || condition.operator === 'relativeDate' || ['relation', 'lookup', 'attachment'].includes(fields.get(condition.fieldId)!.type))) return;
   if (query.sort?.some(sort => ['relation', 'lookup', 'multiSelect', 'attachment'].includes(fields.get(sort.fieldId)!.type))) return;
   if (query.search && table.fields.some(field => ['relation', 'lookup', 'multiSelect', 'attachment'].includes(field.type))) return;

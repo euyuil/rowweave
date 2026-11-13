@@ -1,4 +1,4 @@
-import { maxPageSize, maxTextLength, valueField, isLookupSummary, relativeDatePeriods, maxRelativeDays,
+import { maxPageSize, maxTextLength, valueField, isLookupSummary, supportsScalarGrouping, relativeDatePeriods, maxRelativeDays,
   type Field, type FieldFilter, type FilterGroup, type RecordQuery, type RelativeDateFilter, type Table } from '../../contracts/src/index.js';
 import { ServiceError } from './errors.js';
 import { validateValue } from './field-values.js';
@@ -29,7 +29,7 @@ export function parseQuery(table: Table, input: unknown): CheckedQuery {
   const query: CheckedQuery = { offset: offset as number, limit: limit as number };
   if (source['groupBy'] !== undefined) {
     const selected = field(source['groupBy']);
-    if (['multiSelect', 'relation', 'lookup', 'attachment'].includes(valueField(selected).type)) {
+    if (!supportsScalarGrouping(selected)) {
       return invalid('Group by a text, number, checkbox, date, timestamp or single-select field.');
     }
     query.groupBy = selected.id;

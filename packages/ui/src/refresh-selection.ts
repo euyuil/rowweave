@@ -1,10 +1,13 @@
 import { CompactSelection, type GridSelection } from '@glideapps/glide-data-grid';
 import { maxBatchRecords } from '../../contracts/src/index.js';
 import type { TableModel, TableRefresh } from '../../client/src/table-model.js';
-import type { GroupedRows } from '../../client/src/grouped-rows.js';
+interface RowMapping {
+  at(row: number): { kind: 'record'; index: number } | { kind: 'group'; group: { key: string } } | undefined;
+  position(index: number): number | undefined;
+}
 
 export function refreshSelection(selection: GridSelection, model: TableModel, snapshot: TableRefresh,
-  previousGroups?: GroupedRows, nextGroups?: GroupedRows): { selection: GridSelection; cleared: boolean } {
+  previousGroups?: RowMapping, nextGroups?: RowMapping): { selection: GridSelection; cleared: boolean } {
   const current = selection.current;
   const empty = () => ({ selection: { columns: CompactSelection.empty(), rows: CompactSelection.empty() },
     cleared: !!current || selection.rows.length > 0 || selection.columns.length > 0 });
@@ -12,7 +15,7 @@ export function refreshSelection(selection: GridSelection, model: TableModel, sn
   const definitions = new Map(snapshot.table.fields.map(field => [field.id, field]));
   const fields = snapshot.query.fields ? snapshot.query.fields.flatMap(id => definitions.has(id) ? [definitions.get(id)!] : []) : snapshot.table.fields;
   const record = (row: number) => snapshot.pages.get(Math.floor(row / model.pageSize))?.records[row % model.pageSize] ?? snapshot.visibleRows.get(row);
-  const position = (row: number, groups?: GroupedRows) => groups ? groups.at(row) : { kind: 'record' as const, index: row };
+  const position = (row: number, groups?: RowMapping) => groups ? groups.at(row) : { kind: 'record' as const, index: row };
   const rows = [...selection.rows.toArray(), ...(current
     ? Array.from({ length: current.range.height }, (_, index) => current.range.y + index) : [])];
   const sameRows = rows.every(row => {

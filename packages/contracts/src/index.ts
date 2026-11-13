@@ -207,6 +207,10 @@ export function valueField(field: Field): Field {
   return field.type === 'formula' ? { ...field, type: field.formula!.resultType } : field;
 }
 
+export function supportsScalarGrouping(field: Field): boolean {
+  return !['multiSelect', 'relation', 'lookup', 'attachment'].includes(valueField(field).type);
+}
+
 export function isReadOnlyField(field: Pick<Field, 'type'>): boolean {
   return field.type === 'lookup' || field.type === 'formula' || field.type === 'autoNumber' || field.type === 'createdTime' || field.type === 'updatedTime';
 }

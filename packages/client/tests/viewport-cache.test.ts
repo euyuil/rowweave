@@ -5,7 +5,7 @@ import { RecordService } from '../../core/src/record-service.js';
 import { maxBatchRecords } from '../../contracts/src/index.js';
 import { ApiFailure, queryForView, type TableApi } from '../src/http-client.js';
 import { TableModel } from '../src/table-model.js';
-import { GroupedRows } from '../src/grouped-rows.js';
+import { GroupRows } from '../src/group-rows.js';
 
 const prototypeApi = (service: RecordService): TableApi => ({
   getTable: async () => service.getTable(),
@@ -25,8 +25,9 @@ test('fragmented grouped viewports retain saved rows beyond the page cache and o
     values: { [table.primaryFieldId]: option.name + ' record ' + index, [field.id]: option.id },
   }))));
   const view = service.createView(table.id, { name: 'Fragmented', groupBy: field.id });
-  const summary = service.summarizeRecords(table.id, { viewId: view.id, expectedViewVersion: view.version, groupBy: field.id, limit: 500 });
-  const groups = new GroupedRows(field, summary, new Set(options.filter(option => option.id.startsWith('heavy')).map(option => JSON.stringify(option.id))));
+  const layout = service.queryGroups(table.id, { viewId: view.id, expectedViewVersion: view.version, limit: 500,
+    collapse: { defaultCollapsed: false, exceptions: options.filter(option => option.id.startsWith('heavy')).map(option => option.id) } });
+  const groups = new GroupRows(field, layout);
   const model = new TableModel({ getTable: async () => service.getTable(table.id),
     readPage: async (offset, limit, query) => service.queryView(table.id, view.id, { ...query, offset, limit, expectedViewVersion: view.version }),
     save: async updates => service.updateBatch(updates, table.id) });

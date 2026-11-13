@@ -1,7 +1,6 @@
-import type { SummaryMeasure, Table } from '../../contracts/src/index.js';
+import { valueField, supportsScalarGrouping, type SummaryMeasure, type Table } from '../../contracts/src/index.js';
 import { ServiceError } from './errors.js';
 import { schemaObject } from './schema-validation.js';
-import { valueField } from '../../contracts/src/index.js';
 
 export interface CheckedSummary {
   groupBy?: string;
@@ -12,7 +11,7 @@ export function parseSummary(table: Table, input: Record<string, unknown>): Chec
   const fields = new Map(table.fields.map(field => [field.id, field]));
   const groupBy = input['groupBy'];
   if (groupBy !== undefined && (typeof groupBy !== 'string' || !fields.has(groupBy) ||
-      ['multiSelect', 'relation', 'lookup', 'attachment'].includes(valueField(fields.get(groupBy)!).type))) {
+      !supportsScalarGrouping(fields.get(groupBy)!))) {
     throw new ServiceError('INVALID_SUMMARY', 'Group by a text, number, checkbox, date, timestamp or single-select field.');
   }
   const measures = input['measures'] ?? [];

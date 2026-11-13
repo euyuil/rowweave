@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { FieldFilter, FilterGroup, GridView, RowHeight, Table, ViewQuery } from '../../contracts/src/index.js';
+import { supportsScalarGrouping, type FieldFilter, type FilterGroup, type GridView, type RowHeight, type Table, type ViewQuery } from '../../contracts/src/index.js';
 import { parseQuery } from './record-query.js';
 import { schemaName, schemaObject } from './schema-validation.js';
 import { ServiceError } from './errors.js';
@@ -18,8 +18,8 @@ export function parseView(table: Table, input: unknown, previous = defaultView(t
     throw new ServiceError('INVALID_VIEW', 'A board needs a single-select grouping field. Choose another field or change the view to a grid.');
   }
   if (type === 'grid' && groupBy != null && (typeof groupBy !== 'string' ||
-      !table.fields.some(field => field.id === groupBy && ['singleSelect', 'checkbox'].includes(field.type)))) {
-    throw new ServiceError('INVALID_VIEW', 'Group a grid by a single-select or checkbox field, or remove grouping.');
+      !table.fields.some(field => field.id === groupBy && supportsScalarGrouping(field)))) {
+    throw new ServiceError('INVALID_VIEW', 'Group a grid by a scalar field, or remove grouping.');
   }
   const query = parseQuery(table, item['query'] === undefined ? previous.query : item['query']);
   const saved: ViewQuery = {};

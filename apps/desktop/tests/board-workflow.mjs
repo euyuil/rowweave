@@ -91,6 +91,7 @@ export async function verifyBoardWorkflow(page) {
   await page.getByRole('alert').filter({ hasText: 'Refresh the board before moving another record' }).waitFor();
   assert.equal(await todo.getByLabel('Move Task 001 to', { exact: true }).isDisabled(), true);
   await page.getByRole('button', { name: 'Refresh board', exact: true }).click();
+  await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === 'Refresh board' && !button.disabled));
   await todo.locator('.board-card').filter({ has: page.getByRole('button', { name: 'Task 001', exact: true }) }).getByText('999', { exact: true }).waitFor();
   assert.equal(await todo.getByLabel('Move Task 001 to', { exact: true }).inputValue(), 'todo');
   const empty = page.getByRole('region', { name: 'No value column', exact: true });
