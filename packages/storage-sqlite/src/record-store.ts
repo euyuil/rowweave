@@ -454,8 +454,8 @@ export class SqliteRecordStore implements RecordStore {
   }
 
   private decodeView(row: StoredView): GridView {
-    const config = JSON.parse(row.config_json) as Pick<GridView, 'query' | 'columns' | 'rowHeight' | 'frozenColumns' | 'type' | 'groupBy' | 'groupMeasures'>;
-    return { id: row.id, tableId: row.table_id, name: row.name, version: row.version, ...config };
+    const config = JSON.parse(row.config_json) as Omit<GridView, 'id' | 'tableId' | 'name' | 'version'>;
+    return { id: row.id, tableId: row.table_id, name: row.name, version: row.version, ...config } as GridView;
   }
 
   listViews(id: string): GridView[] {

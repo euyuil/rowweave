@@ -343,7 +343,7 @@ export interface ViewColumn {
 export type ViewQuery = Pick<RecordQuery, 'filter' | 'sort' | 'search'>;
 export type RowHeight = 36 | 48 | 64;
 
-export interface GridView {
+interface ViewDefinition {
   id: string;
   tableId: string;
   name: string;
@@ -352,10 +352,10 @@ export interface GridView {
   columns: ViewColumn[];
   rowHeight: RowHeight;
   frozenColumns: number;
-  type: 'grid' | 'board';
-  groupBy?: string;
   groupMeasures?: SummaryMeasure[];
 }
+
+export type GridView = ViewDefinition & ({ type: 'grid'; groupBy?: string | string[] } | { type: 'board'; groupBy: string });
 
 export interface ViewCreate {
   name: string;
@@ -364,7 +364,7 @@ export interface ViewCreate {
   rowHeight?: RowHeight;
   frozenColumns?: number;
   type?: 'grid' | 'board';
-  groupBy?: string | null;
+  groupBy?: string | string[] | null;
   groupMeasures?: SummaryMeasure[];
 }
 

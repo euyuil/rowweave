@@ -4,7 +4,8 @@ import DataEditor, {
 } from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
 import { flushSync } from 'react-dom';
-import { isReadOnlyField, maxBatchCells, maxBatchRecords, type CellValue, type Field, type GroupCollapse, type GridView, type QueryPage, type RecordLink, type RowRecord, type Table, type ViewUpdate } from '../../contracts/src/index.js';
+import { groupFieldIds, isReadOnlyField, maxBatchCells, maxBatchRecords, type CellValue, type Field, type GridView, type QueryPage, type RecordLink, type RowRecord, type Table, type ViewUpdate } from '../../contracts/src/index.js';
+import type { GroupChoice } from './group-preferences.js';
 import type { TableModel } from '../../client/src/table-model.js';
 import { ApiFailure, queryForView, type WorkspaceApi } from '../../client/src/http-client.js';
 import { cellDisplay, cellText } from '../../client/src/cell-values.js';
@@ -60,9 +61,10 @@ function gridCell(record: RowRecord | undefined, field: Field | undefined, reado
 
 const measureNames = { sum: 'Sum', average: 'Average', min: 'Minimum', max: 'Maximum' };
 const measureNumber = new Intl.NumberFormat(undefined, { maximumSignificantDigits: 15 });
-function groupHeading(group: GroupRow, measures: readonly string[]): string {
+function groupHeading(group: GroupRow, measures: readonly string[], ancestry = false): string {
   const values = group.values?.map((value, index) => `${measures[index]}: ${value === null ? '—' : measureNumber.format(value)}`) ?? [];
-  return [`${group.collapsed ? '▸' : '▾'} ${group.label} · ${group.count.toLocaleString()} ${group.count === 1 ? 'record' : 'records'}`, ...values].join(' · ');
+  const label = ancestry ? [...group.ancestors, group.label].join(' / ') : group.label;
+  return [`${ancestry ? '' : '　'.repeat(group.ancestors.length)}${group.collapsed ? '▸' : '▾'} ${label} · ${group.count.toLocaleString()} ${group.count === 1 ? 'record' : 'records'}`, ...values].join(' · ');
 }
 function groupHeadingCell(group: GroupRow, column: number, end: number, measures: readonly string[]): GridCell {
   const label = groupHeading(group, measures);
@@ -187,7 +189,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     }
     return records;
   };
-  const collapseGroups = (choice: GroupCollapse) => {
+  const collapseGroups = (choice: GroupChoice) => {
     if (locked || activeEditor.current || grouping.pending) return;
     grouping.collapse(choice);
     setSelection({ columns: CompactSelection.empty(), rows: CompactSelection.empty() });
@@ -197,7 +199,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     if (mapped?.kind !== 'group') return;
     const keys = new Map(grouping.choice.exceptions.map(value => [JSON.stringify(value), value]));
     if (keys.has(mapped.group.key)) keys.delete(mapped.group.key); else keys.set(mapped.group.key, mapped.group.value);
-    collapseGroups({ defaultCollapsed: grouping.choice.defaultCollapsed, exceptions: [...keys.values()] });
+    collapseGroups({ defaultCollapsed: grouping.choice.defaultCollapsed, exceptions: [...keys.values()] } as GroupChoice);
   };
 
   const report = useCallback((failure: unknown) => {
@@ -544,7 +546,8 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     if (recordActionsLocked || busyRef.current) throw new Error('Wait for the current operation to finish.');
     setBusy(true); busyRef.current = true; setError(undefined);
     try {
-      await api.updateRecords(tableId, [{ id: record.id, expectedVersion: record.version, values: { [view!.groupBy!]: lane } }]);
+      await api.updateRecords(tableId, [{ id: record.id, expectedVersion: record.version,
+        values: { [(view as Extract<GridView, { type: 'board' }>).groupBy]: lane } }]);
       await refreshAfterWrite('Record');
     } finally { setBusy(false); busyRef.current = false; }
   };
@@ -684,7 +687,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
         <button disabled={!view || locked} onClick={() => setViewAction('display')}>Display</button>
         {view?.type === 'grid' && <button aria-label="Groups" aria-haspopup="dialog" aria-expanded={viewAction === 'group'} disabled={locked}
           onClick={event => { setQueryAnchor(event.currentTarget.getBoundingClientRect()); setViewAction('group'); }}>
-          Groups{view.groupBy && <span className="query-badge" aria-hidden="true">1</span>}</button>}
+          Groups{view.groupBy && <span className="query-badge" aria-hidden="true">{groupFieldIds(view.groupBy).length}</span>}</button>}
         <button disabled={!view || recordActionsLocked || searchComposing} onClick={() => setSummarizing(true)}>Summarize</button>
         <button disabled={!view || locked || views.length < 2} onClick={() => setViewAction('delete')}>Delete view</button>
         <input type="search" aria-label="Search records" placeholder="Search records…" value={search}
@@ -692,7 +695,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
           onCompositionStart={() => setSearchComposing(true)} onCompositionEnd={() => setSearchComposing(false)} />
       </div>
       {grouping.enabled && <div className="group-tools" aria-label="Record groups">
-        <span>Grouped by {model.table?.fields.find(field => field.id === view!.groupBy)?.name}</span>
+        <span>Grouped by {groupFieldIds(view?.groupBy).map(id => model.table?.fields.find(field => field.id === id)?.name).join(' → ')}</span>
         <button disabled={locked || editorDirty || grouping.pending || !grouping.rows} onClick={() => collapseGroups({ defaultCollapsed: true, exceptions: [] })}>Collapse all</button>
         <button disabled={locked || editorDirty || grouping.pending || !grouping.rows} onClick={() => collapseGroups({ defaultCollapsed: false, exceptions: [] })}>Expand all</button>
         <small>Click a group heading or press Enter to expand or collapse.</small>
@@ -757,7 +760,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
           rowMarkers={grouping.enabled ? 'checkbox' : 'both'} rowHeight={view!.rowHeight} freezeColumns={view!.frozenColumns} headerHeight={40} rangeSelect="rect" rowSelectionMode="multi"
           onItemHovered={event => {
             const row = event.kind === 'cell' ? grouping.rows?.at(event.location[1]) : undefined;
-            if (gridHost.current) gridHost.current.title = row?.kind === 'group' ? groupHeading(row.group, measureLabels) : '';
+            if (gridHost.current) gridHost.current.title = row?.kind === 'group' ? groupHeading(row.group, measureLabels, true) : '';
           }}
           getRowThemeOverride={row => grouping.rows?.at(row)?.kind === 'group' ? { bgCell: '#edf2fa', textDark: '#244570' } : undefined}
           cellActivationBehavior="double-click"

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { supportsScalarGrouping, valueField, type GridView, type RowHeight, type SortRule, type SummaryMeasure, type Table, type ViewColumn } from '../../contracts/src/index.js';
+import { groupFieldIds, maxGroupLevels, supportsScalarGrouping, valueField, type GridView, type RowHeight, type SortRule, type SummaryMeasure, type Table, type ViewColumn } from '../../contracts/src/index.js';
 import type { WorkspaceApi } from '../../client/src/http-client.js';
 import { Dialog, type DialogAnchor } from './dialog.js';
 import { QueryEditor } from './query-editor.js';
@@ -16,7 +16,7 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
   const [rowHeight, setRowHeight] = useState<RowHeight>(view.rowHeight);
   const [frozenColumns, setFrozenColumns] = useState(view.frozenColumns);
   const [type, setType] = useState(view.type);
-  const [groupBy, setGroupBy] = useState(view.groupBy ?? '');
+  const [groupBy, setGroupBy] = useState([...groupFieldIds(view.groupBy)]);
   const [groupMeasures, setGroupMeasures] = useState<SummaryMeasure[]>(view.groupMeasures ?? []);
   const [filter, setFilter] = useState(() => filterDraft(view.query.filter, table.fields));
   const [sort, setSort] = useState<SortRule[]>(view.query.sort ?? []);
@@ -29,6 +29,8 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
   const visibleCount = columns.filter(column => !column.hidden).length;
   const fields = new Map(table.fields.map(field => [field.id, field]));
   const numericFields = table.fields.filter(field => valueField(field).type === 'number');
+  const groupFields = table.fields.filter(supportsScalarGrouping);
+  const nextGroup = groupFields.find(field => !groupBy.includes(field.id));
   useEffect(() => () => setDirty(false), [setDirty]);
   const move = (index: number, delta: number) => {
     const next = [...columns];
@@ -51,7 +53,8 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
       void (async () => {
         let result: GridView | undefined;
         const display = { columns, rowHeight, frozenColumns: Math.min(frozenColumns, visibleCount) };
-        const groups = { groupBy: groupBy || null, groupMeasures: type === 'grid' && groupBy ? groupMeasures : [] };
+        const groups = { groupBy: groupBy.length > 1 ? groupBy : groupBy[0] ?? null,
+          groupMeasures: type === 'grid' && groupBy.length ? groupMeasures : [] };
         const config = { name, ...display, type, ...groups, query: { filter: filterValue(filter, table.fields), sort, search: savedSearch } };
         if (deleting) await api.deleteView(table.id, view.id, view.version);
         else if (kind === 'create') result = await api.createView(table.id, config);
@@ -65,22 +68,38 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
         {!queryOnly && !displayOnly && !groupOnly && <><label className="form-field">View name<input autoFocus required maxLength={200} value={name} onChange={event => setName(event.target.value)} /></label>
           <div className="form-row"><label className="form-field">View type<select aria-label="View type" value={type} onChange={event => {
             setType(event.target.value as GridView['type']);
-            setGroupBy(event.target.value === 'board' ? table.fields.find(field => field.type === 'singleSelect')?.id ?? '' : '');
+            const boardGroup = table.fields.find(field => field.type === 'singleSelect');
+            setGroupBy(event.target.value === 'board' && boardGroup ? [boardGroup.id] : []);
           }}>
             <option value="grid">Grid</option><option value="board">Board</option>
           </select></label>
-          {type === 'board' && <label className="form-field">Group by<select aria-label="Board group field" required value={groupBy} onChange={event => setGroupBy(event.target.value)}>
+          {type === 'board' && <label className="form-field">Group by<select aria-label="Board group field" required value={groupBy[0] ?? ''} onChange={event => setGroupBy([event.target.value])}>
             <option value="" disabled>Choose a single-select field</option>{table.fields.filter(field => field.type === 'singleSelect').map(field => <option key={field.id} value={field.id}>{field.name}</option>)}
           </select></label>}</div>
-          {type === 'board' && !groupBy && <p className="form-note">Add a single-select field to use a board view.</p>}
+          {type === 'board' && !groupBy.length && <p className="form-note">Add a single-select field to use a board view.</p>}
         </>}
         {type === 'grid' && (groupOnly || (!queryOnly && !displayOnly)) && <>
-          <label className="form-field">Group by<select aria-label="Grid group field" value={groupBy} onChange={event => setGroupBy(event.target.value)}>
-            <option value="">No grouping</option>{table.fields.filter(supportsScalarGrouping).map(field =>
-              <option key={field.id} value={field.id}>{field.name}</option>)}
-          </select></label>
-          <p className="form-note">Empty values have their own group. Options follow their configured order; other values sort in ascending order. Sorting applies within each group. Records move to their new group after saving. Expand and collapse choices are remembered on this device.</p>
-          {groupBy && <><h3>Group measures</h3>
+          {(groupBy.length ? groupBy : ['']).map((id, index) => <div className="form-row group-level-row" key={index}>
+            <label className="form-field">{index ? 'Then by' : 'Group by'}<select aria-label={index ? `Grid group field ${index + 1}` : 'Grid group field'} value={id}
+              onChange={event => setGroupBy(event.target.value ? index === groupBy.length ? [...groupBy, event.target.value]
+                : groupBy.map((current, position) => position === index ? event.target.value : current) : [])}>
+              {index === 0 && <option value="">No grouping</option>}{groupFields.filter(field => field.id === id || !groupBy.includes(field.id)).map(field =>
+                <option key={field.id} value={field.id}>{field.name}</option>)}
+            </select></label>
+            {groupBy.length > 1 && <>
+              <button type="button" disabled={index === 0} aria-label={`Move group ${index + 1} up`} onClick={() => {
+                setGroupBy(current => { const next = [...current]; [next[index - 1], next[index]] = [next[index]!, next[index - 1]!]; return next; }); setDirty(true);
+              }}>↑</button>
+              <button type="button" aria-label={`Remove group ${index + 1}`} onClick={() => {
+                setGroupBy(current => current.filter((_, position) => position !== index)); setDirty(true);
+              }}>Remove</button>
+            </>}
+          </div>)}
+          {!!groupBy.length && <button type="button" disabled={groupBy.length === maxGroupLevels || !nextGroup} onClick={() => {
+            setGroupBy(current => [...current, nextGroup!.id]); setDirty(true);
+          }}>Add grouping level</button>}
+          <p className="form-note">Nest up to three fields in order. Empty values have their own group. Options follow their configured order; other values sort in ascending order. Sorting applies within the last level. Records move after saving. Collapse choices are remembered on this device, including children of collapsed parents.</p>
+          {!!groupBy.length && <><h3>Group measures</h3>
             <p className="form-note">Show totals and other numeric measures in each heading. They include all saved records matching this view, even in collapsed groups. Hover a heading to read its full summary.</p>
             {groupMeasures.map((measure, index) => <div className="form-row group-measure-row" key={index}>
               <label className="form-field">Field<select aria-label={`Measure ${index + 1} field`} value={measure.fieldId}
@@ -131,7 +150,7 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
       </fieldset>}
       {error && <p className="form-error" role="alert">{error}</p>}
       <div className="dialog-actions"><button type="button" disabled={busy} onClick={onClose}>Cancel</button>
-        <button className={deleting ? 'danger' : 'primary'} disabled={busy || (!deleting && (columns.every(column => column.hidden) || (type === 'board' && !groupBy)))}>
+        <button className={deleting ? 'danger' : 'primary'} disabled={busy || (!deleting && (columns.every(column => column.hidden) || (type === 'board' && !groupBy.length)))}>
           {busy ? 'Working…' : deleting ? 'Delete view' : kind === 'create' ? 'Create view' : 'Save view'}</button></div>
     </form>
   </Dialog>;

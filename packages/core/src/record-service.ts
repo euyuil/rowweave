@@ -288,14 +288,16 @@ export class RecordService {
     if (item['expectedViewVersion'] !== undefined && (!view || schemaVersion(item['expectedViewVersion']) !== view.version)) {
       throw new ServiceError('VIEW_CONFLICT', 'The view changed. Refresh before reading groups.', 409);
     }
-    if (view && (view.type !== 'grid' || !view.groupBy || item['filter'] !== undefined ||
-        (item['groupBy'] !== undefined && item['groupBy'] !== view.groupBy))) {
+    if (view && (view.type !== 'grid' || !view.groupBy || item['filter'] !== undefined)) {
       throw new ServiceError('INVALID_QUERY', 'Use a grouped grid and its saved grouping and filter.');
     }
-    const query = parseQuery(table, { groupBy: view?.groupBy ?? item['groupBy'],
+    const query = parseQuery(table, { groupBy: item['groupBy'] === undefined ? view?.groupBy : item['groupBy'],
       filter: view?.query.filter ?? item['filter'], search: item['search'] === undefined ? view?.query.search : item['search'],
       offset: item['offset'], limit: item['limit'], expectedRevision: item['expectedRevision'], expectedDateContext: item['expectedDateContext'] });
     if (!query.groupBy) throw new ServiceError('INVALID_QUERY', 'Choose a grouping field or a saved grouped grid.');
+    if (view && JSON.stringify(groupFieldIds(query.groupBy)) !== JSON.stringify(groupFieldIds(view.groupBy))) {
+      throw new ServiceError('INVALID_QUERY', 'Use the saved grouping order of this view.');
+    }
     const groups = groupFieldIds(query.groupBy).map(id => table.fields.find(field => field.id === id)!);
     const collapse = groups.length === 1 ? parseGroupCollapse(groups[0]!, item['collapse']) : parseGroupPaths(groups, item['collapse']);
     return this.store.queryGroups(table, { ...query, window, measures: parseSummary(table, {

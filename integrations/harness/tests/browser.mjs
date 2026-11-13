@@ -229,6 +229,14 @@ app.on('window-all-closed', () => app.quit());`);
   assert.equal(await hostDraft.inputValue(), 'Host draft 中文');
   assert.equal(await hostDraft.evaluate(element => element === document.activeElement), true);
   await page.screenshot({ path: '.artifacts/desktop-harness-group-measures.png' });
+  currentGroupedView = service.updateView(table.id, currentGroupedView.id, { expectedVersion: currentGroupedView.version, groupBy: [budgetId, done] });
+  const nestedHeading = '　▾ Checked · 1 record · Sum ' + groupedTable.fields.find(field => field.id === budgetId).name + ': ' +
+    budget.toLocaleString(undefined, { maximumSignificantDigits: 15 });
+  await page.waitForFunction(text => document.querySelector('canvas [aria-rowindex="3"] [role="gridcell"][aria-colindex="1"]')?.textContent === text,
+    nestedHeading, { polling: 100 });
+  assert.equal(await hostDraft.inputValue(), 'Host draft 中文');
+  assert.equal(await hostDraft.evaluate(element => element === document.activeElement), true);
+  await page.screenshot({ path: '.artifacts/desktop-harness-nested-groups.png' });
   service.updateView(table.id, currentGroupedView.id, { expectedVersion: currentGroupedView.version, groupBy: null });
   service.deleteField(table.id, done, { expectedVersion: groupedTable.version });
   await page.getByRole('button', { name: 'Collapse all', exact: true }).waitFor({ state: 'detached' });

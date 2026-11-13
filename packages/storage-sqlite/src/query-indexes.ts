@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import type { FieldFilter, FilterGroup, Table, ViewQuery } from '../../contracts/src/index.js';
+import { groupFieldIds, type FieldFilter, type FilterGroup, type RecordQuery, type Table, type ViewQuery } from '../../contracts/src/index.js';
 import { querySql } from './query-sql.js';
 
 const identifier = (name: string) => `"${name.replaceAll('"', '""')}"`;
 const prefix = (tableId: string) => `rowweave_view_${tableId}_`;
 
-type IndexedQuery = ViewQuery & { groupBy?: string };
+type IndexedQuery = ViewQuery & Pick<RecordQuery, 'groupBy'>;
 
 function definition(table: Pick<Table, 'id' | 'fields'>, query: IndexedQuery): string | undefined {
   // Index the grouped order independently of filters, including temporary searches.
@@ -22,7 +22,7 @@ function definition(table: Pick<Table, 'id' | 'fields'>, query: IndexedQuery): s
   if (query.filter) visit(query.filter);
   if (!conditions.length && !query.sort?.length && !query.search && !query.groupBy) return;
   // SQLite expression/partial indexes cannot contain subqueries or read another table.
-  if (query.groupBy && fields.get(query.groupBy)!.type === 'lookup') return;
+  if (groupFieldIds(query.groupBy).some(id => fields.get(id)!.type === 'lookup')) return;
   if (conditions.some(condition => condition.operator === 'hasAny' || condition.operator === 'relativeDate' || ['relation', 'lookup', 'attachment'].includes(fields.get(condition.fieldId)!.type))) return;
   if (query.sort?.some(sort => ['relation', 'lookup', 'multiSelect', 'attachment'].includes(fields.get(sort.fieldId)!.type))) return;
   if (query.search && table.fields.some(field => ['relation', 'lookup', 'multiSelect', 'attachment'].includes(field.type))) return;

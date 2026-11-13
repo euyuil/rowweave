@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { Field, GroupCollapse } from '../../contracts/src/index.js';
-import { readGroupPreference, writeGroupPreference } from '../src/group-preferences.js';
+import { pruneGroupChoice, readGroupPreference, writeGroupPreference } from '../src/group-preferences.js';
 
 const text: Field = { id: 'category', name: 'Category', type: 'text', required: false };
 function storage(initial: string | null = null) {
@@ -63,4 +63,28 @@ test('storage failures preserve the current layout and are cleared only by a suc
   fail = false;
   assert.deepEqual(writeGroupPreference('view', choice, data), { choice });
   assert.equal(writes, 2); assert.deepEqual(JSON.parse(saved), choice);
+});
+
+test('nested choices preserve full typed ancestry and prune removed options at every level', () => {
+  const root: Field = { ...text, type: 'singleSelect', options: [{ id: 'a', name: 'A renamed' }, { id: 'b', name: 'B' }] };
+  const child: Field = { ...text, id: 'child', type: 'singleSelect', options: [{ id: 'same', name: 'Same renamed' }] };
+  const number: Field = { ...text, id: 'number', type: 'number' };
+  const choice = { defaultCollapsed: false, exceptions: [['a'], ['a', 'same'], ['b', 'same', 0], ['a', 'gone'], ['gone', 'same']] };
+  const data = storage(JSON.stringify(choice));
+  const expected = { defaultCollapsed: false, exceptions: [['a'], ['a', 'same'], ['b', 'same', 0]] };
+  assert.deepEqual(readGroupPreference('nested', [root, child, number], data), { choice: expected });
+  assert.deepEqual(pruneGroupChoice([root, child, number], choice), expected);
+  assert.equal(pruneGroupChoice([root, child, number], expected), expected, 'Unchanged choices retain their identity.');
+  assert.deepEqual(JSON.parse(data.read()!), choice, 'Reading removed options does not overwrite storage.');
+  assert.deepEqual(writeGroupPreference('nested', expected, data), { choice: expected });
+  assert.deepEqual(readGroupPreference('nested', [root, child, number], data), { choice: expected });
+});
+
+test('invalid nested preference paths are reported rather than reused as scalar choices', () => {
+  const number: Field = { ...text, id: 'amount', type: 'number' };
+  for (const exceptions of [['a'], [[]], [['a', 'wrong']], [['a', 0], ['a', 0]], [['a', 0, 1]]]) {
+    const result = readGroupPreference('invalid-path', [text, number], storage(JSON.stringify({ defaultCollapsed: false, exceptions })));
+    assert.deepEqual(result.choice, { defaultCollapsed: false, exceptions: [] });
+    assert.match(result.error!, /Could not load saved group choices/);
+  }
 });

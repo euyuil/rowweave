@@ -1,4 +1,4 @@
-import { maxPageSize, type GridView, type GroupCollapse, type GroupLayout, type GroupQuery, type Table, type Field } from '../../contracts/src/index.js';
+import { groupFieldIds, maxPageSize, type GridView, type GroupCollapse, type GroupPathCollapse, type GroupLayout, type GroupQuery, type Table, type Field } from '../../contracts/src/index.js';
 import { ApiFailure, type WorkspaceApi } from './http-client.js';
 import { GroupRows } from './group-rows.js';
 
@@ -8,7 +8,7 @@ export interface GroupContext {
   revision: number;
   dateContext?: string;
   search: string;
-  collapse: GroupCollapse;
+  collapse: GroupCollapse | GroupPathCollapse;
 }
 export interface RowRange { start: number; count: number }
 export interface ExpandedRange { start: number; count: number }
@@ -18,9 +18,9 @@ export class GroupReader {
   private readonly windows = new Map<number, { layout: GroupLayout; rows: GroupRows }>();
   private queue: Promise<unknown> = Promise.resolve();
   private metadata: GroupLayout | undefined;
-  readonly field: Field;
+  readonly fields: readonly Field[];
   constructor(private readonly api: Pick<WorkspaceApi, 'queryGroups'>, readonly context: GroupContext) {
-    this.field = context.table.fields.find(field => field.id === context.view.groupBy)!;
+    this.fields = groupFieldIds(context.view.groupBy).map(id => context.table.fields.find(field => field.id === id)!);
   }
   dispose(): void { this.controller.abort(); this.windows.clear(); }
   get cachedWindows(): number { return this.windows.size; }
@@ -28,7 +28,7 @@ export class GroupReader {
   private cached(start: number, count: number): { layout: GroupLayout; rows: GroupRows } | undefined {
     for (const [key, entry] of this.windows) {
       const first = entry.rows.groups[0], last = entry.rows.groups.at(-1);
-      const end = last ? last.start + 1 + (last.collapsed ? 0 : last.count) : 0;
+      const end = last ? last.start + last.span : 0;
       if ((start >= entry.rows.rowCount && !first) || (first && start >= first.start && Math.min(start + count, entry.rows.rowCount) <= end)) {
         this.windows.delete(key); this.windows.set(key, entry); return entry;
       }
@@ -69,7 +69,7 @@ export class GroupReader {
       const offset = Math.floor(start / 100) * 100;
       const limit = Math.min(maxPageSize, Math.max(200, start - offset + count));
       const layout = await this.request({ offset, limit, window: 'displayRows' }, active);
-      const entry = { layout, rows: new GroupRows(this.field, layout) };
+      const entry = { layout, rows: new GroupRows(this.fields, layout) };
       this.windows.set(offset, entry);
       while (this.windows.size > 12) this.windows.delete(this.windows.keys().next().value!);
       return entry;
@@ -83,11 +83,11 @@ export class GroupReader {
       parts.push(entry);
       if (row >= entry.layout.totalRows) break;
       const last = entry.rows.groups.at(-1)!;
-      row = last.start + 1 + (last.collapsed ? 0 : last.count);
+      row = last.start + last.span;
     }
     signal.throwIfAborted();
     return parts.length === 1 ? parts[0]!.rows
-      : new GroupRows(this.field, parts[0]!.layout, parts.flatMap(part => part.layout.groups));
+      : new GroupRows(this.fields, parts[0]!.layout, parts.flatMap(part => part.layout.groups));
   }
 
   private async before(row: number, signal: AbortSignal): Promise<number> {
