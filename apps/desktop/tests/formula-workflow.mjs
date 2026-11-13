@@ -33,7 +33,12 @@ export async function verifyFormulaWorkflow(page) {
   await page.getByLabel('Field type', { exact: true }).selectOption('formula');
   await page.getByLabel('Insert field', { exact: true }).selectOption(quantity);
   assert.equal(await page.getByLabel('Formula', { exact: true }).inputValue(), '["Quantity"]');
+  await page.waitForFunction(() => {
+    const input = document.querySelector('textarea[aria-label="Formula"]');
+    return document.activeElement === input && input.selectionStart === input.value.length && input.selectionEnd === input.value.length;
+  });
   await page.getByLabel('Formula', { exact: true }).fill('["Quantity"] * ["Price"]');
+  assert.equal(await page.getByLabel('Formula', { exact: true }).inputValue(), '["Quantity"] * ["Price"]');
   await page.getByLabel('Number format', { exact: true }).selectOption('currency');
   assert.equal(await page.getByLabel('Require a value', { exact: true }).count(), 0);
   await page.screenshot({ path: '.artifacts/desktop-formula-editor.png' });
