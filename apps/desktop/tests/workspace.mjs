@@ -216,6 +216,7 @@ try {
   await page.getByText('1 record · 1 field', { exact: true }).waitFor();
   const bounds = await page.locator('canvas').first().boundingBox();
   await page.mouse.click(bounds.x + 100, bounds.y + 58);
+  await page.waitForFunction(() => document.querySelector('canvas')?.contains(document.activeElement));
   await page.keyboard.press('Enter');
   await page.getByRole('textbox', { name: 'Cell value' }).fill('Keep this draft');
   await page.keyboard.press('Enter');
