@@ -30,6 +30,7 @@ export async function verifyNavigationWorkflow(page, application) {
   await page.getByRole('button', { name: 'Reload', exact: true }).click();
   const tabs = page.getByRole('tablist', { name: 'Views', exact: true });
   await tabs.getByRole('tab', { name: names.at(-1), exact: true }).waitFor({ state: 'attached' });
+  await page.waitForFunction(() => document.querySelector('[role="tab"][aria-selected="true"]')?.getAttribute('aria-disabled') === 'false');
   const initial = tabs.getByRole('tab', { name: 'All records', exact: true });
   await initial.focus();
   await page.keyboard.press('End');
