@@ -40,6 +40,7 @@ import { verifyCalculationControls } from './calculation-controls-workflow.mjs';
 import { verifyExternalRefresh } from './external-refresh-workflow.mjs';
 import { verifyCatalogRefresh } from './catalog-refresh-workflow.mjs';
 import { verifyViewportCache } from './viewport-cache-workflow.mjs';
+import { verifyGroupedRefresh } from './grouped-refresh-workflow.mjs';
 
 const dataDirectory = await mkdtemp(join(tmpdir(), 'rowweave-workspace-'));
 await mkdir('.artifacts', { recursive: true });
@@ -296,6 +297,7 @@ try {
   await verifyConnectedFormulaWorkflow(page);
   await verifyGroupedWorkflow(page, application);
   await verifyViewportCache(page, application);
+  await verifyGroupedRefresh(page);
   await verifyRelativeDateWorkflow(page, application);
   await verifyExternalRefresh(page, application);
   await verifyCatalogRefresh(page, application);

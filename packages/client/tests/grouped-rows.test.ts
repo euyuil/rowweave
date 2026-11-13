@@ -23,6 +23,12 @@ test('group row mapping skips collapsed records and headers without materializin
   assert.deepEqual(collapsed.indices(0, 8), [1000000, 1000001, 1000002, 1000003]);
   assert.equal(collapsed.count(0, 8), 4);
   assert.deepEqual(collapsed.at(2), { kind: 'record', index: 1000000 });
+  assert.equal(expanded.position(999999), 1000000);
+  assert.equal(collapsed.position(999999), undefined);
+  assert.equal(collapsed.position(1000000), 2);
+  assert.equal(collapsed.position(1000003), 7);
+  assert.equal(collapsed.position(1000004), undefined);
+  assert.equal(collapsed.position(-1), undefined);
   assert.deepEqual(collapsed.pasteIndices(4, 2), [1000002, 1000003]);
   assert.throws(() => collapsed.pasteIndices(0, 1), /headings/);
   assert.throws(() => collapsed.pasteIndices(7, 2), /expanded groups/);

@@ -198,6 +198,24 @@ app.on('window-all-closed', () => app.quit());`);
   assert.equal(await hostDraft.inputValue(), 'Host draft 中文');
   assert.equal(await hostDraft.evaluate(element => element === document.activeElement), true);
   await page.screenshot({ path: '.artifacts/desktop-harness-workspace.png' });
+  let groupedTable = service.getTable(table.id);
+  groupedTable = service.createField(table.id, { expectedVersion: groupedTable.version, name: 'Done', type: 'checkbox' });
+  const done = groupedTable.fields.at(-1).id;
+  service.updateBatch(records().map((record, index) => ({ id: record.id, expectedVersion: record.version, values: { [done]: index === 1 } })), table.id);
+  const groupedView = service.listViews(table.id)[0];
+  service.updateView(table.id, groupedView.id, { expectedVersion: groupedView.version, groupBy: done });
+  await page.waitForFunction(() => document.querySelector('canvas [aria-rowindex="2"] [role="gridcell"][aria-colindex="1"]')?.textContent === '▾ Unchecked · 1 record', undefined, { polling: 100 });
+  const moved = records()[0];
+  service.updateBatch([{ id: moved.id, expectedVersion: moved.version, values: { [done]: true } }], table.id);
+  await page.waitForFunction(() => document.querySelector('canvas [aria-rowindex="2"] [role="gridcell"][aria-colindex="1"]')?.textContent === '▾ Unchecked · 0 records' &&
+    document.querySelector('canvas [aria-rowindex="3"] [role="gridcell"][aria-colindex="1"]')?.textContent === '▾ Checked · 2 records', undefined, { polling: 100 });
+  assert.equal(await hostDraft.inputValue(), 'Host draft 中文');
+  assert.equal(await hostDraft.evaluate(element => element === document.activeElement), true);
+  await page.screenshot({ path: '.artifacts/desktop-harness-group-refresh.png' });
+  const currentGroupedView = service.listViews(table.id)[0];
+  service.updateView(table.id, currentGroupedView.id, { expectedVersion: currentGroupedView.version, groupBy: null });
+  service.deleteField(table.id, done, { expectedVersion: groupedTable.version });
+  await page.getByRole('button', { name: 'Collapse all', exact: true }).waitFor({ state: 'detached' });
   await verifyCrossInterfaceWorkflow({ url: serviceServer.url, token }, page, table.id, process.argv.includes('--packaged'));
   await page.evaluate(() => {
     window.originalUrlOpener = window.open;
@@ -286,7 +304,7 @@ app.on('window-all-closed', () => app.quit());`);
   if (application) {
     const page = await application.firstWindow();
     console.error(await page.locator('body').innerText());
-    await page.screenshot({ path: '.artifacts/harness-failure.png' });
+    await page.screenshot({ path: '.artifacts/desktop-harness-failure.png' });
   }
   console.error(error);
   throw error;

@@ -37,6 +37,7 @@ export interface TableRefresh {
   query: TableQuery;
   first: QueryPage;
   pages: ReadonlyMap<number, QueryPage>;
+  visibleRows: ReadonlyMap<number, RowRecord>;
 }
 
 export class TableModel {
@@ -213,9 +214,8 @@ export class TableModel {
     const visible = new Map<number, RowRecord>();
     for (const index of indices) {
       if (index >= this.rowCount) continue;
-      const page = await this.loadPage(Math.floor(index / this.pageSize));
+      const record = this.visibleRows.get(index) ?? (await this.loadPage(Math.floor(index / this.pageSize))).records[index % this.pageSize];
       if (generation !== this.generation || request !== this.viewportRequest) return;
-      const record = page.records[index % this.pageSize];
       if (!record) throw new Error('The service returned an incomplete page.');
       visible.set(index, record);
     }
@@ -433,8 +433,9 @@ export class TableModel {
     await this.initialize();
   }
 
-  async prepareRefresh(query: TableQuery, { start = 0, count = this.pageSize, signal: callerSignal }: {
+  async prepareRefresh(query: TableQuery, { start = 0, count = this.pageSize, signal: callerSignal, selectRows }: {
     start?: number; count?: number; signal?: AbortSignal;
+    selectRows?: (table: Table, first: QueryPage, signal: AbortSignal) => Promise<readonly number[]>;
   } = {}): Promise<TableRefresh> {
     if (this.disposed) throw new Error('This table was closed.');
     this.refreshRequest?.abort();
@@ -452,17 +453,30 @@ export class TableModel {
       check(first);
       const pages = new Map<number, QueryPage>([[0, first]]);
       const offset = Math.max(0, Math.min(start, first.total - 1));
-      const startPage = Math.floor(offset / this.pageSize);
-      const pageCount = Math.min(this.maxPages, Math.ceil((offset % this.pageSize + count) / this.pageSize));
-      for (let index = startPage; index < startPage + pageCount && index * this.pageSize < first.total; index++) {
-        if (index === 0) continue;
-        const page = await this.api.readPage(index * this.pageSize, this.pageSize, { ...currentQuery,
+      const selected = selectRows ? await selectRows(table, first, signal)
+        : Array.from({ length: Math.min(count, maxBatchRecords, Math.max(0, first.total - offset)) }, (_, index) => offset + index);
+      if (selected.length > maxBatchRecords || selected.some(index => !Number.isSafeInteger(index) || index < 0 || index >= first.total)) {
+        throw new Error('The visible refresh window is invalid or too large.');
+      }
+      const requested = new Map<number, number[]>();
+      for (const row of selected) {
+        const index = Math.floor(row / this.pageSize), rows = requested.get(index) ?? [];
+        rows.push(row); requested.set(index, rows);
+      }
+      const visibleRows = new Map<number, RowRecord>();
+      for (const [index, rows] of requested) {
+        const page = index === 0 ? first : await this.api.readPage(index * this.pageSize, this.pageSize, { ...currentQuery,
           expectedRevision: first.revision, ...(first.dateContext ? { expectedDateContext: first.dateContext } : {}) }, signal);
         check(page);
         pages.set(index, page);
         while (pages.size > this.maxPages) pages.delete(pages.keys().next().value!);
+        for (const row of rows) {
+          const record = page.records[row % this.pageSize];
+          if (!record) throw new Error('The service returned an incomplete page.');
+          visibleRows.set(row, record);
+        }
       }
-      return { generation, sourceRevision, signal, table, query: currentQuery, first, pages };
+      return { generation, sourceRevision, signal, table, query: currentQuery, first, pages, visibleRows };
     } finally { if (this.refreshRequest === controller) this.refreshRequest = undefined; }
   }
 
@@ -476,6 +490,7 @@ export class TableModel {
     this.queryDateContext = snapshot.first.dateContext;
     this.rowCount = snapshot.first.total;
     for (const [index, page] of snapshot.pages) this.pages.set(index, page);
+    this.visibleRows = new Map(snapshot.visibleRows);
     this.updateFields();
     this.error = undefined;
     this.conflicted = false;
