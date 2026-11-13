@@ -6,6 +6,7 @@ import { TableApp, type TableHost } from './table-app.js';
 import { Dialog } from './dialog.js';
 import { WorkspaceContext } from './workspace-context.js';
 import { ExternalLinkContext } from './external-link.js';
+import { CalculationPanel } from './calculation-panel.js';
 
 type TableAction = { kind: 'create' } | { kind: 'rename' | 'delete'; table: Table };
 const message = (error: unknown) => error instanceof Error ? error.message : 'The operation failed.';
@@ -85,12 +86,12 @@ export function WorkspaceApp({ api, host, workspaceLabel = 'Local workspace', on
   return <WorkspaceContext.Provider value={api}><ExternalLinkContext.Provider value={tableHost.openUrl}><main className="rowweave-app">
     <header className="app-header">
       <div className="brand"><span className="brand-mark" aria-hidden="true">▦</span> RowWeave</div>
-      <span className="workspace-label">{workspaceLabel}{onConnectionSettings && <button onClick={() => {
+      <div className="workspace-label"><CalculationPanel api={api} offline={offline} />{workspaceLabel}{onConnectionSettings && <button onClick={() => {
         if (model?.saving) { setError('Wait for the current save to finish before changing the connection.'); return; }
         if (dirty.current.table || dirty.current.form) { setError('Save or discard your workspace edits before changing the connection.'); return; }
         setError(undefined);
         onConnectionSettings();
-      }}>Connection</button>}</span>
+      }}>Connection</button>}</div>
     </header>
     <div className="workspace-body">
       <aside className="workspace-sidebar" aria-label="Workspace tables">

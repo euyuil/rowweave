@@ -5,6 +5,26 @@ import { fixture } from '../../storage-sqlite/tests/helpers.js';
 import { RecordService } from '../../core/src/record-service.js';
 import { startServer } from '../../../apps/server/src/http-server.js';
 import { createWorkspaceClient } from '../src/http-client.js';
+import { Calculations } from '../../../apps/server/src/calculations.js';
+import type { CalculationRefresh } from '../../contracts/src/index.js';
+
+test('aborting a refresh response stops waiting without cancelling the accepted calculation', async t => {
+  let complete!: (value: CalculationRefresh) => void, start!: () => void;
+  const pending = new Promise<CalculationRefresh>(resolve => { complete = resolve; });
+  const started = new Promise<void>(resolve => { start = resolve; });
+  const calculations = new Calculations({ refresh: () => { start(); return pending; }, close: async () => {} }, false);
+  const token = randomBytes(32).toString('hex');
+  const server = await startServer({ service: new RecordService(fixture(t, null).open()), token, calculations });
+  const result: CalculationRefresh = { evaluatedAt: '2024-01-01T00:00:00.000Z', changedRecords: 0, changedTableIds: [] };
+  t.after(async () => { complete(result); await server.close(); });
+  const api = createWorkspaceClient({ url: server.url, token }), controller = new AbortController();
+  const rejected = assert.rejects(api.refreshCalculations(controller.signal), { name: 'AbortError' });
+  await started; controller.abort(); await rejected;
+  assert.equal((await api.calculationStatus()).running, true);
+  complete(result);
+  await calculations.refresh();
+  assert.deepEqual((await api.calculationStatus()).lastResult, result);
+});
 
 test('the workspace client completes a schema, view, conversion and record lifecycle over HTTP', async t => {
   const token = randomBytes(32).toString('hex');

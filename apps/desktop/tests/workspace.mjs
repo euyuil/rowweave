@@ -36,6 +36,7 @@ import { verifyRecordTimesWorkflow } from './record-times-workflow.mjs';
 import { verifySelectColorsWorkflow } from './select-colors-workflow.mjs';
 import { verifyAttachmentWorkflow } from './attachment-workflow.mjs';
 import { verifyBackgroundCalculations } from './background-calculations.mjs';
+import { verifyCalculationControls } from './calculation-controls-workflow.mjs';
 
 const dataDirectory = await mkdtemp(join(tmpdir(), 'rowweave-workspace-'));
 await mkdir('.artifacts', { recursive: true });
@@ -288,6 +289,7 @@ try {
   await verifyDateFormulaWorkflow(page);
   await verifyArrayFormulaWorkflow(page);
   await verifyFormulaPreviewWorkflow(page);
+  await verifyCalculationControls(page, application);
   await verifyConnectedFormulaWorkflow(page);
   await verifyGroupedWorkflow(page, application);
   await verifyRelativeDateWorkflow(page, application);
