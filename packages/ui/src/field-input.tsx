@@ -8,18 +8,19 @@ export function FieldInput({ field, value, onChange, disabled = false, calculati
   field: Field; value: FormValue; onChange(value: FormValue, links?: RecordLink[]): void; disabled?: boolean; calculationError?: string | undefined;
 }) {
   const id = useId();
-  const common = { id, disabled, required: !!field.required };
+  const descriptionId = field.description ? `${id}-description` : undefined;
+  const common = { id, disabled, required: !!field.required, 'aria-describedby': descriptionId };
   const scalar = (value ?? '') as string;
   let input;
   if (calculationError) {
-    input = <output id={id} className="form-error">#ERROR: {calculationError}</output>;
+    input = <output id={id} aria-describedby={descriptionId} className="form-error">#ERROR: {calculationError}</output>;
   } else if (field.type === 'formula') {
-    input = <output id={id}>{value === null ? ''
+    input = <output id={id} aria-describedby={descriptionId}>{value === null ? ''
       : cellDisplay(field, field.formula!.resultType === 'number' ? Number(value) : field.formula!.resultType === 'checkbox' ? value === 'true' : scalar)}</output>;
   } else if (field.type === 'lookup') {
-    input = <output id={id}>{cellDisplay(field, value === null ? isLookupSummary(field) ? null : [] : JSON.parse(value as string))}</output>;
+    input = <output id={id} aria-describedby={descriptionId}>{cellDisplay(field, value === null ? isLookupSummary(field) ? null : [] : JSON.parse(value as string))}</output>;
   } else if (field.type === 'relation') {
-    input = <RelationInput key={field.relation!.tableId} id={id} field={field} value={value as string[] | null} disabled={disabled} onChange={onChange} />;
+    input = <RelationInput key={field.relation!.tableId} id={id} descriptionId={descriptionId} field={field} value={value as string[] | null} disabled={disabled} onChange={onChange} />;
   } else if (field.type === 'singleSelect' || field.type === 'checkbox') {
     input = <select {...common} value={scalar} onChange={event => onChange(event.target.value || null)}>
       <option value="">Not set</option>
@@ -45,6 +46,7 @@ export function FieldInput({ field, value, onChange, disabled = false, calculati
       {!field.required && field.type !== 'lookup' && field.type !== 'formula' && <button type="button" className="clear-value" disabled={disabled || value === null}
         aria-label={`Clear ${field.name}`} onClick={() => { onChange(null); document.getElementById(id)!.focus(); }}>Clear</button>}</div>
     {input}
+    {field.description && <small id={descriptionId} className="field-description">{field.description}</small>}
     {field.type === 'lookup' && <small>Updates after saving linked records.</small>}
     {field.type === 'formula' && <small>Updates when changes to its inputs are saved.</small>}
     {field.type === 'number' && field.numberFormat === 'percent' && <small>Enter a fraction: 0.5 displays as 50%.</small>}

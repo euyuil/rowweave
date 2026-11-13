@@ -19,6 +19,7 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved, ancho
   onClose(): void; onSaved(table: Table): Promise<void>;
 }) {
   const [name, setName] = useState(field?.name ?? '');
+  const [description, setDescription] = useState(field?.description ?? '');
   const [type, setType] = useState<FieldType>(field?.type ?? 'text');
   const [required, setRequired] = useState(field?.required ?? false);
   const [options, setOptions] = useState<SelectOption[]>(field?.options ?? []);
@@ -78,7 +79,7 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved, ancho
   }, [api, type, relation]);
   const converting = !!field && type !== field.type;
   const selection = type === 'singleSelect' || type === 'multiSelect';
-  const target: Field = { id: field?.id ?? 'new-field', name, type, required: type !== 'lookup' && type !== 'formula' && required,
+  const target: Field = { id: field?.id ?? 'new-field', name, description, type, required: type !== 'lookup' && type !== 'formula' && required,
     ...(type === 'relation' ? { relation: { tableId: targetId, multiple } } : {}),
     ...(type === 'lookup' ? { lookup: { relationFieldId: lookupRelation, fieldId: lookupField, operation: lookupOperation } } : {}),
     ...(type === 'formula' ? { formula: { expression, resultType } } : {}),
@@ -132,6 +133,8 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved, ancho
     }}>
       <fieldset disabled={busy}>
         <label className="form-field">Field name<input autoFocus required maxLength={200} value={name} onChange={event => setName(event.target.value)} /></label>
+        <label className="form-field">Field description<textarea aria-label="Field description" rows={2} maxLength={2000} value={description}
+          placeholder="Explain what belongs in this field…" onChange={event => setDescription(event.target.value)} /></label>
         <label className="form-field">Field type<select aria-label="Field type" value={type} onChange={event => {
           setType(event.target.value as FieldType); setHasDefault(false); setDefaultValue(null);
         }}>{Object.entries(fieldTypeNames).map(([value, label]) => <option key={value} value={value}

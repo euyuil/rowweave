@@ -10,6 +10,13 @@ export function parseField(input: Record<string, unknown>, previous?: Field): Fi
   const config = { ...previous, ...input };
   if (!fieldTypes.includes(config['type'] as FieldType)) throw new ServiceError('INVALID_SCHEMA', 'This field type is not supported.');
   const field: Field = { id: previous?.id ?? randomUUID(), name: schemaName(config['name']), type: config['type'] as FieldType };
+  if (config['description'] !== undefined) {
+    if (typeof config['description'] !== 'string' || config['description'].length > 2000) {
+      throw new ServiceError('INVALID_SCHEMA', 'Field descriptions must be text up to 2,000 characters.');
+    }
+    const description = config['description'].trim();
+    if (description) field.description = description;
+  }
   if (config['required'] !== undefined) {
     if (typeof config['required'] !== 'boolean') throw new ServiceError('INVALID_SCHEMA', 'required must be a boolean.');
     field.required = config['required'];

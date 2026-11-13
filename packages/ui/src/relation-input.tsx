@@ -3,8 +3,8 @@ import type { Field, QueryPage, RecordLink, RowRecord, Table } from '../../contr
 import { cellText } from '../../client/src/cell-values.js';
 import { WorkspaceContext } from './workspace-context.js';
 
-export function RelationInput({ id, field, value, disabled, onChange }: {
-  id: string; field: Field; value: string[] | null; disabled: boolean; onChange(value: string[], links: RecordLink[]): void;
+export function RelationInput({ id, descriptionId, field, value, disabled, onChange }: {
+  id: string; descriptionId?: string | undefined; field: Field; value: string[] | null; disabled: boolean; onChange(value: string[], links: RecordLink[]): void;
 }) {
   const api = useContext(WorkspaceContext)!;
   const targetId = field.relation!.tableId;
@@ -73,7 +73,7 @@ export function RelationInput({ id, field, value, disabled, onChange }: {
       <button type="button" disabled={disabled} aria-label={`Unlink ${labels[recordId] ?? recordId}`}
         onClick={() => change(selected.filter(id => id !== recordId))}>×</button>
     </div>)}</div>
-    <input id={id} type="search" placeholder="Find records…" value={search} disabled={disabled}
+    <input id={id} aria-describedby={descriptionId} type="search" placeholder="Find records…" value={search} disabled={disabled}
       onChange={event => { setSearch(event.target.value); setOffset(0); setPage(undefined); }}
       onCompositionStart={() => setComposing(true)} onCompositionEnd={() => setComposing(false)} />
     <div className="relation-results" aria-busy={busy}>{page?.records.map(record => <label key={record.id} title={record.id}>

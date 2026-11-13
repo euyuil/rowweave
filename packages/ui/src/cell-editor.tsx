@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useLayoutEffect, useRef, useState } from 'react';
+import React, { createContext, useContext, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { GridCell, ProvideEditorComponent, TextCell } from '@glideapps/glide-data-grid';
 import type { CellValue, Field, RecordLink } from '../../contracts/src/index.js';
 import { sameValue } from '../../client/src/cell-values.js';
@@ -25,6 +25,7 @@ export const CellEditor: ProvideEditorComponent<GridCell> = ({ value: gridValue,
   const closed = useRef(false);
   const links = useRef<RecordLink[]>();
   const text = ['text', 'multiline', 'number'].includes(value.field.type);
+  const descriptionId = useId();
   const initial = useRef<FormValue>(text ? value.copyData ?? value.data : toFormValue(value.field, value.rawValue));
   const [draft, setDraft] = useState<FormValue>(text ? value.data : initial.current);
   const [error, setError] = useState<string>();
@@ -82,10 +83,11 @@ export const CellEditor: ProvideEditorComponent<GridCell> = ({ value: gridValue,
         finish(event.key !== 'Escape', event.key === 'Tab' ? [event.shiftKey ? -1 : 1, 0] : event.key === 'Enter' ? [0, 1] : [0, 0]);
       }
     }}>
-    {text ? <textarea ref={input} aria-label="Cell value" value={draft as string}
+    {text ? <textarea ref={input} aria-label="Cell value" aria-describedby={value.field.description ? descriptionId : undefined} value={draft as string}
       rows={Math.min(6, (draft as string).split('\n').length)} inputMode={value.field.type === 'number' ? 'decimal' : undefined}
       onChange={event => change(event.target.value)} />
       : <FieldInput field={{ ...value.field, name: 'Cell value' }} value={draft} onChange={change} />}
+    {text && value.field.description && <small id={descriptionId} className="field-description cell-description">{value.field.description}</small>}
     {error && <div role="alert" className="cell-error">{error}</div>}
     {!text && <div className="cell-editor-actions"><button onClick={() => finish(false)}>Cancel</button><button onClick={() => finish(true)}>Apply</button></div>}
   </div>;

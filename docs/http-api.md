@@ -27,7 +27,7 @@ A new table contains an optional text field named `Name` and an `All records` vi
 
 `primaryFieldId` selects the **primary display field**, not a database primary key. Its values label linked records and may repeat or be empty unless the field is required. Each record's immutable `id` UUID is its primary key; each column has a separate field UUID. Renaming a field, editing display values, or selecting another display field preserves record IDs and links.
 
-Tables support up to 200 fields. Field definitions use `{ name, type, required?, defaultValue? }` and these type-specific properties:
+Tables support up to 200 fields. Field definitions use `{ name, type, description?, required?, defaultValue? }` and these type-specific properties:
 
 | Type | JSON cell value | Configuration |
 | --- | --- | --- |
@@ -43,6 +43,8 @@ Tables support up to 200 fields. Field definitions use `{ name, type, required?,
 | `lookup` | Read-only array, or number/null for numeric summaries | `lookup: { relationFieldId, fieldId, operation? }`; omitted/`values` returns the original array. Numeric targets support `count`, `sum`, `average`, `min`, `max`. See [linked summaries](linked-summaries.md). No defaults, required constraint, direct writes, or chained lookups. |
 
 Optional writable fields allow null. New-record defaults apply only to omitted fields; explicit null does not use a default. Existing records do not receive a newly added default. Add a required field to a non-empty table as optional, fill it, then enable its constraint. Tightening constraints validates existing values atomically. A field's ID and option IDs survive rename and reorder. Returned lookup fields include the current resolved `lookupResult` metadata; that property is not writable configuration.
+
+`description` is optional plain text up to 2,000 UTF-16 code units. Leading/trailing whitespace is trimmed; line breaks inside the text are retained. Omit it to preserve existing guidance on updates or conversion; send empty/whitespace-only text to clear it. Description changes use the table's `expectedVersion`, preserve field/record identities and do not rewrite record values or history. Descriptions are part of stored schema and backups; desktop configuration, column actions, typed record forms and cell editors show them as text, never HTML. SDK, CLI and MCP field operations use the same property.
 
 A new relation may additionally specify `reverseField: { name, multiple, expectedVersion }`. The nested version belongs to the target table. Both fields are created atomically and return service-assigned `relation.inverseFieldId` metadata. Edits from either side synchronize values and versions; final cardinality and required constraints apply to both sides. Deleting a record clears its reciprocal links unless other dependencies prevent deletion. Deleting one field preserves the opposite field as ordinary one-way links. See [two-way relationship semantics](development.md#linked-records) for batch, CSV and schema boundaries.
 

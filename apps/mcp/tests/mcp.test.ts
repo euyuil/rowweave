@@ -61,6 +61,31 @@ async function setup(t: Context) {
   return { service, server, token, environment };
 }
 
+test('MCP and CLI share field descriptions, omission, validation and explicit clearing', async t => {
+  const { environment } = await setup(t);
+  const { json, call } = await connect(t, environment);
+  let table = await json<Table>('tables_create', { name: 'Field guidance' });
+  table = await json<Table>('fields_create', { tableId: table.id, input: { expectedVersion: table.version,
+    name: 'Budget', type: 'number', description: 'Enter the approved amount.\n预算金额' } });
+  const field = table.fields[1]!;
+  assert.equal(field.description, 'Enter the approved amount.\n预算金额');
+  const directory = await mkdtemp(join(tmpdir(), 'rowweave-descriptions-cli-')); t.after(() => rm(directory, { recursive: true, force: true }));
+  const input = join(directory, 'field.json');
+  const update = async (changes: object) => {
+    await writeFile(input, JSON.stringify({ expectedVersion: table.version, ...changes }));
+    const result = await runFile(process.execPath, [resolve('apps/cli/dist/rowweave.js'), 'fields', 'update', table.id, field.id, '--input', input],
+      { env: { ...process.env, ...environment } });
+    return JSON.parse(result.stdout) as Table;
+  };
+  table = await update({ name: 'Approved budget' });
+  assert.equal(table.fields[1]!.description, field.description);
+  table = await update({ description: 'Updated through CLI' });
+  assert.equal((await json<Table>('tables_get', { tableId: table.id })).fields[1]!.description, 'Updated through CLI');
+  assert.equal((await call('fields_update', { tableId: table.id, fieldId: field.id, input: { expectedVersion: table.version, description: 'x'.repeat(2001) } })).isError, true);
+  table = await json<Table>('fields_update', { tableId: table.id, fieldId: field.id, input: { expectedVersion: table.version, description: '' } });
+  assert.equal(table.fields[1]!.description, undefined);
+});
+
 test('MCP and CLI preserve relative date rules and reject continuation after calendar rollover', async t => {
   let now = new Date('2026-07-01T23:59:00Z');
   const service = new RecordService(fixture(t, null, () => now).open());

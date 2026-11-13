@@ -49,6 +49,7 @@ export function FieldsDialog({ initial, api, setDirty, onClose, onSaved }: {
     <p className="form-note">Each record has an immutable record ID (UUID), its primary key. Each column has a separate field ID that stays the same when you rename or move it.</p>
     <div className="schema-fields">{table.fields.map((field, index) => <div className="schema-field" role="group" aria-label={field.name} key={field.id}>
       <div className="schema-field-name"><strong>{field.name}</strong><small>{fieldTypeNames[field.type]}{field.required ? ' · Required' : ''}{field.id === table.primaryFieldId ? ' · Primary display field' : ''}</small></div>
+      {field.description && <p className="form-note field-description">{field.description}</p>}
       <div className="schema-field-actions">
         <button disabled={busy || index === 0} aria-label={`Move ${field.name} up`} onClick={() => move(index, -1)}>↑</button>
         <button disabled={busy || index === table.fields.length - 1} aria-label={`Move ${field.name} down`} onClick={() => move(index, 1)}>↓</button>
