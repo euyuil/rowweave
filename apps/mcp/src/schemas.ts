@@ -55,17 +55,19 @@ const page = {
   expectedDateContext: z.string().regex(/^[a-f0-9]{64}$/).describe('Reuse dateContext from the first page or summary; DATA_CHANGED requires refreshing after the calendar period changes.').exactOptional(),
 };
 export const recordQuery = z.strictObject({ ...page, ...query, recordIds: z.array(id).exactOptional(), groupBy: id.exactOptional() });
+const summaryMeasures = z.array(z.strictObject({ fieldId: id, operation: z.enum(['sum', 'average', 'min', 'max']) })).max(12);
 export const recordGroups = z.strictObject({
   window: z.enum(['displayRows', 'expandedRecords']).describe('Offsets count display rows by default; expandedRecords skips all headings and collapsed records.').exactOptional(),
   viewId: id.exactOptional(), expectedViewVersion: version.exactOptional(), groupBy: id.exactOptional(),
   filter: filter.exactOptional(), search: z.string().exactOptional(),
   offset: page.offset, limit: page.limit, expectedRevision: page.expectedRevision, expectedDateContext: page.expectedDateContext,
   collapse: z.strictObject({ defaultCollapsed: z.boolean(), exceptions: z.array(scalar).max(maxGroupCollapseKeys) }).exactOptional(),
+  measures: summaryMeasures.exactOptional(),
 });
 export const recordSummary = z.strictObject({
   viewId: id.exactOptional(), expectedViewVersion: version.exactOptional(),
   filter: filter.exactOptional(), search: z.string().exactOptional(), groupBy: id.exactOptional(),
-  measures: z.array(z.strictObject({ fieldId: id, operation: z.enum(['sum', 'average', 'min', 'max']) })).max(12).exactOptional(),
+  measures: summaryMeasures.exactOptional(),
   offset: page.offset, limit: page.limit, expectedRevision: page.expectedRevision, expectedDateContext: page.expectedDateContext,
 });
 export const recordCreate = z.array(z.strictObject({ values }));

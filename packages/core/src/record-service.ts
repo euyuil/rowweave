@@ -297,7 +297,7 @@ export class RecordService {
       offset: item['offset'], limit: item['limit'], expectedRevision: item['expectedRevision'], expectedDateContext: item['expectedDateContext'] });
     if (!query.groupBy) throw new ServiceError('INVALID_QUERY', 'Choose a grouping field or a saved grouped grid.');
     const collapse = parseGroupCollapse(table.fields.find(field => field.id === query.groupBy)!, item['collapse']);
-    return this.store.queryGroups(table, { ...query, window }, collapse, view);
+    return this.store.queryGroups(table, { ...query, window, measures: parseSummary(table, { measures: item['measures'] }).measures }, collapse, view);
   }
 
   importCsv(id: string, input: unknown): CsvImportResult {

@@ -68,15 +68,19 @@ async function setup(t: Context, clock?: () => Date) {
 test('SDK, MCP and CLI share bounded group positions and matching scalar record queries', async t => {
   const { service, server, token, environment } = await setup(t), { json, call } = await connect(t, environment);
   const api = createWorkspaceClient({ url: server.url, token });
-  const table = await api.createTable({ name: 'Group windows' });
+  let table = await api.createTable({ name: 'Group windows' });
+  table = await api.createField(table.id, { expectedVersion: table.version, name: 'Amount', type: 'number' });
+  const amount = table.fields[1]!.id;
   await api.createRecords(table.id, Array.from({ length: 607 }, (_, index) => ({
-    values: { [table.primaryFieldId]: 'Group ' + String(606 - index).padStart(3, '0') },
+    values: { [table.primaryFieldId]: 'Group ' + String(606 - index).padStart(3, '0'), [amount]: 606 - index },
   })));
   const input = { groupBy: table.primaryFieldId, offset: 600, limit: 5,
+    measures: [{ fieldId: amount, operation: 'sum' as const }],
     collapse: { defaultCollapsed: true, exceptions: ['Group 601'] } };
   const expected = await api.queryGroups(table.id, input);
   assert.equal(expected.totalGroups, 608); assert.equal(expected.totalRows, 609);
   assert.deepEqual(expected.groups.map(group => group.key), ['Group 600', 'Group 601', 'Group 602', 'Group 603']);
+  assert.deepEqual(expected.groups.map(group => group.values), [[600], [601], [602], [603]]);
   assert.deepEqual(await json<GroupLayout>('records_groups', { tableId: table.id, input }), expected);
   const cli = await runFile(process.execPath, [resolve('apps/cli/dist/rowweave.js'), 'records', 'groups', table.id, '--json', JSON.stringify(input)],
     { env: { ...process.env, ...environment } });

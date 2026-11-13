@@ -309,11 +309,12 @@ export interface GroupCollapse { defaultCollapsed: boolean; exceptions: ScalarVa
 export type GroupWindow = 'displayRows' | 'expandedRecords';
 export interface GroupQuery extends Pick<RecordQuery, 'groupBy' | 'filter' | 'search' | 'offset' | 'limit' | 'expectedRevision' | 'expectedDateContext'> {
   window?: GroupWindow;
+  measures?: SummaryMeasure[];
   viewId?: string;
   expectedViewVersion?: number;
   collapse?: GroupCollapse;
 }
-export interface GroupSegment { key: ScalarValue; label: string; count: number; recordOffset: number; rowStart: number; expandedOffset: number; collapsed: boolean }
+export interface GroupSegment { key: ScalarValue; label: string; count: number; recordOffset: number; rowStart: number; expandedOffset: number; collapsed: boolean; values?: Array<number | null> }
 export interface GroupLayout {
   window: GroupWindow;
   groups: GroupSegment[];

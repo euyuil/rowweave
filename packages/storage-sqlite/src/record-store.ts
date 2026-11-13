@@ -444,7 +444,7 @@ export class SqliteRecordStore implements RecordStore {
     return this.transaction(() => {
       const { current, sql, dateContext } = this.prepareQuery(table, query, view);
       const field = current.fields.find(field => field.id === query.groupBy)!;
-      return { ...groupLayout(this.db, current, field, collapse, sql.where, sql.countParameters, query.offset, query.limit, query.window),
+      return { ...groupLayout(this.db, current, field, collapse, sql.where, sql.countParameters, query.offset, query.limit, query.window, query.measures),
         ...(dateContext ? { dateContext } : {}), ...(view ? { viewId: view.id, viewVersion: view.version } : {}) };
     }, 'DEFERRED');
   }

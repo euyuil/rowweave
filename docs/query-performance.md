@@ -85,3 +85,30 @@ After:  316.8034, 344.8682, 339.9002, 329.7556, 340.1529, 326.1827, 333.6898, 33
 ```
 
 Both specified query workloads now measure below the 500 ms p95 criterion. This does not close the remaining functional inventory or establish UI input/scrolling performance; those remain explicit acceptance items.
+
+## Measures in bounded group windows
+
+Measured on 2026-11-13 UTC using clean source `4dc7f73629156938b6c51ac7584d3bdf8cab7774`. The compiled service ran on Intel(R) Core(TM) i7-8700K CPU @ 3.70GHz, 12 logical processors, 31.95 GiB RAM, Windows_NT 10.0.22631 x64, Node.js v24.22.1 and SQLite 3.53.4. Display settings do not apply to this service-only test. Renderer, HTTP, native input and final-package performance remain separate gates.
+
+Reproduce with `npm run build`, then `node scripts/benchmark-group-measures.mjs`. The isolated SQLite dataset contains 100,000 records, 100,000 distinct text groups and 100 numeric buckets of 1,000 records. Amounts cycle from -50 to 50. Each workload has two warm-ups and 20 measured calls. Correctness checks run outside timing and independently calculate every returned group's complete measures; counts, sparse expanded keys and unchanged workspace state are also checked. The twelve-measure case repeats the four operations to exercise the supported request limit.
+
+| Workload | p95 | Observed range |
+| --- | ---: | ---: |
+| 100,000 distinct groups, deep collapsed window without measures | 404.1 ms | 390.7–406.3 ms |
+| Same window, sum/average/min/max | 428.1 ms | 418.1–436.1 ms |
+| Same window, twelve measures | 461.2 ms | 418.9–775.4 ms |
+| 100 groups of 1,000 records, four measures | 178.9 ms | 166.4–251.5 ms |
+| Two distant expanded records, four measures | 452.8 ms | 420.9–493.9 ms |
+
+All five p95 values are below 500 ms. The twelve-measure workload includes a 775.4 ms maximum; these samples do not establish a maximum-latency guarantee. Raw measurements remain in `.artifacts/group-measure-performance-bs91SZ/results.json`.
+
+The service retains matching record identities in the existing materialized input, determines the bounded group window, then evaluates numeric fields only for records belonging to those returned keys. Counts, positions and complete-group measures share one SQLite statement and snapshot. Requests without measures retain the original layout path. Empty configured groups return null measures; an overflowing returned group fails explicitly without summing unrelated groups together.
+
+The four- and twelve-measure deep-window samples retain observation order, in milliseconds:
+
+```text
+Four:   427.4221, 426.6193, 418.7056, 423.1656, 419.7132, 426.4780, 421.7948, 428.1279, 421.7418, 422.1919, 436.0609, 424.3911, 419.3713, 424.1828, 422.1299, 418.1352, 419.8035, 425.5710, 423.6541, 425.8905
+Twelve: 438.8853, 449.3152, 461.2148, 426.0486, 435.6049, 433.2684, 443.4892, 429.3006, 428.6077, 454.3689, 423.0318, 436.0934, 775.4358, 436.2686, 425.5989, 425.3413, 427.6838, 428.1248, 418.8612, 422.4695
+```
+
+Type checking, production build and all 342 locally supported Node tests passed after optimization, including complete groups larger than a page, collapse, filtering, configured empty groups, nulls, computed/linked values, numeric overflow, restart, cancellation, date/view/data conflicts and packaged SDK/CLI/MCP consumers. Saved desktop measure configuration and rendering remain the next functional step; this report does not close the broader grouping or final-candidate rows.

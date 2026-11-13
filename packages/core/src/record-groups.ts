@@ -1,10 +1,10 @@
 import { maxGroupCollapseKeys, valueField, type Field, type GroupCollapse, type ScalarValue } from '../../contracts/src/index.js';
 import { ServiceError } from './errors.js';
 import { validateValue } from './field-values.js';
-import type { GroupWindow } from '../../contracts/src/index.js';
+import type { GroupWindow, SummaryMeasure } from '../../contracts/src/index.js';
 import type { CheckedQuery } from './record-query.js';
 
-export type CheckedGroupQuery = CheckedQuery & { window: GroupWindow };
+export type CheckedGroupQuery = CheckedQuery & { window: GroupWindow; measures: SummaryMeasure[] };
 
 export function parseGroupCollapse(field: Field, input: unknown): GroupCollapse {
   if (input === undefined) return { defaultCollapsed: false, exceptions: [] };
