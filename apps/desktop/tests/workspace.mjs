@@ -25,6 +25,7 @@ import { verifyNavigationWorkflow } from './navigation-workflow.mjs';
 import { verifyRecordPanelWorkflow } from './record-panel-workflow.mjs';
 import { verifyHistoryWorkflow } from './history-workflow.mjs';
 import { verifyTrashWorkflow } from './trash-workflow.mjs';
+import { verifyBatchHistoryWorkflow } from './batch-history-workflow.mjs';
 import { verifyFieldPanelWorkflow } from './field-panel-workflow.mjs';
 
 const dataDirectory = await mkdtemp(join(tmpdir(), 'rowweave-workspace-'));
@@ -253,6 +254,7 @@ try {
   await verifyRecordPanelWorkflow(page, application);
   await verifyHistoryWorkflow(page, application);
   await verifyTrashWorkflow(page, application);
+  await verifyBatchHistoryWorkflow(page, application);
   await verifyViewWorkflow(page);
   await verifyNavigationWorkflow(page, application);
   await verifyQueryWorkflow(page, application);

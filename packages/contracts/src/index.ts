@@ -309,6 +309,7 @@ export interface DeleteResult {
 
 export interface BatchResult {
   records: RowRecord[];
+  batchId?: string;
 }
 
 export const maxBatchRecords = 2_000;

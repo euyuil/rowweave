@@ -193,3 +193,31 @@ test('the client completes a real HTTP read-edit-save-reload cycle', async t => 
   assert.equal(model.getRecord(1)?.values['field_2'], 'Round trip');
   assert.equal(model.getRecord(1)?.version, 2);
 });
+
+test('saved undo targets the returned transaction even when another client writes before refresh', async t => {
+  const service = new RecordService(fixture(t, { rows: 2, columns: 2 }).open());
+  const initial = service.queryRecords('prototype', {}).records;
+  let ownBatch: string | undefined;
+  const model = new TableModel({
+    getTable: async () => service.getTable(),
+    readPage: async (offset, limit, query) => service.queryRecords('prototype', { ...query, offset, limit }),
+    save: async updates => {
+      const result = service.updateBatch(updates);
+      ownBatch = result.batchId;
+      service.updateBatch([{ id: initial[1]!.id, expectedVersion: 1, values: { field_1: 'Another client' } }]);
+      return result;
+    },
+  });
+  await model.initialize();
+  model.applyEdits([{ row: 0, fieldId: 'field_1', value: 'My saved value' }]);
+  await model.save();
+  assert.ok(ownBatch);
+  assert.equal(model.lastSavedBatchId, ownBatch);
+  assert.notEqual(service.recordBatches('prototype', {}).batches[0]!.id, ownBatch);
+  await model.refresh();
+  assert.equal(model.lastSavedBatchId, ownBatch);
+  service.undoRecordBatch('prototype', ownBatch);
+  assert.equal(service.getRecord('prototype', initial[0]!.id).values['field_1'], initial[0]!.values['field_1']);
+  assert.equal(service.getRecord('prototype', initial[1]!.id).values['field_1'], 'Another client');
+  model.dispose();
+});

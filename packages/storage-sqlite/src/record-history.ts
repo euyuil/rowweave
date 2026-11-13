@@ -97,8 +97,10 @@ export class RecordHistory {
   }
 
   beforeValues(changeId: number, fieldIds: string[]): Record<string, CellValue> {
-    const row = this.db.prepare(`SELECT json_group_object(field.value, json(c.before_values_json -> ('$.' || json_quote(field.value)))) AS values_json
-      FROM record_changes c, json_each(?) field WHERE c.id = ? AND json_type(c.before_values_json, '$.' || json_quote(field.value)) IS NOT NULL`)
+    // A value introduced by this operation was empty before it; only fields absent on both sides may have been added later.
+    const row = this.db.prepare(`SELECT json_group_object(field.value, json(COALESCE(c.before_values_json -> ('$.' || json_quote(field.value)), 'null'))) AS values_json
+      FROM record_changes c, json_each(?) field WHERE c.id = ? AND (json_type(c.before_values_json, '$.' || json_quote(field.value)) IS NOT NULL
+        OR json_type(c.after_values_json, '$.' || json_quote(field.value)) IS NOT NULL)`)
       .get(JSON.stringify(fieldIds), changeId)!;
     return JSON.parse(row['values_json'] as string) as Record<string, CellValue>;
   }

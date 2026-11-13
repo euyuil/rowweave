@@ -36,6 +36,7 @@ export class TableModel {
   stale = false;
   error: string | undefined;
   conflicted = false;
+  lastSavedBatchId: string | undefined;
   private revision = 0;
   private generation = 0;
   private disposed = false;
@@ -405,9 +406,10 @@ export class TableModel {
     this.emit();
     try {
       try {
-        await this.api.save([...this.edits.drafts.values()].map(draft => ({
+        const saved = await this.api.save([...this.edits.drafts.values()].map(draft => ({
           id: draft.base.id, expectedVersion: draft.base.version, values: draft.values,
         })));
+        this.lastSavedBatchId = saved.batchId;
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Saving failed.';
         this.conflicted = error instanceof ApiFailure && error.code === 'VERSION_CONFLICT';

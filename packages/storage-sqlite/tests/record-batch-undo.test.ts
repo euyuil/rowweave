@@ -88,6 +88,28 @@ test('cross-table reciprocal swaps undo atomically against the final graph and r
   assert.equal(service.recordBatchChanges(tasks.id, undo.batchId, {}).batch.recordCount, 4);
 });
 
+test('undo restores absent optional values and newly assigned reciprocal links to empty', t => {
+  const { service, table: source } = setup(t);
+  const row = service.createRecords(source.id, [{ values: {} }]).records[0]!;
+  const target = service.createTable({ name: 'Targets' });
+  const linked = service.createRecords(target.id, [{ values: {} }]).records[0]!;
+  let table = service.createField(source.id, { expectedVersion: source.version, name: 'Reference', type: 'text' });
+  const text = table.fields.at(-1)!.id;
+  table = service.createField(table.id, { expectedVersion: table.version, name: 'Link', type: 'relation',
+    relation: { tableId: target.id, multiple: true }, reverseField: { name: 'Sources', multiple: true, expectedVersion: target.version } });
+  const link = table.fields.at(-1)!;
+  service.updateBatch([{ id: row.id, expectedVersion: row.version, values: { [text]: 'First value', [link.id]: [linked.id] } }], table.id);
+  const saved = service.recordBatches(table.id, {}).batches[0]!;
+  const undone = service.undoRecordBatch(table.id, saved.id);
+  assert.equal(service.getRecord(table.id, row.id).values[text], null);
+  assert.equal(service.getRecord(table.id, row.id).values[link.id], null);
+  assert.equal(service.getRecord(target.id, linked.id).values[link.relation!.inverseFieldId!], null);
+  service.undoRecordBatch(table.id, undone.batchId);
+  assert.equal(service.getRecord(table.id, row.id).values[text], 'First value');
+  assert.deepEqual(service.getRecord(table.id, row.id).values[link.id], [linked.id]);
+  assert.deepEqual(service.getRecord(target.id, linked.id).values[link.relation!.inverseFieldId!], [row.id]);
+});
+
 test('saved batch conflicts preserve unrelated changes and roll back late dependency failures', t => {
   const { data, service, table, amount } = setup(t);
   const rows = service.createRecords(table.id, [1, 2, 3].map(value => ({ values: { [amount]: value } }))).records;

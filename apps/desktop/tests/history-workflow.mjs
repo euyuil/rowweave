@@ -70,6 +70,7 @@ export async function verifyHistoryWorkflow(page, application) {
   assert.equal(await history.getByRole('button', { name: 'Restore before change', exact: true }).isDisabled(), true);
   await page.keyboard.press('Escape');
   await dialog.getByRole('button', { name: 'Keep editing', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('dialog form')?.contains(document.activeElement));
   assert.equal(await dialog.getByLabel('Cost', { exact: true }).inputValue(), '99');
   await showHistory(); await page.keyboard.press('Escape');
   await dialog.getByRole('button', { name: 'Discard changes', exact: true }).click();
