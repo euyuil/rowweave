@@ -18,6 +18,7 @@ import { verifyDisplayWorkflow } from './display-workflow.mjs';
 import { verifyBoardWorkflow } from './board-workflow.mjs';
 import { verifyFormulaWorkflow } from './formula-workflow.mjs';
 import { verifyNavigationWorkflow } from './navigation-workflow.mjs';
+import { verifyRecordPanelWorkflow } from './record-panel-workflow.mjs';
 
 const dataDirectory = await mkdtemp(join(tmpdir(), 'rowweave-workspace-'));
 await mkdir('.artifacts', { recursive: true });
@@ -241,6 +242,7 @@ try {
   assert.equal((await tables()).length, 2);
   await verifySchemaWorkflow(page);
   await recordLifecycle();
+  await verifyRecordPanelWorkflow(page, application);
   await verifyViewWorkflow(page);
   await verifyNavigationWorkflow(page, application);
   await verifyQueryWorkflow(page, application);
