@@ -9,7 +9,7 @@ import { rewriteFormulaReferences } from '../../core/src/formulas.js';
 import { isLookupSummary, valueField } from '../../contracts/src/index.js';
 
 export const fieldTypeNames: Record<FieldType, string> = {
-  text: 'Text', multiline: 'Multiline text', number: 'Number', checkbox: 'Checkbox', date: 'Date',
+  text: 'Text', multiline: 'Multiline text', url: 'URL', number: 'Number', checkbox: 'Checkbox', date: 'Date',
   datetime: 'Date and time', singleSelect: 'Single select', multiSelect: 'Multiple select', relation: 'Linked records', lookup: 'Lookup', formula: 'Formula',
 };
 

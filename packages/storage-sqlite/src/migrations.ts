@@ -5,8 +5,8 @@ import { syncQueryIndexes } from './query-indexes.js';
 
 export function migrate(db: DatabaseSync): boolean {
   const version = db.prepare('PRAGMA user_version').get()!['user_version'] as number;
-  if (version === 19) return false;
-  if (version < 0 || version > 19) throw new Error(`Unsupported database version: ${version}.`);
+  if (version === 20) return false;
+  if (version < 0 || version > 20) throw new Error(`Unsupported database version: ${version}.`);
   db.exec('BEGIN IMMEDIATE');
   try {
     if (version < 2) {
@@ -104,7 +104,8 @@ export function migrate(db: DatabaseSync): boolean {
       PRIMARY KEY(table_id, batch_id)
     ); CREATE INDEX batches_by_table ON record_batch_tables(table_id, sequence DESC);`);
     if (version < 19) db.exec('ALTER TABLE record_batches ADD COLUMN undo_of TEXT;');
-    db.exec('PRAGMA user_version = 19; COMMIT;');
+    // URL fields use existing JSON storage; older applications must reject the new field semantics.
+    db.exec('PRAGMA user_version = 20; COMMIT;');
     return version === 0;
   } catch (error) {
     db.exec('ROLLBACK');

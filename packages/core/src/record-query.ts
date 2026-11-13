@@ -70,7 +70,7 @@ export function parseQuery(table: Table, input: unknown): CheckedQuery {
         return { fieldId: selected.id, operator, relative: { period, timeZone, ...(counted ? { days: days as number } : {}) } };
       }
       if (operator === 'contains') {
-        if (!['text', 'multiline'].includes(selected.type) || typeof item['value'] !== 'string' || item['value'].length > maxTextLength) {
+        if (!['text', 'multiline', 'url'].includes(selected.type) || typeof item['value'] !== 'string' || item['value'].length > maxTextLength) {
           return invalid('contains requires a text field and a text value.');
         }
         return { fieldId: selected.id, operator, value: item['value'] };

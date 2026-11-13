@@ -3,6 +3,7 @@ import { createWorkspaceClient, type Connection } from '../../../packages/client
 import { WorkspaceApp } from '../../../packages/ui/src/workspace-app.js';
 import type { TableHost } from '../../../packages/ui/src/table-app.js';
 import { Dialog } from '../../../packages/ui/src/dialog.js';
+import { webUrl } from '../../../packages/core/src/web-url.js';
 
 export interface WorkspaceSession {
   getConnection(): Connection | undefined;
@@ -15,6 +16,11 @@ export function HarnessWorkspace({ session }: { session: WorkspaceSession }) {
   const [settings, setSettings] = useState(false);
   const api = useMemo(() => connection ? createWorkspaceClient(connection) : undefined, [connection]);
   const host = useMemo<TableHost>(() => ({
+    openUrl: async input => {
+      const url = webUrl(input);
+      if (!url) throw new Error('Only valid HTTP and HTTPS links can be opened.');
+      window.open(url, '_blank', 'noopener,noreferrer');
+    },
     confirmDiscard: async () => window.confirm('Discard your unsaved RowWeave edits?'),
     setDirty: async value => session.setDirty(value),
     onServiceExit: () => () => {},

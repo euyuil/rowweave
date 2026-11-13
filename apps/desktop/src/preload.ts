@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('rowweave', {
     return result.state;
   },
   confirmDiscard: (): Promise<boolean> => ipcRenderer.invoke('confirm-discard'),
+  openUrl: (url: string): Promise<void> => ipcRenderer.invoke('open-url', url),
   setDirty: (value: boolean): Promise<void> => ipcRenderer.invoke('dirty', value),
   saveCsv: (name: string, csv: string): Promise<boolean> => ipcRenderer.invoke('save-csv', name, csv),
   onServiceExit: (listener: () => void) => {

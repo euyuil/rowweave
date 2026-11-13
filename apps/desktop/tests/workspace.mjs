@@ -27,6 +27,7 @@ import { verifyHistoryWorkflow } from './history-workflow.mjs';
 import { verifyTrashWorkflow } from './trash-workflow.mjs';
 import { verifyBatchHistoryWorkflow } from './batch-history-workflow.mjs';
 import { verifyFieldPanelWorkflow } from './field-panel-workflow.mjs';
+import { verifyUrlWorkflow } from './url-workflow.mjs';
 
 const dataDirectory = await mkdtemp(join(tmpdir(), 'rowweave-workspace-'));
 await mkdir('.artifacts', { recursive: true });
@@ -267,6 +268,7 @@ try {
   await verifySummaryWorkflow(page);
   await verifyColumnWorkflow(page);
   await verifyFieldPanelWorkflow(page, application);
+  await verifyUrlWorkflow(page, application);
   await verifyDisplayWorkflow(page);
   await verifyBoardWorkflow(page);
   await verifyFormulaWorkflow(page);
