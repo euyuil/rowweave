@@ -2,9 +2,11 @@ export type ScalarValue = string | number | boolean | null;
 export type CellValue = ScalarValue | ScalarValue[];
 
 export const maxAttachmentBytes = 8 * 1024 * 1024;
+export const maxAttachmentsPerCell = 20;
 export interface AttachmentUpload { filename: string; mediaType: string; data: string }
 export interface Attachment {
   id: string;
+  tableId: string;
   filename: string;
   mediaType: string;
   size: number;
@@ -20,7 +22,7 @@ export interface SelectOption {
   color?: string;
 }
 
-export type FieldType = 'text' | 'multiline' | 'url' | 'number' | 'autoNumber' | 'createdTime' | 'updatedTime' | 'checkbox' | 'date' | 'datetime' | 'singleSelect' | 'multiSelect' | 'relation' | 'lookup' | 'formula';
+export type FieldType = 'text' | 'multiline' | 'url' | 'attachment' | 'number' | 'autoNumber' | 'createdTime' | 'updatedTime' | 'checkbox' | 'date' | 'datetime' | 'singleSelect' | 'multiSelect' | 'relation' | 'lookup' | 'formula';
 
 export interface Field {
   id: string;
@@ -105,6 +107,7 @@ export interface RowRecord {
   version: number;
   values: Record<string, CellValue>;
   links?: Record<string, RecordLink[]>;
+  attachments?: Record<string, Attachment[]>;
   formulaErrors?: Record<string, string>;
 }
 

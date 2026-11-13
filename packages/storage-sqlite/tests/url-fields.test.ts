@@ -51,7 +51,7 @@ test('URL schema upgrades preserve existing data and survive restart and backups
   const current = upgraded.getRecord(table.id, row.id);
   assert.deepEqual(new RecordService(data.open()).getRecord(table.id, row.id), current);
   const backup = join(dirname(data.path), 'backup.sqlite'), restored = join(dirname(data.path), 'restored.sqlite');
-  await backupWorkspace(data.path, backup); assert.equal((await restoreWorkspace(backup, restored)).version, 23);
+  await backupWorkspace(data.path, backup); assert.equal((await restoreWorkspace(backup, restored)).version, 24);
   const restoredStore = new SqliteRecordStore(restored);
   try { assert.deepEqual(restoredStore.getTable(table.id).fields, table.fields); assert.deepEqual(new RecordService(restoredStore).getRecord(table.id, row.id), current); }
   finally { restoredStore.close(); }

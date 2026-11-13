@@ -47,8 +47,8 @@ export function parseQuery(table: Table, input: unknown): CheckedQuery {
       const original = field(item['fieldId']);
       const selected = queryValueField(original);
       const operator = item['operator'];
-      if (original.type === 'lookup' && selected.type === 'multiSelect' && (operator === 'eq' || operator === 'neq')) {
-        return invalid('Use hasAny or empty checks for a multiple-select lookup.');
+      if (original.type === 'lookup' && ['multiSelect', 'attachment'].includes(selected.type) && (operator === 'eq' || operator === 'neq')) {
+        return invalid('Use hasAny or empty checks for a multiple-value lookup.');
       }
       if (operator === 'isEmpty' || operator === 'isNotEmpty') return { fieldId: selected.id, operator };
       if (operator === 'relativeDate') {
@@ -76,15 +76,15 @@ export function parseQuery(table: Table, input: unknown): CheckedQuery {
         return { fieldId: selected.id, operator, value: item['value'] };
       }
       if (operator === 'hasAny') {
-        if (!['multiSelect', 'relation'].includes(selected.type) || !Array.isArray(item['value'])) return invalid('hasAny requires a select or linked-record field and IDs.');
+        if (!['multiSelect', 'relation', 'attachment'].includes(selected.type) || !Array.isArray(item['value'])) return invalid('hasAny requires a select, linked-record or attachment field and IDs.');
       } else if (operator === 'gt' || operator === 'gte' || operator === 'lt' || operator === 'lte') {
         if (!['number', 'date', 'datetime'].includes(selected.type) || item['value'] === null) {
           return invalid('Ordered comparisons require a number, date or timestamp value.');
         }
       } else if (operator !== 'eq' && operator !== 'neq') {
         return invalid('Unknown filter operator.');
-      } else if (['multiSelect', 'relation'].includes(selected.type) && item['value'] !== null) {
-        return invalid('Use hasAny for select or linked-record matching.');
+      } else if (['multiSelect', 'relation', 'attachment'].includes(selected.type) && item['value'] !== null) {
+        return invalid('Use hasAny for select, linked-record or attachment matching.');
       }
       return { fieldId: selected.id, operator,
         value: validateValue({ ...selected, required: false,

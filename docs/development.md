@@ -62,6 +62,7 @@ SQLite stores relational table/field/view metadata and JSON record values, with 
 | --- | --- |
 | `text`, `multiline` | String up to 10,000 UTF-16 code units, or null. Empty strings remain distinct from null. |
 | `url` | Absolute HTTP/HTTPS URL or null, up to 2,048 characters including its encoded form. Credentials, whitespace, control characters and backslashes are rejected. Unicode text remains unchanged in storage, CSV and clipboard; opening uses the encoded URL. |
+| `attachment` | Up to 20 unique uploaded file IDs, or null. No default; required fields need at least one file. Record responses include ordered file metadata. See [attachments](attachments.md). |
 | `autoNumber` | Read-only positive integer assigned by the service. Each field has its own sequence starting at 1. See [automatic numbering](#automatic-numbering) for recovery and import behavior. |
 | `createdTime`, `updatedTime` | Read-only UTC ISO timestamp or null. See [automatic record times](#automatic-record-times) for edit, history and restoration semantics. |
 | `number` | Finite JSON number. Optional `numberFormat`: `decimal`, `currency`, or `percent`; `precision`: 0–10; currency formatting requires a three-letter uppercase `currency` code. Formatting never rounds stored values. Percent values use fractions: `0.5` displays as 50%. |
@@ -111,7 +112,7 @@ The grid and forms display UTC values read-only. Date comparisons, relative-date
 
 ### Attachment storage
 
-The service and SDK/CLI/MCP provide authenticated, bounded file uploads/downloads with immutable metadata. Bytes are stored inside SQLite and included in workspace backups. See [attachment storage](attachments.md) for limits, lifecycle and commands. This is independent of the attachment-field UI, which remains in the active delivery scope.
+Attachment fields hold up to 20 uploaded file IDs. Record forms and typed grid editors upload, select, remove and download files through the shared service and host interfaces; lookup files are read-only and paged. The service validates ownership and retains files transactionally so history, trash and saved undo remain recoverable. SDK/CLI/MCP share the same operations. Bytes are stored inside SQLite and included in workspace backups. See [attachments](attachments.md) for limits, lifecycle and commands.
 
 ### Linked records
 

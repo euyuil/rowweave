@@ -38,6 +38,8 @@ export function querySql(table: Pick<Table, 'id' | 'fields'>, query: CheckedQuer
   function formatted(field: Field, value: string): string {
     field = valueField(field);
     if (field.type === 'checkbox') return `(CASE ${value} WHEN 1 THEN 'true' WHEN 0 THEN 'false' END)`;
+    if (field.type === 'attachment') return `(SELECT group_concat(filename, ', ') FROM (SELECT file.filename FROM json_each(${value}) selected
+      JOIN attachments file ON file.id = selected.value ORDER BY CAST(selected.key AS INTEGER)))`;
     if (field.type === 'singleSelect' || field.type === 'multiSelect') {
       if (!field.options!.length) return 'NULL';
       if (field.type === 'singleSelect') return `(CASE ${value} ${field.options!.map(option =>
@@ -59,6 +61,7 @@ export function querySql(table: Pick<Table, 'id' | 'fields'>, query: CheckedQuer
     }
     if (field.type === 'lookup' && !isLookupSummary(field)) {
       const target = field.lookupResult!;
+      if (target.type === 'attachment') return formatted(target, sorting ? `json_array(json_extract(${value}, '$[0]'))` : value);
       const scalar = target.type === 'multiSelect' ? { ...target, type: 'singleSelect' as const } : target;
       if (sorting) return formatted(scalar, `json_extract(${value}, '$[0]')`);
       return `(SELECT group_concat(${formatted(scalar, 'entry.value')}, ', ') FROM json_each(${value}) entry)`;
@@ -96,7 +99,7 @@ export function querySql(table: Pick<Table, 'id' | 'fields'>, query: CheckedQuer
       return filter.operator === 'neq' ? `NOT ${any}` : any;
     }
     if (filter.operator === 'isEmpty' || filter.operator === 'isNotEmpty') {
-      const empty = `(${value} IS NULL OR ${value} = ''${['multiSelect', 'relation'].includes(field.type) ? ` OR json_array_length(${value}) = 0` : ''})`;
+      const empty = `(${value} IS NULL OR ${value} = ''${['multiSelect', 'relation', 'attachment'].includes(field.type) ? ` OR json_array_length(${value}) = 0` : ''})`;
       return filter.operator === 'isEmpty' ? empty : `NOT ${empty}`;
     }
     if (filter.operator === 'contains') return `instr(lower(${value}), lower(${bind(filter.value!)})) > 0`;

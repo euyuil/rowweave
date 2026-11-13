@@ -8,6 +8,7 @@ import { SelectValues } from './select-values.js';
 function recordText(field: Field, record: RowRecord): string {
   if (record.formulaErrors?.[field.id]) return `#ERROR: ${record.formulaErrors[field.id]}`;
   const value = record.values[field.id] ?? null;
+  if (record.attachments?.[field.id]) return record.attachments[field.id]!.map(file => file.filename).join(', ');
   return field.type === 'relation' ? ((value ?? []) as string[]).map(id => record.links?.[field.id]?.find(link => link.id === id)?.label || id).join(', ')
     : cellDisplay(field, value);
 }

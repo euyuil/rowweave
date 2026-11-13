@@ -6,6 +6,10 @@ const numberFormats = new WeakMap<Field, Intl.NumberFormat>();
 export const cellText = fieldText;
 
 export function cellDisplay(field: Field, value: CellValue | undefined): string {
+  if (field.type === 'attachment' || (field.type === 'lookup' && field.lookupResult!.type === 'attachment')) {
+    const count = ((value ?? []) as string[]).length;
+    return count ? `${count} ${count === 1 ? 'file' : 'files'}` : '';
+  }
   if (isLookupSummary(field)) return field.lookup!.operation === 'count' ? String(value ?? '') : cellDisplay(field.lookupResult!, value);
   if (field.type === 'lookup') {
     const target = field.lookupResult!;

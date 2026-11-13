@@ -1,10 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
 import { isReadOnlyField, type CellValue, type RowRecord, type Table } from '../../contracts/src/index.js';
 import type { WorkspaceApi } from '../../client/src/http-client.js';
 import { cellDisplay, sameValue } from '../../client/src/cell-values.js';
 import { Dialog } from './dialog.js';
 import { FieldInput } from './field-input.js';
 import { RecordHistoryPanel } from './record-history.js';
+import { AttachmentContext } from './attachment-context.js';
 import { fromFormValue, toFormValue, type FormValue } from './field-input-values.js';
 
 export interface RecordAction {
@@ -24,7 +25,8 @@ export function RecordDialog({ action, table, api, setDirty, onClose, onSaved }:
   const [values, setValues] = useState(initialValues);
   const [confirmClose, setConfirmClose] = useState(false);
   const form = useRef<HTMLFormElement>(null);
-  const [busy, setBusy] = useState(false);
+  const [writing, setBusy] = useState(false);
+  const busy = writing || !!useContext(AttachmentContext)?.pending;
   const [error, setError] = useState<string>();
   const [historyOpen, setHistoryOpen] = useState(false);
   const deleting = action.kind === 'delete';

@@ -210,6 +210,7 @@ export class SqliteRecordStore implements RecordStore {
       throw new ServiceError('SCHEMA_CONFLICT', 'The table schema changed. Reload it before trying again.', 409);
     }
     const before = this.getTable(table.id);
+    this.attachments.validateSchema(table);
     this.relations.validateSchema(table, before);
     this.lookups.validateSchema(table, before);
     const calculate = compileFormulas(table, { skipLinked: true });
@@ -322,7 +323,7 @@ export class SqliteRecordStore implements RecordStore {
       const rows = this.db.prepare(`SELECT id, version, values_json, formula_errors_json FROM records WHERE table_id = ?
         ORDER BY position LIMIT ? OFFSET ?`).all(id, limit, offset) as unknown as StoredRecord[];
       const table = this.getTable(id);
-      return { offset, records: this.lookups.hydrate(table, this.relations.hydrate(table, rows.map(row => this.decode(row)))) };
+      return { offset, records: this.hydrateRecords(table, rows.map(row => this.decode(row))) };
     }, 'DEFERRED');
   }
 
@@ -352,8 +353,7 @@ export class SqliteRecordStore implements RecordStore {
     return this.transaction(() => {
       const { current, sql, dateContext } = this.prepareQuery(table, query, view, true);
       const { total, rows } = queryPage(this.db, sql, query);
-      const output = query.fields ? { ...current, fields: current.fields.filter(field => query.fields!.includes(field.id)) } : current;
-      const hydrated = this.lookups.hydrate(current, this.relations.hydrate(output, rows.map(row => this.decode(row))), query.fields);
+      const hydrated = this.hydrateRecords(current, rows.map(row => this.decode(row)), query.fields);
       const records = hydrated.map(record => {
         if (query.fields) {
           record.values = Object.fromEntries(query.fields.map(id => [id, record.values[id] ?? null]));
@@ -449,6 +449,11 @@ export class SqliteRecordStore implements RecordStore {
       ...(Object.keys(errors).length ? { formulaErrors: errors } : {}) };
   }
 
+  private hydrateRecords(table: Table, records: RowRecord[], fields?: string[]): RowRecord[] {
+    const output = fields ? { ...table, fields: table.fields.filter(field => fields.includes(field.id)) } : table;
+    return this.attachments.hydrate(output, this.lookups.hydrate(table, this.relations.hydrate(output, records), fields));
+  }
+
   private recalculate(table: Table, calculate: ReturnType<typeof compileFormulas>): Set<string> {
     const changed = new Set<string>();
     const write = this.db.prepare('UPDATE records SET values_json = ?, formula_errors_json = ?, version = version + 1 WHERE id = ?');
@@ -487,7 +492,7 @@ export class SqliteRecordStore implements RecordStore {
   getRecord(id: string, recordId: string): RowRecord {
     return this.transaction(() => {
       const table = this.getTable(id);
-      return this.lookups.hydrate(table, this.relations.hydrate(table, [this.readRecord(id, recordId)]))[0]!;
+      return this.hydrateRecords(table, [this.readRecord(id, recordId)])[0]!;
     }, 'DEFERRED');
   }
 
@@ -510,6 +515,7 @@ export class SqliteRecordStore implements RecordStore {
         if (!plan.validated) continue;
         try {
           const values = csvRecordValues(table, plan, row);
+          this.attachments.validateValues(table, values, apply);
           if (apply) {
             const id = randomUUID();
             this.automaticNumbers.assign(table.fields, values);
@@ -590,6 +596,7 @@ export class SqliteRecordStore implements RecordStore {
     const calculate = compileFormulas(table, { skipLinked: true });
     const insert = this.db.prepare('INSERT INTO records (id, table_id, position, version, values_json, formula_errors_json) VALUES (?, ?, ?, ?, ?, ?)');
     const records = input.map(({ id, version, values }) => {
+      this.attachments.validateValues(table, values, true);
       this.automaticNumbers.assign(table.fields, values);
       this.recordTimes.create(table, id, version, values);
       const result = calculate(values);
@@ -599,7 +606,7 @@ export class SqliteRecordStore implements RecordStore {
     const linked = this.relations.write(table.fields, records);
     for (const record of records) if (linked.values.has(record.id)) record.values = linked.values.get(record.id)!;
     const computed = this.finishRecordWrite(table.id, records.map(record => record.id), linked);
-    return { batchId: this.history.currentBatchId(), records: this.lookups.hydrate(table, this.relations.hydrate(table, records.map(record => computed.has(record.id) ? this.readRecord(table.id, record.id) : record))) };
+    return { batchId: this.history.currentBatchId(), records: this.hydrateRecords(table, records.map(record => computed.has(record.id) ? this.readRecord(table.id, record.id) : record)) };
   }
 
   recordTrash(table: Table, query: RecordHistoryQuery): RecordTrashPage {
@@ -648,7 +655,11 @@ export class SqliteRecordStore implements RecordStore {
   }
 
   recordChange(id: string, recordId: string, changeId: number): RecordChangeDetail {
-    return this.history.get(id, recordId, changeId);
+    return this.transaction(() => {
+      const change = this.history.get(id, recordId, changeId), table = this.getTable(id);
+      for (const record of [change.before, change.after]) if (record) this.attachments.hydrate(table, [record]);
+      return change;
+    }, 'DEFERRED');
   }
 
   restoreRecord(update: RecordUpdate, id: string, schemaVersion: number, source: RecordRestore): RowRecord {
@@ -691,6 +702,7 @@ export class SqliteRecordStore implements RecordStore {
         const existing = current.get(change.recordId);
         const before = this.history.beforeValues(change.id, fields.get(table.id)!.map(field => field.id));
         const values = restoredBatchValues(table, before, existing?.values);
+        this.attachments.validateValues(table, values, true);
         this.automaticNumbers.assign(table.fields, values);
         const version = (existing?.version ?? change.beforeVersion!) + 1;
         if (existing) this.recordTimes.edit(table.fields, values);
@@ -734,6 +746,7 @@ export class SqliteRecordStore implements RecordStore {
       }
       const record = this.decode(stored);
       const values = { ...record.values, ...update.values };
+      this.attachments.validateValues(table, values, true);
       this.recordTimes.edit(table.fields, values);
       const result = calculate(values, record.formulaErrors);
       record.values = result.values;
@@ -746,7 +759,7 @@ export class SqliteRecordStore implements RecordStore {
     const linked = this.relations.write(table.fields, updates);
     for (const record of records) if (linked.values.has(record.id)) record.values = linked.values.get(record.id)!;
     const computed = this.finishRecordWrite(id, records.map(record => record.id), linked);
-    return { batchId: this.history.currentBatchId(), records: this.lookups.hydrate(table, this.relations.hydrate(table, records.map(record => computed.has(record.id) ? this.readRecord(id, record.id) : record))) };
+    return { batchId: this.history.currentBatchId(), records: this.hydrateRecords(table, records.map(record => computed.has(record.id) ? this.readRecord(id, record.id) : record)) };
   }
 
   close(): void {

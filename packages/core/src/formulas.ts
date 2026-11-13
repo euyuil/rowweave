@@ -211,7 +211,7 @@ export function compileFormulas(table: Pick<Table, 'fields'>, options: { skipLin
     for (const reference of formula.references) {
       const field = fields.get(reference);
       if (!field) fail(`Formula references a missing field: ${reference}. Remove or update its dependent formulas first.`);
-      if (['relation', 'multiSelect'].includes(field!.type) || (field!.type === 'lookup' && !isLookupSummary(field!))) {
+      if (['relation', 'multiSelect', 'attachment'].includes(field!.type) || (field!.type === 'lookup' && !isLookupSummary(field!))) {
         fail(`${field!.name}: formulas require scalar fields or numeric linked summaries.`);
       }
       if (formulas.has(reference)) visit(reference);

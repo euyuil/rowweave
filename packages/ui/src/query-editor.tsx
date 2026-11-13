@@ -79,7 +79,7 @@ function FilterRule({ fields, rule, onChange, path }: { fields: Field[]; rule: R
   const operators = filterOperators(original);
   const empty = rule.operator === 'isEmpty' || rule.operator === 'isNotEmpty';
   const ordered = ['gt', 'gte', 'lt', 'lte'].includes(rule.operator);
-  const collection = field.type === 'multiSelect' || field.type === 'relation';
+  const collection = field.type === 'multiSelect' || field.type === 'relation' || field.type === 'attachment';
   const nullOnly = collection && (rule.operator === 'eq' || rule.operator === 'neq');
   return <div className="filter-rule" role="group" aria-label={`Filter ${path}`}>
     <select aria-label="Filter field" value={field.id} onChange={event => onChange({ fieldId: event.target.value, operator: 'isNotEmpty', value: null })}>
@@ -109,7 +109,7 @@ function FilterRule({ fields, rule, onChange, path }: { fields: Field[]; rule: R
       <small>{rule.relative!.period === 'pastDays' || rule.relative!.period === 'nextDays' ? 'The day count includes today. ' : ''}
         Calendar periods use this time zone; weeks start Monday. Refresh to use the latest period.</small>
     </div>}
-    {!empty && !nullOnly && rule.operator !== 'relativeDate' && <FieldInput field={{ ...field, name: 'Value', required: ordered,
+    {!empty && !nullOnly && rule.operator !== 'relativeDate' && <FieldInput allowUploads={false} field={{ ...field, name: 'Value', required: ordered,
       ...(field.relation ? { relation: { ...field.relation, multiple: true } } : {}) }} value={rule.value} onChange={value => onChange({ ...rule, value })} />}
   </div>;
 }

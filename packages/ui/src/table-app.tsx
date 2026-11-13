@@ -10,6 +10,7 @@ import { cellDisplay, cellText } from '../../client/src/cell-values.js';
 import { parseTextValue } from '../../core/src/field-values.js';
 import { CellEditor, EditorContext, type EditableCell, type EditorHandle } from './cell-editor.js';
 import { drawSelectCell } from './select-values.js';
+import { AttachmentContext } from './attachment-context.js';
 import { parseClipboard, serializeClipboard } from './clipboard.js';
 import { RecordDialog, type RecordAction } from './record-dialog.js';
 import { TrashDialog } from './trash-dialog.js';
@@ -33,6 +34,7 @@ export interface TableHost {
   setDirty(value: boolean): Promise<void>;
   onServiceExit(listener: () => void): () => void;
   saveCsv(name: string, csv: string): Promise<boolean | 'download-started'>;
+  saveFile(filename: string, bytes: Uint8Array): Promise<boolean | 'download-started'>;
 }
 
 function gridCell(record: RowRecord | undefined, field: Field | undefined, readonly: boolean, row: number): GridCell {
@@ -43,7 +45,8 @@ function gridCell(record: RowRecord | undefined, field: Field | undefined, reado
   const value = record.values[field.id] ?? null;
   const text = cellText(field, value);
   if (field.type === 'checkbox') return { kind: GridCellKind.Boolean, data: value as boolean | null, allowOverlay: false, readonly, copyData: text };
-  const display = field.type === 'relation' ? ((value ?? []) as string[]).map(id => record.links?.[field.id]?.find(link => link.id === id)?.label || id).join(', ') : cellDisplay(field, value);
+  const display = record.attachments?.[field.id] ? ((value ?? []) as string[]).map(id => record.attachments![field.id]!.find(file => file.id === id)?.filename ?? 'File').join(', ')
+    : field.type === 'relation' ? ((value ?? []) as string[]).map(id => record.links?.[field.id]?.find(link => link.id === id)?.label || id).join(', ') : cellDisplay(field, value);
   return { kind: GridCellKind.Text, data: text, copyData: text, displayData: display,
     allowOverlay: !readonly, readonly, field, rawValue: value, row } as EditableCell;
 }
@@ -70,6 +73,8 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [transfers, setTransfers] = useState(0);
+  const transfer = useCallback((delta: number) => setTransfers(value => value + delta), []);
   const [offline, setOffline] = useState(false);
   const [editorDirty, setEditorDirty] = useState(false);
   const [formDirty, setFormDirty] = useState(false);
@@ -93,7 +98,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   const rootHost = useRef<HTMLElement>(null);
   const grid = useRef<DataEditorRef>(null);
   const busyRef = useRef(false);
-  const locked = busy || model.saving || offline;
+  const locked = busy || model.saving || offline || transfers > 0;
   const pending = model.pendingCells;
   const grouping = useGroupedRows(model, api, view, appliedSearch.current);
   const gridRowCount = grouping.enabled ? grouping.rows?.rowCount ?? 0 : model.rowCount;
@@ -196,7 +201,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     return () => { active = false; unsubscribe(); model.dispose(); };
   }, [model, host, report, loadView]);
 
-  useEffect(() => { void host.setDirty(pending > 0 || editorDirty || formDirty).catch(report); }, [pending, editorDirty, formDirty, host, report]);
+  useEffect(() => { void host.setDirty(pending > 0 || editorDirty || formDirty || transfers > 0).catch(report); }, [pending, editorDirty, formDirty, transfers, host, report]);
 
   useEffect(() => {
     if (!ready || !gridHost.current) return;
@@ -446,7 +451,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     : editorDirty ? 'Editing cell…'
     : pending ? `${pending.toLocaleString()} unsaved ${pending === 1 ? 'cell' : 'cells'}` : 'All changes saved';
   const message = error ?? model.error ?? grouping.error;
-  return <section className="table-workspace" ref={rootHost}>
+  return <AttachmentContext.Provider value={{ table, pending: transfers > 0, transfer, saveFile: host.saveFile }}><section className="table-workspace" ref={rootHost}>
     <section className="table-heading">
       <div className="table-title"><h1>{table?.name ?? 'Loading table…'}</h1>
         <div className="table-management"><button disabled={recordActionsLocked} onClick={() => setManagingFields(true)}>Manage fields</button>
@@ -615,5 +620,5 @@ export function TableApp({ tableId, model, api, host, onManage }: {
         if (viewAction !== 'filter' && viewAction !== 'sort') appliedSearch.current = saved?.query.search ?? '';
         void refreshAfterWrite('View');
       }} />}
-  </section>;
+  </section></AttachmentContext.Provider>;
 }

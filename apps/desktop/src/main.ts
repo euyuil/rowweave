@@ -2,8 +2,8 @@ import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell, type IpcMainIn
 import { mkdirSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { maxCsvBytes } from '../../../packages/contracts/src/index.js';
-import { writeTextFile } from '../../../packages/node-host/src/files.js';
+import { maxCsvBytes, maxAttachmentBytes } from '../../../packages/contracts/src/index.js';
+import { writeTextFile, writeBinaryFile } from '../../../packages/node-host/src/files.js';
 import { createWorkspaceClient } from '../../../packages/client/src/http-client.js';
 import { connectionChoice, readConnectionSettings, writeConnectionSettings } from './connection-settings.js';
 import type { ConnectionResult, DesktopConnectionState } from './connection-types.js';
@@ -159,6 +159,17 @@ void app.whenReady().then(async () => {
         filters: [{ name: 'CSV files', extensions: ['csv'] }] });
       if (result.canceled) return false;
       await writeTextFile(result.filePath, csv);
+      return true;
+    });
+    ipcMain.handle('save-file', async (event, name: unknown, bytes: unknown) => {
+      if (!trusted(event) || typeof name !== 'string' || name.length > 200 || !(bytes instanceof Uint8Array) || bytes.byteLength > maxAttachmentBytes) {
+        throw new Error('Invalid file download.');
+      }
+      let filename = name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').replace(/[. ]+$/, '') || 'attachment';
+      if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(filename)) filename = '_' + filename;
+      const result = await dialog.showSaveDialog(window!, { title: 'Download file', defaultPath: filename });
+      if (result.canceled) return false;
+      await writeBinaryFile(result.filePath, bytes);
       return true;
     });
     window.on('close', event => {

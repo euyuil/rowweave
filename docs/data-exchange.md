@@ -50,6 +50,7 @@ Files use UTF-8, comma separators, double-quoted cells, and doubled double quote
 | Single select | An existing option name (or ID on import). Names take precedence if a name equals another option's ID. |
 | Multiple select | A JSON array of existing option names (or IDs on import), inside a CSV cell. |
 | Linked records | A JSON array of existing record IDs in the configured target table. Export preserves link order. |
+| Attachments | A JSON array of uploaded file IDs owned by the destination table. Import validates ownership; export and clipboard preserve order and IDs, without embedding file bytes. Use a workspace backup to include file content. |
 | Lookup | A read-only JSON array of computed values; select results use option names. Skip this column when importing. |
 
 An empty file is invalid; a header-only file can preview/export a schema and imports zero records. A blank data row represents one null cell. A final line ending does not create an extra record. Required text rejects blank values; optional text preserves empty strings separately from null.

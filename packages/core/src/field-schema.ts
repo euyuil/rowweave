@@ -4,7 +4,7 @@ import { ServiceError } from './errors.js';
 import { schemaName, schemaObject } from './schema-validation.js';
 import { validateValue } from './field-values.js';
 
-const fieldTypes: FieldType[] = ['text', 'multiline', 'url', 'number', 'autoNumber', 'createdTime', 'updatedTime', 'checkbox', 'date', 'datetime', 'singleSelect', 'multiSelect', 'relation', 'lookup', 'formula'];
+const fieldTypes: FieldType[] = ['text', 'multiline', 'url', 'attachment', 'number', 'autoNumber', 'createdTime', 'updatedTime', 'checkbox', 'date', 'datetime', 'singleSelect', 'multiSelect', 'relation', 'lookup', 'formula'];
 
 export function parseField(input: Record<string, unknown>, previous?: Field): Field {
   const config = { ...previous, ...input };
@@ -23,6 +23,9 @@ export function parseField(input: Record<string, unknown>, previous?: Field): Fi
   }
   if (['autoNumber', 'createdTime', 'updatedTime'].includes(field.type) && (field.required || (config['defaultValue'] !== undefined && config['defaultValue'] !== null))) {
     throw new ServiceError('INVALID_SCHEMA', 'Automatic fields are assigned by the service and cannot require a value or set a default.');
+  }
+  if (field.type === 'attachment' && config['defaultValue'] !== undefined && config['defaultValue'] !== null) {
+    throw new ServiceError('INVALID_SCHEMA', 'Attachment fields cannot set a default file. Attach files explicitly to records.');
   }
   if (field.type === 'singleSelect' || field.type === 'multiSelect') {
     const options = config['options'];

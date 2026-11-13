@@ -26,6 +26,7 @@ export function WorkspaceApp({ api, host, workspaceLabel = 'Local workspace', on
     confirmDiscard: () => host.confirmDiscard(),
     onServiceExit: listener => host.onServiceExit(listener),
     saveCsv: (name, csv) => host.saveCsv(name, csv),
+    saveFile: (filename, bytes) => host.saveFile(filename, bytes),
     setDirty: async value => {
       dirty.current.table = value;
       await host.setDirty(value || dirty.current.form);
