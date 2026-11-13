@@ -37,7 +37,13 @@ export class GroupReader {
 
   private serialized<T>(signal: AbortSignal, operation: (signal: AbortSignal) => Promise<T>): Promise<T> {
     const combined = AbortSignal.any([signal, this.controller.signal]);
-    const task = this.queue.then(() => { combined.throwIfAborted(); return operation(combined); });
+    const task = this.queue.then(async () => {
+      combined.throwIfAborted();
+      // A caller leaving the viewport must not release the queue while SQLite is still reading.
+      const result = await operation(this.controller.signal);
+      combined.throwIfAborted();
+      return result;
+    });
     // Each caller receives its own failure; a failed read must not poison the next queued read.
     this.queue = task.catch(() => undefined);
     return task;

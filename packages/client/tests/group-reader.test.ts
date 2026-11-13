@@ -103,7 +103,31 @@ test('group reads serialize requests, skip cancelled queued windows and recover 
   await assert.rejects(reader.readWindow(1200, 20, AbortSignal.abort()), { name: 'AbortError' });
 });
 
-test('disposed or cancelled late group responses cannot refill the cache', async t => {
+test('abandoning an active viewport retains backpressure and skips intermediate windows', async t => {
+  const { api, context } = setup(t);
+  let release!: () => void, arrived!: () => void, activeSignal: AbortSignal | undefined, calls = 0;
+  const held = new Promise<void>(resolve => { release = resolve; }), entered = new Promise<void>(resolve => { arrived = resolve; });
+  const reader = new GroupReader({ queryGroups: async (id, input, signal) => {
+    calls++;
+    if (calls === 1) { activeSignal = signal; arrived(); await held; }
+    return api.queryGroups(id, input, signal);
+  } }, context);
+  t.after(() => reader.dispose());
+  const first = new AbortController(), middle = new AbortController();
+  const abandoned = assert.rejects(reader.readWindow(0, 20, first.signal), { name: 'AbortError' });
+  await entered; first.abort();
+  const skipped = assert.rejects(reader.readWindow(400, 20, middle.signal), { name: 'AbortError' });
+  middle.abort();
+  const latest = reader.readWindow(800, 20, new AbortController().signal);
+  await Promise.resolve();
+  assert.equal(calls, 1, 'A canceled caller cannot start another query before the active service read finishes.');
+  assert.equal(activeSignal!.aborted, false);
+  release(); await abandoned; await skipped;
+  assert.deepEqual((await latest).at(801), { kind: 'record', index: 400 });
+  assert.equal(calls, 2);
+});
+
+test('disposed late group responses cannot refill the cache', async t => {
   const { api, context } = setup(t);
   let release!: () => void, arrived!: () => void;
   const held = new Promise<void>(resolve => { release = resolve; }), entered = new Promise<void>(resolve => { arrived = resolve; });
