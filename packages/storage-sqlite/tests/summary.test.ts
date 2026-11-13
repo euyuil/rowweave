@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
+import { DatabaseSync } from 'node:sqlite';
 import { fixture } from './helpers.js';
+import { summarize } from '../src/record-summary.js';
 import { RecordService, ServiceError } from '../../core/src/record-service.js';
 import { createWorkspaceClient } from '../../client/src/http-client.js';
 import { startServer } from '../../../apps/server/src/http-server.js';
@@ -59,6 +61,10 @@ test('summary pages count beyond record page limits and reject changed data or s
   const next = service.summarizeRecords(table.id, { groupBy: name, measures, limit: 2, offset: 2, expectedRevision: first.revision });
   assert.deepEqual(next.totals, first.totals);
   assert.ok(next.groups.every(group => !first.groups.some(previous => previous.key === group.key)));
+  const pastEnd = service.summarizeRecords(table.id, { groupBy: name, measures, offset: 604 });
+  assert.deepEqual(pastEnd.totals, first.totals);
+  assert.equal(pastEnd.groupCount, 604);
+  assert.deepEqual(pastEnd.groups, []);
   const view = service.createView(table.id, { name: 'Positive', query: { filter: { conjunction: 'and',
     conditions: [{ fieldId: amount, operator: 'gt', value: 3 }] } } });
   assert.deepEqual(service.summarizeRecords(table.id, { viewId: view.id, expectedViewVersion: view.version, measures }).totals,
@@ -67,6 +73,46 @@ test('summary pages count beyond record page limits and reject changed data or s
   assert.throws(() => service.summarizeRecords(table.id, { viewId: view.id, expectedViewVersion: view.version }), code('VIEW_CONFLICT'));
   service.updateBatch([{ id: rows[0]!.id, expectedVersion: rows[0]!.version, values: { [amount]: 20 } }], table.id);
   assert.throws(() => service.summarizeRecords(table.id, { groupBy: name, offset: 2, expectedRevision: first.revision }), code('DATA_CHANGED'));
+});
+
+test('grouped summaries weight averages by non-null records and preserve empty result semantics', t => {
+  const { service, table, amount, status, measures } = setup(t);
+  service.createRecords(table.id, [{ values: { [amount]: 8, [status]: 'done' } }]);
+  const result = service.summarizeRecords(table.id, { groupBy: status, measures });
+  assert.deepEqual(result.totals, { count: 6, values: [20, 4, -2, 10] });
+  assert.deepEqual(result.groups.map(group => group.values), [[10, 10 / 3, -2, 8], [10, 5, 0, 10]]);
+  const empty = service.summarizeRecords(table.id, { groupBy: status, measures, search: 'missing' });
+  assert.deepEqual(empty.totals, { count: 0, values: [null, null, null, null] });
+  assert.deepEqual(empty.groups, []);
+  assert.equal(empty.groupCount, 0);
+});
+
+test('grouped summary pagination evaluates the record filter once for totals and groups', t => {
+  const { data, table, status, measures } = setup(t);
+  const db = new DatabaseSync(data.path, { readOnly: true });
+  let visited = 0;
+  db.function('observeRow', () => { visited++; return 1; });
+  try {
+    for (const offset of [0, 1, 2]) {
+      visited = 0;
+      const result = summarize(db, table, { groupBy: status, measures },
+        'r.table_id = :table AND observeRow()', { ':table': table.id }, offset, 1);
+      assert.equal(visited, 5);
+      assert.deepEqual(result.totals, { count: 5, values: [12, 3, -2, 10] });
+      assert.equal(result.groupCount, 2);
+      assert.equal(result.groups.length, offset < 2 ? 1 : 0);
+    }
+  } finally { db.close(); }
+});
+
+test('grouped summary overflow remains explicit even when the overall total is finite', t => {
+  const { service, table, amount, status } = setup(t);
+  service.createRecords(table.id, [-1e308, 1e308, -1e308, 1e308].map((value, i) => ({ values: {
+    [amount]: value, [status]: i % 2 === 0 ? 'open' : 'done',
+  } })));
+  const measures = [{ fieldId: amount, operation: 'sum' }];
+  assert.ok(Number.isFinite(service.summarizeRecords(table.id, { measures }).totals.values[0]));
+  assert.throws(() => service.summarizeRecords(table.id, { groupBy: status, measures }), code('SUMMARY_OVERFLOW'));
 });
 
 test('summaries validate aggregate types, bounds and finite numeric results at the service boundary', t => {
