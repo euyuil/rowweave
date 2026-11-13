@@ -46,7 +46,7 @@ export class RecordTimes {
   editRelated(table: Table, ids: Set<string>): Set<string> {
     const changed = new Set<string>(), fields = table.fields.filter(field => field.type === 'updatedTime');
     if (!fields.length) return changed;
-    const now = this.transactionTime.get()!['changed_at'] as string, calculate = compileFormulas(table, { skipLinked: true });
+    const now = this.transactionTime.get()!['changed_at'] as string, calculate = compileFormulas(table, { skipLinked: true, now: new Date(now) });
     const read = this.db.prepare('SELECT values_json, formula_errors_json FROM records WHERE table_id = ? AND id = ?');
     const write = this.db.prepare('UPDATE records SET values_json = ?, formula_errors_json = ? WHERE id = ?');
     for (const id of ids) {

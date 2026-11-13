@@ -59,6 +59,8 @@ Receipts start with workspace format 18. Older record history remains available 
 
 ## Undo a saved batch
 
+Clock-formula refreshes advance changed record versions without creating user-history entries. They can invalidate an older undo receipt, just as any other version change does. Individual snapshot restoration with the current record version remains available; it restores writable values and recalculates formulas at the current clock.
+
 After inspecting a complete transaction, call `undoRecordBatch(tableId, batchId)`. The service reverses the complete record operation, including changes to other tables through reciprocal links and stored calculations. Created records are deleted, edited records receive their prior writable values, and deleted records are recreated with their original UUIDs. Recreated records append to their tables. Existing later-added fields keep their current values; recreated rows use current defaults/null for later fields. Removed fields and schemas are not recreated, and formulas recalculate with current definitions and targets.
 
 An optional field may have no stored key before its first assignment. If it appears in the operation's after snapshot, undo restores that prior emptiness to null, including both sides of newly assigned reciprocal links. This differs from fields absent on both sides of the historical operation, whose later values are retained.

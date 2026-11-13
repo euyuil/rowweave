@@ -1,4 +1,4 @@
-import type { FormulaPreview, FormulaPreviewRequest } from '../../contracts/src/index.js';
+import type { CalculationRefresh, FormulaPreview, FormulaPreviewRequest } from '../../contracts/src/index.js';
 import {
   tableId, type BatchResult, type ConversionPreview, type DeleteResult, type FieldConversion,
   type FieldCreate, type FieldUpdate, type GridView, type QueryPage, type RecordCreate, type RecordDelete,
@@ -71,6 +71,7 @@ export function createWorkspaceClient(connection: Connection, request: typeof fe
     createTable: (input: TableCreate) => write<Table>('/tables', 'POST', input),
     updateTable: (id: string, input: TableUpdate) => write<Table>(root(id), 'PATCH', input),
     deleteTable: (id: string, expectedVersion: number) => write<{ deleted: string }>(root(id), 'DELETE', { expectedVersion }),
+    refreshCalculations: () => write<CalculationRefresh>('/calculations/refresh', 'POST', {}),
     previewFormula: (id: string, input: FormulaPreviewRequest) => write<FormulaPreview>(`${root(id)}/formulas/preview`, 'POST', input),
     createField: (id: string, input: FieldCreate) => write<Table>(`${root(id)}/fields`, 'POST', input),
     updateField: (id: string, fieldId: string, input: FieldUpdate) => write<Table>(field(id, fieldId), 'PATCH', input),

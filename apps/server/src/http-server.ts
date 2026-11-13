@@ -62,6 +62,11 @@ export async function startServer({ service, token, ...options }: ServerOptions)
       throw new ServiceError('UNAUTHORIZED', 'A valid access token is required.', 401);
     }
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+    if (url.pathname === '/calculations/refresh' && request.method === 'POST') {
+      await readJson(request);
+      send(response, 200, service.refreshCalculations());
+      return;
+    }
     const attachment = url.pathname.match(/^\/tables\/([^/]+)\/attachments(?:\/([^/]+)(?:\/(content))?)?$/);
     if (attachment) {
       const [, tableId, id, content] = attachment;

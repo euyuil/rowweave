@@ -4,6 +4,7 @@ import { CalculationError, calculationError } from './calculation-error.js';
 import { calculateDateFunction, dateFunctionArities } from './date-formulas.js';
 import { validateValue } from './field-values.js';
 import { arrayFunctionArities, calculateArrayFunction, scalarFormulaValue } from './array-formulas.js';
+import { clockFunctionArities, calculateClockFunction } from './clock-formulas.js';
 
 type Expression = { kind: 'literal'; value: ScalarValue } | { kind: 'reference'; id: string }
   | { kind: 'operation'; name: string; args: Expression[] };
@@ -48,6 +49,7 @@ export function rewriteFormulaReferences(source: string, resolve: (reference: st
 }
 
 const arities: Record<string, [number, number]> = {
+  ...clockFunctionArities,
   ...dateFunctionArities,
   ...arrayFunctionArities,
   IF: [3, 3], COALESCE: [2, 20], CONCAT: [1, 20], LOWER: [1, 1], UPPER: [1, 1],
@@ -55,9 +57,10 @@ const arities: Record<string, [number, number]> = {
 };
 const precedence: Record<string, number> = { '==': 1, '!=': 1, '>': 1, '>=': 1, '<': 1, '<=': 1, '+': 2, '-': 2, '*': 3, '/': 3, '%': 3 };
 
-function parse(source: string): { expression: Expression; references: Set<string> } {
+function parse(source: string): { expression: Expression; references: Set<string>; clockDependent: boolean } {
   const tokens = tokenize(source);
   const references = new Set<string>();
+  let clockDependent = false;
   let position = 0;
   const take = (kind: string) => {
     if (tokens[position]?.kind !== kind) fail(`Expected ${kind} at token ${position + 1}.`);
@@ -89,6 +92,7 @@ function parse(source: string): { expression: Expression; references: Set<string
       else {
         const arity = arities[name];
         if (!arity) return fail(`Unknown formula function: ${token.text}.`);
+        if (name === 'NOW' || name === 'TODAY') clockDependent = true;
         take('(');
         const args: Expression[] = [];
         if (tokens[position]?.kind !== ')') {
@@ -114,7 +118,7 @@ function parse(source: string): { expression: Expression; references: Set<string
   }
   const result = expression();
   if (position !== tokens.length) fail(`Unexpected token: ${tokens[position]!.text}.`);
-  return { expression: result, references };
+  return { expression: result, references, clockDependent };
 }
 
 function number(value: ScalarValue): number {
@@ -132,14 +136,14 @@ function bounded(value: ScalarValue): ScalarValue {
   return value;
 }
 
-function evaluate(node: Expression, values: Record<string, CellValue>, errors: Record<string, string>): CellValue {
+function evaluate(node: Expression, values: Record<string, CellValue>, errors: Record<string, string>, now?: Date): CellValue {
   if (node.kind === 'literal') return node.value;
   if (node.kind === 'reference') {
     if (errors[node.id]) calculationError('A referenced calculation has an error.');
     return values[node.id] ?? null;
   }
   const { name, args } = node;
-  const arg = (index: number) => evaluate(args[index]!, values, errors);
+  const arg = (index: number) => evaluate(args[index]!, values, errors, now);
   if (name === 'IF') {
     const condition = arg(0);
     return condition === null ? null : arg(boolean(scalarFormulaValue(condition)) ? 1 : 2);
@@ -148,9 +152,10 @@ function evaluate(node: Expression, values: Record<string, CellValue>, errors: R
     for (let i = 0; i < args.length; i++) { const value = arg(i); if (value !== null) return value; }
     return null;
   }
-  const evaluated = args.map(child => evaluate(child, values, errors));
+  const evaluated = args.map(child => evaluate(child, values, errors, now));
   if (arrayFunctionArities[name]) return calculateArrayFunction(name, evaluated);
   const inputs = evaluated.map(scalarFormulaValue);
+  if (clockFunctionArities[name]) return calculateClockFunction(name, inputs, now);
   const a = inputs[0]!, b = inputs[1]!;
   if (name === '==' || name === '!=') return name === '==' ? a === b : a !== b;
   if (name === 'CONCAT') return bounded(inputs.map(value => value === null ? '' : String(value)).join(''));
@@ -190,9 +195,9 @@ function evaluate(node: Expression, values: Record<string, CellValue>, errors: R
 
 export function compileFormula(field: Field) {
   const parsed = parse(field.formula!.expression);
-  return { references: parsed.references, calculate(values: Record<string, CellValue>, errors: Record<string, string>) {
+  return { references: parsed.references, clockDependent: parsed.clockDependent, calculate(values: Record<string, CellValue>, errors: Record<string, string>, now?: Date) {
     try {
-      let value = bounded(scalarFormulaValue(evaluate(parsed.expression, values, errors)));
+      let value = bounded(scalarFormulaValue(evaluate(parsed.expression, values, errors, now)));
       const resultType = field.formula!.resultType;
       const expected = { text: 'string', number: 'number', checkbox: 'boolean', date: 'string', datetime: 'string' }[resultType];
       if (value !== null && typeof value !== expected) calculationError(`Expected a ${field.formula!.resultType} result.`);
@@ -212,7 +217,7 @@ export function compileFormula(field: Field) {
   } };
 }
 
-export function compileFormulas(table: Pick<Table, 'fields'>, options: { skipLinked?: boolean } = {}):
+export function compileFormulas(table: Pick<Table, 'fields'>, options: { skipLinked?: boolean; now?: Date } = {}):
   (values: Record<string, CellValue>, previousErrors?: Record<string, string>) => { values: Record<string, CellValue>; formulaErrors?: Record<string, string> } {
   const fields = new Map(table.fields.map(field => [field.id, field]));
   const formulas = new Map(table.fields.filter(field => field.type === 'formula').map(field => [field.id, compileFormula(field)]));
@@ -240,7 +245,7 @@ export function compileFormulas(table: Pick<Table, 'fields'>, options: { skipLin
       ? Object.fromEntries(Object.entries(previousErrors).filter(([id]) => linked.has(id))) : {};
     for (const id of ordered) {
       if (options.skipLinked && linked.has(id)) continue;
-      const result = formulas.get(id)!.calculate(values, errors);
+      const result = formulas.get(id)!.calculate(values, errors, options.now);
       values[id] = result.value;
       if (result.error) errors[id] = result.error;
     }
