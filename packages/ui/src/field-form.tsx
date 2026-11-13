@@ -10,7 +10,7 @@ import { isLookupSummary, isReadOnlyField, valueField } from '../../contracts/sr
 
 export const fieldTypeNames: Record<FieldType, string> = {
   text: 'Text', multiline: 'Multiline text', url: 'URL', number: 'Number', autoNumber: 'Automatic number', checkbox: 'Checkbox', date: 'Date',
-  createdTime: 'Created time', updatedTime: 'Last edited time',
+  createdTime: 'Created time', updatedTime: 'Last edited time', attachment: 'Attachment',
   datetime: 'Date and time', singleSelect: 'Single select', multiSelect: 'Multiple select', relation: 'Linked records', lookup: 'Lookup', formula: 'Formula',
 };
 
@@ -48,7 +48,7 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved, ancho
     if (!lookupTarget) return;
     setLookupField(current => lookupFields.some(candidate => candidate.id === current) ? current : lookupFields[0]?.id ?? '');
   }, [lookupTarget, lookupOperation]);
-  const formulaFields = table.fields.filter(candidate => candidate.id !== field?.id && !['relation', 'multiSelect'].includes(candidate.type) &&
+  const formulaFields = table.fields.filter(candidate => candidate.id !== field?.id && !['relation', 'multiSelect', 'attachment'].includes(candidate.type) &&
     (candidate.type !== 'lookup' || isLookupSummary(candidate)));
   const referenceName = (candidate: Field) => table.fields.filter(other => other.name === candidate.name).length > 1
     ? `${candidate.name} (${candidate.id})` : candidate.name;
@@ -139,7 +139,7 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved, ancho
         <label className="form-field">Field type<select aria-label="Field type" value={type} onChange={event => {
           setType(event.target.value as FieldType); setHasDefault(false); setDefaultValue(null);
         }}>{Object.entries(fieldTypeNames).map(([value, label]) => <option key={value} value={value}
-          disabled={field ? field.type === 'relation' || isReadOnlyField(field) ? value !== field.type : value === 'relation' || isReadOnlyField({ type: value as FieldType })
+          disabled={field ? ['relation', 'attachment'].includes(field.type) || isReadOnlyField(field) ? value !== field.type : ['relation', 'attachment'].includes(value) || isReadOnlyField({ type: value as FieldType })
             : value === 'lookup' && !table.fields.some(field => field.type === 'relation')}>{label}</option>)}</select></label>
         {type === 'formula' && <>
           <label className="form-field">Result type<select aria-label="Result type" value={resultType} onChange={event => setResultType(event.target.value as typeof resultType)}>
@@ -219,7 +219,8 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved, ancho
         {type === 'createdTime' && <p className="form-note">Records the original creation time in UTC. Restoring a record preserves its creation time. Older records without a known creation time remain empty.</p>}
         {type === 'updatedTime' && <p className="form-note">Records the latest record save or linked-record edit in UTC. Schema changes and calculation refreshes leave it unchanged. Existing records use their latest known saved change.</p>}
         {!isReadOnlyField({ type }) && <><label className="check-field"><input type="checkbox" checked={required} onChange={event => setRequired(event.target.checked)} />Require a value</label>
-        <label className="check-field"><input type="checkbox" checked={hasDefault} onChange={event => setHasDefault(event.target.checked)} />Use a default for new records</label></>}
+        {type !== 'attachment' && <label className="check-field"><input type="checkbox" checked={hasDefault} onChange={event => setHasDefault(event.target.checked)} />Use a default for new records</label>}</>}
+        {type === 'attachment' && <p className="form-note">Attach up to 20 uploaded files per record, each up to 8 MiB. Saved files remain available for record history and recovery.</p>}
         {hasDefault && <FieldInput field={{ ...target, name: 'Default value', required: false }} value={defaultValue}
           onChange={value => { setDefaultValue(value); changed(); }} />}
       </fieldset>

@@ -28,10 +28,10 @@ export function filterCount(group: GroupDraft): number {
 }
 
 export function filterOperators(field: Field): FilterOperator[] {
-  if (field.type === 'lookup') return field.lookupResult!.type === 'multiSelect'
+  if (field.type === 'lookup') return ['multiSelect', 'attachment'].includes(field.lookupResult!.type)
     ? ['hasAny', 'isEmpty', 'isNotEmpty'] : filterOperators(queryValueField(field));
   field = queryValueField(field);
-  const operators: FilterOperator[] = ['multiSelect', 'relation'].includes(field.type) ? ['hasAny', 'eq', 'neq'] : ['eq', 'neq'];
+  const operators: FilterOperator[] = ['multiSelect', 'relation', 'attachment'].includes(field.type) ? ['hasAny', 'eq', 'neq'] : ['eq', 'neq'];
   if (field.type === 'text' || field.type === 'multiline' || field.type === 'url') operators.push('contains');
   if (field.type === 'number' || field.type === 'date' || field.type === 'datetime') operators.push('gt', 'gte', 'lt', 'lte');
   if (field.type === 'date' || field.type === 'datetime') operators.push('relativeDate');

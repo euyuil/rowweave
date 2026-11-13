@@ -1,4 +1,4 @@
-import { maxTextLength, type CellValue, type Field } from '../../contracts/src/index.js';
+import { maxTextLength, maxAttachmentsPerCell, type CellValue, type Field } from '../../contracts/src/index.js';
 import { ServiceError } from './errors.js';
 import { webUrl } from './web-url.js';
 
@@ -55,6 +55,11 @@ export function validateValue(field: Field, input: unknown): CellValue {
       }
       if (field.required && !input.length) return invalid('choose at least one record.');
       return input as string[];
+    case 'attachment':
+      if (!Array.isArray(input) || input.length > maxAttachmentsPerCell || new Set(input).size !== input.length ||
+          input.some(id => typeof id !== 'string' || !id || id.length > 100)) return invalid(`choose up to ${maxAttachmentsPerCell} unique uploaded file IDs.`);
+      if (field.required && !input.length) return invalid('attach at least one file.');
+      return input as string[];
   }
 }
 
@@ -72,6 +77,9 @@ export function parseTextValue(field: Field, text: string): CellValue {
     value = text.trim().toLowerCase() === 'true';
   } else if (field.type === 'singleSelect') {
     value = (field.options!.find(option => option.name === text) ?? field.options!.find(option => option.id === text))?.id;
+  } else if (field.type === 'attachment') {
+    try { value = JSON.parse(text); }
+    catch { throw new ServiceError('INVALID_VALUE', `${field.name}: use a JSON array of uploaded file IDs.`); }
   } else if (field.type === 'relation') {
     try { value = JSON.parse(text); }
     catch { throw new ServiceError('INVALID_VALUE', `${field.name}: use a JSON array of record IDs.`); }

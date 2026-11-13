@@ -6,7 +6,7 @@ export function lookupSql(field: Field, alias = 'r'): string {
   if (isLookupSummary(field)) return aggregateSql(field, alias);
   const literal = (text: string) => `'${text.replaceAll("'", "''")}'`;
   const path = literal(`$.${JSON.stringify(field.lookup!.fieldId)}`);
-  const multi = field.lookupResult!.type === 'multiSelect';
+  const multi = ['multiSelect', 'attachment'].includes(field.lookupResult!.type);
   return `(SELECT json_group_array(${multi ? 'item' : 'json(item)'}) FROM (
     SELECT ${multi ? 'choice.value' : `target.values_json -> ${path}`} AS item
     FROM relation_edges edge JOIN records target ON target.id = edge.target_record_id

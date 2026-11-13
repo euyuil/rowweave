@@ -42,7 +42,7 @@ export function SummaryDialog({ table, view, search, api, onClose }: {
     <div className="form-row">
       <label className="form-field">Group by<select aria-label="Group by" value={groupBy} onChange={event => { setGroupBy(event.target.value); setPage({ offset: 0 }); }}>
         <option value="">No grouping</option>
-        {table.fields.filter(field => !['multiSelect', 'relation', 'lookup'].includes(valueField(field).type)).map(field =>
+        {table.fields.filter(field => !['multiSelect', 'relation', 'lookup', 'attachment'].includes(valueField(field).type)).map(field =>
           <option key={field.id} value={field.id}>{field.name}</option>)}
       </select></label>
       <label className="form-field">Measure field<select aria-label="Measure field" value={fieldId} onChange={event => { setFieldId(event.target.value); setPage({ offset: 0 }); }}>

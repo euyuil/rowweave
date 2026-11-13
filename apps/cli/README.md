@@ -107,7 +107,7 @@ CSV supports 32 MiB, 100,000 rows, and 2,000,000 cells per operation; see [CSV v
 
 ## Output and errors
 
-`attachments upload TABLE_ID --file PATH` stores a real file of up to 8 MiB; optional JSON supplies `filename` and `mediaType`. Use `attachments list TABLE_ID`, `attachments get TABLE_ID ATTACHMENT_ID`, `attachments download TABLE_ID ATTACHMENT_ID --output PATH`, and `attachments delete TABLE_ID ATTACHMENT_ID` to manage files. Downloads require an explicit path and never execute content. See [attachment limits and lifecycle](https://github.com/euyuil/rowweave/blob/main/docs/attachments.md). Uploading a file does not itself edit a record.
+`attachments upload TABLE_ID --file PATH` stores a real file of up to 8 MiB; optional JSON supplies `filename` and `mediaType`. Use `attachments list TABLE_ID`, `attachments get TABLE_ID ATTACHMENT_ID`, `attachments download TABLE_ID ATTACHMENT_ID --output PATH`, and `attachments delete TABLE_ID ATTACHMENT_ID` to manage files. Downloads require an explicit path and never execute content. See [attachment limits and lifecycle](https://github.com/euyuil/rowweave/blob/main/docs/attachments.md). Uploading a file does not itself edit a record. Save its ID in an attachment field to attach it. Only never-attached uploads can be deleted individually; saved files remain available for history and recovery until their owning table is deleted.
 
 Normal success writes exactly one JSON value followed by a newline to stdout and exits 0. Empty collections are `[]`; no status banners precede results. `--help` emits text, and CSV export without `--output` emits CSV.
 

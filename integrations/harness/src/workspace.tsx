@@ -24,6 +24,13 @@ export function HarnessWorkspace({ session }: { session: WorkspaceSession }) {
     confirmDiscard: async () => window.confirm('Discard your unsaved RowWeave edits?'),
     setDirty: async value => session.setDirty(value),
     onServiceExit: () => () => {},
+    saveFile: async (filename, bytes) => {
+      const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: 'application/octet-stream' }));
+      const link = document.createElement('a'); link.href = url; link.download = filename;
+      document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      return 'download-started';
+    },
     saveCsv: async (name, csv) => {
       const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
       const link = document.createElement('a');

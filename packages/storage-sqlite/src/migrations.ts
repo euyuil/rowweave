@@ -5,8 +5,8 @@ import { syncQueryIndexes } from './query-indexes.js';
 
 export function migrate(db: DatabaseSync): boolean {
   const version = db.prepare('PRAGMA user_version').get()!['user_version'] as number;
-  if (version === 23) return false;
-  if (version < 0 || version > 23) throw new Error(`Unsupported database version: ${version}.`);
+  if (version === 24) return false;
+  if (version < 0 || version > 24) throw new Error(`Unsupported database version: ${version}.`);
   db.exec('BEGIN IMMEDIATE');
   try {
     if (version < 2) {
@@ -113,7 +113,8 @@ export function migrate(db: DatabaseSync): boolean {
       filename TEXT NOT NULL, media_type TEXT NOT NULL, size INTEGER NOT NULL,
       sha256 TEXT NOT NULL, created_at TEXT NOT NULL, content BLOB NOT NULL
     ); CREATE INDEX attachments_by_table ON attachments(table_id, sequence DESC);`);
-    db.exec('PRAGMA user_version = 23; COMMIT;');
+    if (version < 24) db.exec('ALTER TABLE attachments ADD COLUMN retained INTEGER NOT NULL DEFAULT 0;');
+    db.exec('PRAGMA user_version = 24; COMMIT;');
     return version === 0;
   } catch (error) {
     db.exec('ROLLBACK');

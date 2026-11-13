@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
 import { isReadOnlyField, maxBatchCells, maxBatchRecords, type DeletedRecord, type RecordTrashPage, type RowRecord, type Table } from '../../contracts/src/index.js';
 import { validateValue } from '../../core/src/field-values.js';
 import type { WorkspaceApi } from '../../client/src/http-client.js';
@@ -7,6 +7,7 @@ import { Dialog } from './dialog.js';
 import { FieldInput } from './field-input.js';
 import { fromFormValue, toFormValue, type FormValue } from './field-input-values.js';
 import { historyValue } from './record-history.js';
+import { AttachmentContext } from './attachment-context.js';
 
 export function TrashDialog({ table: initialTable, api, setDirty, onClose, onRestored }: {
   table: Table; api: WorkspaceApi; setDirty(value: boolean): void; onClose(): void; onRestored(count: number): void;
@@ -21,7 +22,8 @@ export function TrashDialog({ table: initialTable, api, setDirty, onClose, onRes
   const [snapshot, setSnapshot] = useState<RowRecord>();
   const [repairs, setRepairs] = useState<Record<string, Record<string, FormValue>>>({});
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
+  const [writing, setBusy] = useState(false);
+  const busy = writing || !!useContext(AttachmentContext)?.pending;
   const [confirm, setConfirm] = useState(false);
   const [discard, setDiscard] = useState<'close' | 'refresh'>();
   const [error, setError] = useState<string>();

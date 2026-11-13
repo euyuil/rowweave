@@ -4,6 +4,7 @@ import type { CellValue, Field, RecordLink } from '../../contracts/src/index.js'
 import { sameValue } from '../../client/src/cell-values.js';
 import { FieldInput } from './field-input.js';
 import { fromFormValue, toFormValue, type FormValue } from './field-input-values.js';
+import { AttachmentContext } from './attachment-context.js';
 
 export interface EditableCell extends TextCell { field: Field; rawValue: CellValue; row: number }
 type Movement = readonly [-1 | 0 | 1, -1 | 0 | 1];
@@ -19,6 +20,8 @@ export const EditorContext = createContext<EditorBridge | undefined>(undefined);
 export const CellEditor: ProvideEditorComponent<GridCell> = ({ value: gridValue, onFinishedEditing, isHighlighted }) => {
   const value = gridValue as EditableCell;
   const bridge = useContext(EditorContext)!;
+  const attachments = useContext(AttachmentContext);
+  const transferring = useRef(false); transferring.current = !!attachments?.pending;
   const root = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   const composing = useRef(false);
@@ -33,6 +36,7 @@ export const CellEditor: ProvideEditorComponent<GridCell> = ({ value: gridValue,
   latest.current = { value, draft, onFinishedEditing };
   const finish: EditorHandle['finish'] = (commit, movement = [0, 0]) => {
     if (closed.current) return true;
+    if (transferring.current) return false;
     if (commit && composing.current) return false;
     const current = latest.current;
     if (commit && !sameValue(current.draft, initial.current)) {
@@ -89,6 +93,6 @@ export const CellEditor: ProvideEditorComponent<GridCell> = ({ value: gridValue,
       : <FieldInput field={{ ...value.field, name: 'Cell value' }} value={draft} onChange={change} />}
     {text && value.field.description && <small id={descriptionId} className="field-description cell-description">{value.field.description}</small>}
     {error && <div role="alert" className="cell-error">{error}</div>}
-    {!text && <div className="cell-editor-actions"><button onClick={() => finish(false)}>Cancel</button><button onClick={() => finish(true)}>Apply</button></div>}
+    {!text && <div className="cell-editor-actions"><button disabled={!!attachments?.pending} onClick={() => finish(false)}>Cancel</button><button disabled={!!attachments?.pending} onClick={() => finish(true)}>Apply</button></div>}
   </div>;
 };

@@ -246,3 +246,15 @@
 .select-values { display: inline-flex; flex-wrap: wrap; gap: 5px; max-width: 100%; vertical-align: middle; }
 .select-value { display: inline-block; max-width: 100%; border-radius: 5px; padding: 3px 8px; line-height: 1.3; font-size: 12px; font-weight: 500; overflow-wrap: anywhere; }
 .rowweave-app .drawer-dialog .form-field > .select-values { grid-column: 2; }
+.attachment-input { min-width: 0; display: flex; flex-direction: column; gap: 8px; font-size: 12px; font-weight: 400; }
+.attachment-input input[type="file"] { width: 100%; min-width: 0; font-size: 12px; }
+.attachment-files { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.attachment-files li { display: flex; align-items: center; gap: 6px; padding: 8px; border: 1px solid #dce4f2; border-radius: 6px; }
+.attachment-files li > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.attachment-files small { display: block; margin-top: 3px; }
+.attachment-input button { font-size: 12px; padding: 5px 8px; }
+.attachment-input > button { align-self: flex-start; }
+.attachment-library { border: 1px solid #dce4f2; padding: 8px; border-radius: 6px; }
+.attachment-library > label { display: flex; align-items: center; gap: 6px; padding: 5px 0; overflow-wrap: anywhere; }
+.attachment-library small { margin-left: auto; white-space: nowrap; }
+.attachment-pages { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 6px; }

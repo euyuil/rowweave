@@ -1,4 +1,4 @@
-import React, { useId } from 'react';
+import React, { useContext, useId } from 'react';
 import { isReadOnlyField, isLookupSummary, maxUrlLength, type Field, type RecordLink } from '../../contracts/src/index.js';
 import type { FormValue } from './field-input-values.js';
 import { RelationInput } from './relation-input.js';
@@ -6,11 +6,15 @@ import { cellDisplay } from '../../client/src/cell-values.js';
 import { ExternalLink } from './external-link.js';
 import { selectedOptions, selectStyle } from './select-colors.js';
 import { SelectValues } from './select-values.js';
+import { AttachmentInput } from './attachment-input.js';
+import { AttachmentContext } from './attachment-context.js';
 
-export function FieldInput({ field, value, onChange, disabled = false, calculationError }: {
-  field: Field; value: FormValue; onChange(value: FormValue, links?: RecordLink[]): void; disabled?: boolean; calculationError?: string | undefined;
+export function FieldInput({ field, value, onChange, disabled: disabledProp = false, calculationError, allowUploads = true }: {
+  field: Field; value: FormValue; onChange(value: FormValue, links?: RecordLink[]): void; disabled?: boolean; calculationError?: string | undefined; allowUploads?: boolean;
 }) {
   const id = useId();
+  const attachments = useContext(AttachmentContext);
+  const disabled = disabledProp || !!attachments?.pending;
   const descriptionId = field.description ? `${id}-description` : undefined;
   const common = { id, disabled, required: !!field.required, 'aria-describedby': descriptionId };
   const scalar = (value ?? '') as string;
@@ -22,6 +26,13 @@ export function FieldInput({ field, value, onChange, disabled = false, calculati
   } else if (field.type === 'formula') {
     input = <output id={id} aria-describedby={descriptionId}>{value === null ? ''
       : cellDisplay(field, field.formula!.resultType === 'number' ? Number(value) : field.formula!.resultType === 'checkbox' ? value === 'true' : scalar)}</output>;
+  } else if (field.type === 'attachment' || (field.type === 'lookup' && field.lookupResult!.type === 'attachment')) {
+    const source = field.type === 'lookup' ? field : attachments!.table!.fields.find(source => source.id === field.id);
+    const tableId = source?.type === 'lookup' ? attachments!.table!.fields.find(relation => relation.id === source.lookup!.relationFieldId)!.relation!.tableId
+      : attachments!.table!.id;
+    input = <AttachmentInput id={id} descriptionId={descriptionId} tableId={tableId}
+      value={field.type === 'lookup' ? JSON.parse((value ?? '[]') as string) : value as string[] | null}
+      disabled={disabled} readOnly={field.type === 'lookup'} allowUploads={allowUploads} onChange={onChange} />;
   } else if (field.type === 'lookup') {
     const values = value === null ? isLookupSummary(field) ? null : [] : JSON.parse(value as string);
     const options = selectedOptions(field, values);
@@ -52,7 +63,7 @@ export function FieldInput({ field, value, onChange, disabled = false, calculati
       onChange={event => onChange(event.target.value)} />;
   }
   return <div className="form-field">
-    <div className="field-label"><label htmlFor={id}>{field.name}{field.required ? ' *' : ''}{['datetime', 'createdTime', 'updatedTime'].includes(field.type) ? ' (UTC)' : ''}</label>
+    <div className="field-label"><label id={`${id}-label`} htmlFor={id}>{field.name}{field.required ? ' *' : ''}{['datetime', 'createdTime', 'updatedTime'].includes(field.type) ? ' (UTC)' : ''}</label>
       {!field.required && !isReadOnlyField(field) && <button type="button" className="clear-value" disabled={disabled || value === null}
         aria-label={`Clear ${field.name}`} onClick={() => { onChange(null); document.getElementById(id)!.focus(); }}>Clear</button>}</div>
     {input}

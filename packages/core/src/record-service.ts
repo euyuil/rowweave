@@ -176,8 +176,8 @@ export class RecordService {
     const config = schemaObject(item['field']);
     const field = parseField(config, { id: previous.id, name: previous.name, type: previous.type,
       ...(previous.description === undefined ? {} : { description: previous.description }) });
-    if (previous.type === 'relation' || field.type === 'relation' || isReadOnlyField(previous) || isReadOnlyField(field)) {
-      throw new ServiceError('CONVERSION_REQUIRED', 'Create linked, calculated and automatic fields explicitly; they cannot be converted to another type.');
+    if (['relation', 'attachment'].includes(previous.type) || ['relation', 'attachment'].includes(field.type) || isReadOnlyField(previous) || isReadOnlyField(field)) {
+      throw new ServiceError('CONVERSION_REQUIRED', 'Create linked, attachment, calculated and automatic fields explicitly; they cannot be converted to another type.');
     }
     return { version, field, convert: (value: CellValue) => convertValue(previous, field, value) };
   }

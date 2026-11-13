@@ -8,7 +8,7 @@ Successful JSON responses contain the resource/result directly. Errors use a non
 
 ## Attachment storage
 
-The authenticated file API stores immutable, table-scoped files up to 8 MiB inside the workspace database. See [file limits, lifecycle and interface examples](attachments.md). Attachment fields and their UI remain in delivery scope.
+The authenticated file API stores immutable, table-scoped files up to 8 MiB inside the workspace database. Save uploaded IDs in attachment fields to associate them with records. See [file limits, retention and interface examples](attachments.md). Only never-attached uploads can be deleted individually; used files return `ATTACHMENT_RETAINED` so history remains restorable.
 
 | Method and path | Request body | Result / SDK method |
 | --- | --- | --- |
@@ -35,7 +35,7 @@ In the paths below, `:table` and `:field` are stable IDs. Names are trimmed, non
 | `POST /tables/:table/fields/:field/conversion/preview` | `{ expectedVersion, field: definition }` | `ConversionPreview` / `previewConversion(id, fieldId, input)` |
 | `POST /tables/:table/fields/:field/conversion/apply` | Same conversion request | `Table` / `applyConversion(id, fieldId, input)` |
 
-A new table contains an optional text field named `Name` and an `All records` view. `fieldOrder`, when supplied, contains every field ID exactly once. Choose another primary display field before deleting it. Relation and lookup fields cannot be primary display fields. Deleting a table deletes its records/views/fields; external relations and lookups must be removed first.
+A new table contains an optional text field named `Name` and an `All records` view. `fieldOrder`, when supplied, contains every field ID exactly once. Choose another primary display field before deleting it. Relation, lookup and attachment fields cannot be primary display fields. Deleting a table deletes its records/views/fields/files; external relations and lookups must be removed first.
 
 `primaryFieldId` selects the **primary display field**, not a database primary key. Its values label linked records and may repeat or be empty unless the field is required. Each record's immutable `id` UUID is its primary key; each column has a separate field UUID. Renaming a field, editing display values, or selecting another display field preserves record IDs and links.
 
@@ -45,6 +45,7 @@ Tables support up to 200 fields. Field definitions use `{ name, type, descriptio
 | --- | --- | --- |
 | `text`, `multiline` | String | Up to 10,000 characters; required text must not be blank. |
 | `url` | String or null | Absolute HTTP or HTTPS URL without credentials, whitespace, control characters or backslashes. Both entered and URL-encoded forms must fit 2,048 characters. Valid Unicode text is preserved as entered; empty text is invalid. |
+| `attachment` | Array of unique uploaded file IDs or null | Up to 20 files, each owned by this table. Required fields need a file; no defaults, conversion or primary-display use. Record responses include `attachments: { fieldId: Attachment[] }` with immutable metadata, including owning `tableId`. Files are retained for history once saved in a record. |
 | `autoNumber` | Read-only integer | Service-assigned per-field sequence starting at 1. Existing records are numbered in position order when the field is added. Ordinary writes, including explicit null, return `READ_ONLY_FIELD`; defaults and required constraints are unavailable. |
 | `createdTime`, `updatedTime` | Read-only UTC ISO timestamp or null | Original creation / latest record save or reciprocal-link edit. One service transaction supplies one time. Schema changes and calculation-only refreshes do not reset edit time. Known history is backfilled; unknown legacy times remain null. See [automatic record times](development.md#automatic-record-times). |
 | `number` | Finite number | `numberFormat`: `decimal`, `currency`, or `percent`; optional `precision` 0–10, nullable on update to restore automatic precision; three-letter `currency` for currency presentation. Display formatting never rounds the stored value. |

@@ -62,6 +62,25 @@ async function setup(t: Context) {
   return { service, server, token, environment };
 }
 
+test('MCP and CLI attach file IDs to records and preserve bytes after detaching and restoring', async t => {
+  const { environment } = await setup(t), { json, call } = await connect(t, environment);
+  let table = await json<Table>('tables_create', { name: 'Attachment workflow' });
+  table = await json<Table>('fields_create', { tableId: table.id, input: { expectedVersion: table.version, name: 'Files', type: 'attachment' } });
+  const field = table.fields[1]!.id;
+  const file = await json<Attachment>('attachments_upload', { tableId: table.id, input: { filename: 'workflow.txt', mediaType: 'text/plain', data: 'aGk=' } });
+  const row = (await json<BatchResult>('records_create', { tableId: table.id, records: [{ values: { [field]: [file.id] } }] })).records[0]!;
+  assert.deepEqual(row.attachments![field], [file]);
+  const result = await runFile(process.execPath, [resolve('apps/cli/dist/rowweave.js'), 'records', 'update', table.id, '--json', JSON.stringify([
+    { id: row.id, expectedVersion: row.version, values: { [field]: [] } },
+  ])], { env: { ...process.env, ...environment } });
+  const cleared = JSON.parse(result.stdout) as BatchResult;
+  assert.deepEqual(cleared.records[0]!.attachments![field], []);
+  assert.equal(JSON.parse(text(await call('attachments_delete', { tableId: table.id, attachmentId: file.id }))).error.code, 'ATTACHMENT_RETAINED');
+  await json('records_undo_batch', { tableId: table.id, batchId: cleared.batchId });
+  assert.deepEqual((await json<RowRecord>('records_get', { tableId: table.id, recordId: row.id })).attachments![field], [file]);
+  assert.deepEqual(await json('attachments_download', { tableId: table.id, attachmentId: file.id }), { data: 'aGk=' });
+});
+
 test('MCP and CLI share field descriptions, omission, validation and explicit clearing', async t => {
   const { environment } = await setup(t);
   const { json, call } = await connect(t, environment);
