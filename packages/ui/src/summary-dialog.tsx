@@ -10,7 +10,7 @@ export function SummaryDialog({ table, view, search, api, onClose }: {
   const [groupBy, setGroupBy] = useState('');
   const [fieldId, setFieldId] = useState(table.fields.find(field => valueField(field).type === 'number')?.id ?? '');
   const [operation, setOperation] = useState<SummaryMeasure['operation']>('sum');
-  const [page, setPage] = useState<{ offset: number; revision?: number }>({ offset: 0 });
+  const [page, setPage] = useState<{ offset: number; revision?: number; dateContext?: string }>({ offset: 0 });
   const [refresh, setRefresh] = useState(0);
   const [result, setResult] = useState<RecordSummary>();
   const [error, setError] = useState<string>();
@@ -24,7 +24,8 @@ export function SummaryDialog({ table, view, search, api, onClose }: {
     setError(undefined);
     void api.summarizeRecords(table.id, { viewId: view.id, expectedViewVersion: view.version, search,
       ...(groupBy ? { groupBy } : {}), measures: fieldId ? [{ fieldId, operation }] : [],
-      offset: page.offset, limit: 50, ...(page.revision === undefined ? {} : { expectedRevision: page.revision }) }, controller.signal)
+      offset: page.offset, limit: 50, ...(page.revision === undefined ? {} : { expectedRevision: page.revision }),
+      ...(page.dateContext ? { expectedDateContext: page.dateContext } : {}) }, controller.signal)
       .then(result => { if (!controller.signal.aborted) setResult(result); })
       .catch(error => {
         if (controller.signal.aborted) return;
@@ -63,9 +64,11 @@ export function SummaryDialog({ table, view, search, api, onClose }: {
       </table>
       {result.totals.count === 0 && <p>No records match this view and search.</p>}
       {groupBy && result.groupCount > 0 && <div className="summary-pages">
-        <button disabled={page.offset === 0} onClick={() => setPage({ offset: Math.max(0, page.offset - 50), revision: result.revision })}>Previous groups</button>
+        <button disabled={page.offset === 0} onClick={() => setPage({ offset: Math.max(0, page.offset - 50), revision: result.revision,
+          ...(result.dateContext ? { dateContext: result.dateContext } : {}) })}>Previous groups</button>
         <span>{page.offset + 1}–{page.offset + result.groups.length} of {result.groupCount.toLocaleString()} groups</span>
-        <button disabled={page.offset + result.groups.length >= result.groupCount} onClick={() => setPage({ offset: page.offset + 50, revision: result.revision })}>Next groups</button>
+        <button disabled={page.offset + result.groups.length >= result.groupCount} onClick={() => setPage({ offset: page.offset + 50, revision: result.revision,
+          ...(result.dateContext ? { dateContext: result.dateContext } : {}) })}>Next groups</button>
       </div>}
     </>}
     <div className="dialog-actions"><button onClick={() => { setPage({ offset: 0 }); setRefresh(value => value + 1); }} disabled={loading}>Refresh summary</button>

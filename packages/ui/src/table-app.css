@@ -175,6 +175,10 @@
 .rowweave-app .filter-rule { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .rowweave-app .filter-rule select { min-width: 0; }
 .rowweave-app .filter-rule .form-field { grid-column: 1 / -1; margin: 0 0 8px; }
+.rowweave-app .relative-date-rule { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 10px; }
+.rowweave-app .relative-date-rule label { display: flex; flex-direction: column; gap: 6px; flex: 1 1 160px; min-width: 0; }
+.rowweave-app .relative-date-rule input, .rowweave-app .relative-date-rule select { min-width: 0; width: 100%; box-sizing: border-box; }
+.rowweave-app .relative-date-rule small { flex-basis: 100%; color: #69768b; }
 .rowweave-app .filter-actions, .rowweave-app .sort-rule { display: flex; gap: 8px; flex-wrap: wrap; }
 .rowweave-app .sort-rule { margin: 8px 0; }
 .rowweave-app .sort-rule select { min-width: 0; flex: 1; }

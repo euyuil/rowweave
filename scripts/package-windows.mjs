@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import { pipeline } from 'node:stream/promises';
 import { execFileSync } from 'node:child_process';
 import { bundledNotices } from './bundled-notices.mjs';
+import { build } from 'esbuild';
 
 if (process.platform !== 'win32' || process.arch !== 'x64') throw new Error('Package on Windows x64.');
 const manifest = JSON.parse(await readFile('package.json', 'utf8'));
@@ -26,7 +27,10 @@ try {
     type: 'module', main: manifest.main, description: 'Local structured tables for people and software.',
   }, null, 2));
   const meta = JSON.parse(await readFile('dist/apps/desktop/renderer.meta.json', 'utf8'));
-  await writeFile(join(stage, 'THIRD-PARTY-NOTICES.txt'), await bundledNotices(meta));
+  const dates = await build({ entryPoints: ['packages/storage-sqlite/src/relative-date-ranges.ts'],
+    outfile: join(stage, 'dist/packages/storage-sqlite/src/relative-date-ranges.js'),
+    bundle: true, format: 'esm', platform: 'node', target: 'node24', metafile: true });
+  await writeFile(join(stage, 'THIRD-PARTY-NOTICES.txt'), await bundledNotices({ outputs: { ...meta.outputs, ...dates.metafile.outputs } }));
   const electronVersion = manifest.devDependencies.electron;
   const localZip = join(artifacts, `electron-v${electronVersion}-win32-x64.zip`);
   const hasLocalZip = await access(localZip).then(() => true, () => false);

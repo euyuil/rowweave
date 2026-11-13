@@ -200,7 +200,7 @@ export class RecordService {
     if (view && item['filter'] !== undefined) throw new ServiceError('INVALID_SUMMARY', 'Use the saved view filter or an explicit filter, not both.');
     const query = parseQuery(table, { filter: view?.query.filter ?? item['filter'],
       search: item['search'] === undefined ? view?.query.search : item['search'],
-      offset: item['offset'], limit: item['limit'], expectedRevision: item['expectedRevision'] });
+      offset: item['offset'], limit: item['limit'], expectedRevision: item['expectedRevision'], expectedDateContext: item['expectedDateContext'] });
     return this.store.summarizeRecords(table, query, parseSummary(table, item), view);
   }
 
@@ -266,7 +266,7 @@ export class RecordService {
     }
     const query = parseQuery(table, { ...view.query, offset: item['offset'], limit: item['limit'],
       fields: item['fields'] === undefined ? view.columns.filter(column => !column.hidden).map(column => column.fieldId) : item['fields'],
-      expectedRevision: item['expectedRevision'], search: item['search'] === undefined ? view.query.search : item['search'] });
+      expectedRevision: item['expectedRevision'], expectedDateContext: item['expectedDateContext'], search: item['search'] === undefined ? view.query.search : item['search'] });
     if (item['lane'] !== undefined) {
       if (view.type !== 'board') throw new ServiceError('INVALID_QUERY', 'Lane queries require a board view.');
       const group = table.fields.find(field => field.id === view.groupBy)!;

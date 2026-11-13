@@ -22,3 +22,12 @@ test('filter forms retain nested groups and typed zero, false, option IDs and UT
   assert.deepEqual(filterValue({ conjunction: 'and', conditions: [{ fieldId: 'amount', operator: 'eq', value: null }] }, fields),
     { conjunction: 'and', conditions: [{ fieldId: 'amount', operator: 'eq', value: null }] });
 });
+
+test('relative filter drafts round-trip dynamic settings without converting them to fixed dates', () => {
+  const fields: Field[] = [{ id: 'due', name: 'Due', type: 'date' }, { id: 'at', name: 'At', type: 'datetime' }];
+  const filter: FilterGroup = { conjunction: 'or', conditions: [
+    { fieldId: 'due', operator: 'relativeDate', relative: { period: 'pastDays', days: 7, timeZone: 'Asia/Shanghai' } },
+    { fieldId: 'at', operator: 'relativeDate', relative: { period: 'thisWeek', timeZone: 'America/New_York' } },
+  ] };
+  assert.deepEqual(filterValue(filterDraft(filter, fields), fields), filter);
+});

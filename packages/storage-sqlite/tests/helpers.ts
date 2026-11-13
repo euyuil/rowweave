@@ -4,12 +4,12 @@ import { tmpdir } from 'node:os';
 import type { TestContext } from 'node:test';
 import { SqliteRecordStore, type SeedOptions } from '../src/record-store.js';
 
-export function fixture(t: TestContext, seed: SeedOptions | null = { rows: 12, columns: 3 }) {
+export function fixture(t: TestContext, seed: SeedOptions | null = { rows: 12, columns: 3 }, clock?: () => Date) {
   const directory = mkdtempSync(join(tmpdir(), 'rowweave-test-'));
   const path = join(directory, 'test.sqlite');
   const stores: SqliteRecordStore[] = [];
   const open = () => {
-    const store = new SqliteRecordStore(path, seed);
+    const store = new SqliteRecordStore(path, seed, clock);
     stores.push(store);
     return store;
   };

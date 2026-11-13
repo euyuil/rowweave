@@ -18,6 +18,7 @@ import { maxCsvBytes, maxCsvCells, maxCsvRows, type CsvPreview } from '../../con
 import { csvCell, csvLimit, csvRecord, csvRecordValues, type CheckedCsvImport } from '../../core/src/csv.js';
 import { compileFormulas } from '../../core/src/formulas.js';
 import { ConnectedCalculations, type ChangedRecords } from './connected-calculations.js';
+import { relativeDateRanges } from './relative-date-ranges.js';
 
 export interface SeedOptions {
   rows: number;
@@ -59,7 +60,7 @@ export class SqliteRecordStore implements RecordStore {
   private readonly relations: Relations;
   private readonly lookups: Lookups;
 
-  constructor(path: string, seed: SeedOptions | null = null) {
+  constructor(path: string, seed: SeedOptions | null = null, private readonly clock: () => Date = () => new Date()) {
     if (seed && (!Number.isSafeInteger(seed.rows) || seed.rows < 1 || seed.rows > 100_000 ||
         !Number.isSafeInteger(seed.columns) || seed.columns < 1 || seed.columns > 100)) {
       throw new Error('Seed size must be 1–100,000 rows and 1–100 columns.');
@@ -306,12 +307,17 @@ export class SqliteRecordStore implements RecordStore {
       const target = this.getTable(field.relation!.tableId);
       return [target.id, target];
     }));
-    return { current, sql: querySql(current, { ...query, ...(view?.type === 'grid' && view.groupBy ? { groupBy: view.groupBy } : {}) }, targets) };
+    const dates = relativeDateRanges(current, query.filter, this.clock());
+    if (query.expectedDateContext !== undefined && query.expectedDateContext !== dates.dateContext) {
+      throw new ServiceError('DATA_CHANGED', 'The relative date range changed. Refresh to use the current calendar period; your drafts are retained.', 409);
+    }
+    return { current, ...(dates.dateContext ? { dateContext: dates.dateContext } : {}),
+      sql: querySql(current, { ...query, ...(view?.type === 'grid' && view.groupBy ? { groupBy: view.groupBy } : {}) }, targets, false, dates.ranges) };
   }
 
   queryRecords(table: Table, query: CheckedQuery, view?: GridView): QueryPage {
     return this.transaction(() => {
-      const { current, sql } = this.prepareQuery(table, query, view);
+      const { current, sql, dateContext } = this.prepareQuery(table, query, view);
       const total = this.db.prepare(`SELECT COUNT(*) AS total FROM records r WHERE ${sql.where}`)
         .get(sql.countParameters)!['total'] as number;
       const rows = this.db.prepare(`SELECT r.id, r.version, r.values_json, r.formula_errors_json FROM records r WHERE ${sql.where}
@@ -329,14 +335,14 @@ export class SqliteRecordStore implements RecordStore {
         }
         return record;
       });
-      return { offset: query.offset, records, total, revision: current.revision, schemaVersion: current.version };
+      return { offset: query.offset, records, total, revision: current.revision, schemaVersion: current.version, ...(dateContext ? { dateContext } : {}) };
     }, 'DEFERRED');
   }
 
   summarizeRecords(table: Table, query: CheckedQuery, summary: CheckedSummary, view?: GridView): RecordSummary {
     return this.transaction(() => {
-      const { current, sql } = this.prepareQuery(table, query, view);
-      return summarize(this.db, current, summary, sql.where, sql.countParameters, query.offset, query.limit);
+      const { current, sql, dateContext } = this.prepareQuery(table, query, view);
+      return { ...summarize(this.db, current, summary, sql.where, sql.countParameters, query.offset, query.limit), ...(dateContext ? { dateContext } : {}) };
     }, 'DEFERRED');
   }
 

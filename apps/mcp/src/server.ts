@@ -9,7 +9,7 @@ Use stable IDs, not names or positions. Select values are option IDs; linked val
 Lookups are read-only. Dates use YYYY-MM-DD; timestamps include a zone; numbers are JSON numbers (0.5 means 50%).
 Null differs from empty text. Omitted create fields use defaults; explicit null does not.
 Schema writes require table.version; record writes require record.version; view writes require view.version.
-Query in small pages (at most 500), project needed fields, and reuse expectedRevision for continuation pages.
+Query in small pages (at most 500), project needed fields, and reuse expectedRevision for continuation pages. For relative date filters, also pass returned dateContext as expectedDateContext; refresh on DATA_CHANGED.
 Record batches are atomic, with at most 2,000 records and 20,000 changed cells; text values allow 10,000 UTF-16 code units.
 Preview field conversion and inspect issues before applying. Copy the preview field configuration but omit its id and lookupResult.
 Preview CSV mapping and validation before importing; import appends atomically. CSV export returns text including a UTF-8 BOM.
@@ -64,7 +64,7 @@ export function createMcpServer(api: WorkspaceApi): McpServer {
   tool('views_create', 'Create a grid or single-select board view with filters, sorting, search and column configuration.', table.extend({ input: schemas.viewCreate }), 'create', a => api.createView(a.tableId, a.input));
   tool('views_update', 'Change a view using its current version; this does not change records.', view.extend({ input: schemas.viewUpdate }), 'change', a => api.updateView(a.tableId, a.viewId, a.input));
   tool('views_delete', 'Delete a view without deleting records; the final view cannot be deleted.', view.extend(schemas.expectedVersion), 'change', a => api.deleteView(a.tableId, a.viewId, a.expectedVersion));
-  tool('views_query', 'Read a saved view page, optionally one board lane by option ID or null. Include expectedViewVersion and expectedRevision when continuing.', view.extend({ query: schemas.viewPage }), 'read', a => api.queryView(a.tableId, a.viewId, a.query));
+  tool('views_query', 'Read a saved view page, optionally one board lane by option ID or null. Include expectedViewVersion, expectedRevision and returned dateContext as expectedDateContext when continuing.', view.extend({ query: schemas.viewPage }), 'read', a => api.queryView(a.tableId, a.viewId, a.query));
   tool('csv_preview', 'Preview CSV mapping, typed validation and bounded samples without writing.', table.extend({ input: schemas.csvImport }), 'read', a => api.previewCsv(a.tableId, a.input));
   tool('csv_import', 'Append reviewed CSV rows atomically using the current schema version. Never blindly retry.', table.extend({ input: schemas.csvImport }), 'create', a => api.importCsv(a.tableId, a.input));
   tool('csv_export', 'Export table/current-view CSV text with a BOM, preserving Unicode and typed values. Use CLI for large files.', table.extend({ query: schemas.csvExport }), 'read', a => api.exportCsv(a.tableId, a.query), true);

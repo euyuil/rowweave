@@ -1,4 +1,5 @@
-import { maxPageSize, maxTextLength, valueField, isLookupSummary, type Field, type FieldFilter, type FilterGroup, type RecordQuery, type Table } from '../../contracts/src/index.js';
+import { maxPageSize, maxTextLength, valueField, isLookupSummary, relativeDatePeriods, maxRelativeDays,
+  type Field, type FieldFilter, type FilterGroup, type RecordQuery, type RelativeDateFilter, type Table } from '../../contracts/src/index.js';
 import { ServiceError } from './errors.js';
 import { validateValue } from './field-values.js';
 
@@ -50,6 +51,24 @@ export function parseQuery(table: Table, input: unknown): CheckedQuery {
         return invalid('Use hasAny or empty checks for a multiple-select lookup.');
       }
       if (operator === 'isEmpty' || operator === 'isNotEmpty') return { fieldId: selected.id, operator };
+      if (operator === 'relativeDate') {
+        if (selected.type !== 'date' && selected.type !== 'datetime') return invalid('Relative dates require a date or timestamp field.');
+        const relative = object(item['relative']);
+        if (!relativeDatePeriods.includes(relative['period'] as RelativeDateFilter['period'])) return invalid('Choose a supported relative date period.');
+        const timeZone = relative['timeZone'];
+        if (typeof timeZone !== 'string' || !timeZone || /^[+-]/.test(timeZone)) return invalid('Use a named time zone, such as Asia/Shanghai or UTC.');
+        try { new Intl.DateTimeFormat('en', { timeZone }); }
+        catch { return invalid('Use a valid named time zone, such as Asia/Shanghai or UTC.'); }
+        const period = relative['period'] as RelativeDateFilter['period'];
+        const counted = period === 'pastDays' || period === 'nextDays';
+        const days = relative['days'];
+        if (counted && (!Number.isSafeInteger(days) || (days as number) < 1 || (days as number) > maxRelativeDays)) {
+          return invalid(`Use between 1 and ${maxRelativeDays} calendar days.`);
+        }
+        if (!counted && days !== undefined) return invalid('Only pastDays and nextDays accept a day count.');
+        if (item['value'] !== undefined) return invalid('Relative dates use relative settings instead of a fixed value.');
+        return { fieldId: selected.id, operator, relative: { period, timeZone, ...(counted ? { days: days as number } : {}) } };
+      }
       if (operator === 'contains') {
         if (!['text', 'multiline'].includes(selected.type) || typeof item['value'] !== 'string' || item['value'].length > maxTextLength) {
           return invalid('contains requires a text field and a text value.');
@@ -100,6 +119,12 @@ export function parseQuery(table: Table, input: unknown): CheckedQuery {
   if (source['expectedRevision'] !== undefined) {
     if (!Number.isSafeInteger(source['expectedRevision']) || (source['expectedRevision'] as number) < 1) return invalid('expectedRevision must be a positive integer.');
     query.expectedRevision = source['expectedRevision'] as number;
+  }
+  if (source['expectedDateContext'] !== undefined) {
+    if (typeof source['expectedDateContext'] !== 'string' || !/^[a-f0-9]{64}$/.test(source['expectedDateContext'])) {
+      return invalid('expectedDateContext must be the dateContext returned by the first page or summary.');
+    }
+    query.expectedDateContext = source['expectedDateContext'];
   }
   return query;
 }

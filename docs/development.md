@@ -36,6 +36,8 @@ Use `npm run workspace:file -- backup SOURCE NEW_DESTINATION` for a consistent o
 
 ### Dynamic tables and schema
 
+**Filters** supports [relative calendar periods](relative-date-filters.md) for date and timestamp fields, with saved time zones and cross-page date-context checks. Desktop packaging bundles the pinned Temporal date resolver and its license notices; source service execution uses the lockfile-installed dependency.
+
 **Summarize** in the view toolbar computes counts and numeric totals for all saved records matching the current view and search. Choose a scalar grouping field and a numeric sum/average/min/max; group pages stay bounded and carry revision checks. The same operation is `POST /tables/:tableId/summary`, SDK `summarizeRecords`, CLI `rowweave records summarize TABLE_ID --json '{"groupBy":"FIELD_ID"}'`, and MCP `records_summarize`. See [HTTP summaries](http-api.md#summaries) for the complete contract.
 
 The service supports multiple tables with stable table, field, and record IDs. The desktop supports creating, switching, renaming, and deleting tables, with unsaved-edit navigation guards and explicit deletion confirmation. **Manage fields** adds/configures fields, selects the primary display field, changes field order, and confirms deletion. Forms expose the supported types, number formatting, options, required values, and defaults. Save or discard grid drafts before changing schema; changes use the displayed schema version and reject stale writes.

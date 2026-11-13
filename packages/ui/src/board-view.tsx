@@ -55,7 +55,7 @@ export function BoardView({ table, view, search, generation, api, disabled, onOp
     {(error || moveError) && <p role="alert" className="board-error">{error ?? moveError} {error && 'Reload the table to use the latest view and fields.'}</p>}
     {!summary && !error && <p role="status">Loading board…</p>}
     <div className="board-scroll" ref={root}>
-      {summary && lanes.map(lane => <BoardLane key={`${generation}:${summary.revision}:${JSON.stringify(lane.id)}`} lane={lane}
+      {summary && lanes.map(lane => <BoardLane key={`${generation}:${summary.revision}:${summary.dateContext}:${JSON.stringify(lane.id)}`} lane={lane} dateContext={summary.dateContext}
         count={summary.groups.find(result => result.key === lane.id)?.count ?? 0} revision={summary.revision}
         root={root} table={table} view={view} search={search} api={api} fields={fields} primary={primary} group={group} disabled={locked}
         onOpen={onOpen} onCreate={() => onCreate(lane.id)} onMove={move}
@@ -67,8 +67,9 @@ export function BoardView({ table, view, search, generation, api, disabled, onOp
   </section>;
 }
 
-function BoardLane({ lane, count, revision, root, table, view, search, api, fields, primary, group, disabled, onOpen, onCreate, onMove, onDrag, onDrop, canDrop }: {
+function BoardLane({ lane, count, revision, dateContext, root, table, view, search, api, fields, primary, group, disabled, onOpen, onCreate, onMove, onDrag, onDrop, canDrop }: {
   lane: { id: string | null; label: string }; count: number; revision: number; root: RefObject<HTMLDivElement>;
+  dateContext: string | undefined;
   table: Table; view: GridView; search: string; api: WorkspaceApi; fields: Field[]; primary: Field; group: Field; disabled: boolean;
   onOpen(record: RowRecord): void; onCreate(): void; onMove(record: RowRecord, lane: string | null): Promise<void>;
   onDrag(record: RowRecord | undefined): void; onDrop(): void; canDrop(): boolean;
@@ -88,6 +89,7 @@ function BoardLane({ lane, count, revision, root, table, view, search, api, fiel
     if (!near || count === 0) return;
     const controller = new AbortController();
     void api.queryView(table.id, view.id, { lane: lane.id, search, offset, limit: 25, expectedRevision: revision,
+      ...(dateContext ? { expectedDateContext: dateContext } : {}),
       expectedViewVersion: view.version, fields: [...new Set([primary.id, group.id, ...fields.map(field => field.id)])] }, controller.signal)
       .then(result => {
         if (controller.signal.aborted) return;
@@ -95,7 +97,7 @@ function BoardLane({ lane, count, revision, root, table, view, search, api, fiel
         setPage(result);
       }).catch(failure => { if (!controller.signal.aborted) setError(failure instanceof Error ? failure.message : 'Could not load records.'); });
     return () => controller.abort();
-  }, [api, table.id, table.version, view.id, view.version, lane.id, search, offset, revision, near, count, fields, primary.id, group.id]);
+  }, [api, table.id, table.version, view.id, view.version, lane.id, search, offset, revision, dateContext, near, count, fields, primary.id, group.id]);
   return <section ref={element} className="board-lane" aria-label={`${lane.label} column`}
     onDragOver={event => { if (canDrop() && !(lane.id === null && group.required)) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; } }}
     onDrop={event => { event.preventDefault(); if (!(lane.id === null && group.required)) onDrop(); }}>

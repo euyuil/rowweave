@@ -1,13 +1,20 @@
-import React from 'react';
+import React, { useId } from 'react';
 import type { Field, FilterOperator, SortRule } from '../../contracts/src/index.js';
+import { maxRelativeDays, relativeDatePeriods, type RelativeDateFilter } from '../../contracts/src/index.js';
 import { FieldInput } from './field-input.js';
 import { filterCount, filterOperators, type GroupDraft, type RuleDraft } from './filter-draft.js';
 import { queryValueField } from '../../core/src/record-query.js';
 
 const operatorNames: Record<FilterOperator, string> = {
   eq: 'is', neq: 'is not', contains: 'contains', gt: 'greater than', gte: 'at least', lt: 'less than', lte: 'at most',
-  isEmpty: 'is empty', isNotEmpty: 'is not empty', hasAny: 'has any of',
+  isEmpty: 'is empty', isNotEmpty: 'is not empty', hasAny: 'has any of', relativeDate: 'is in a relative period',
 };
+
+const periodNames: Record<RelativeDateFilter['period'], string> = {
+  today: 'Today', yesterday: 'Yesterday', tomorrow: 'Tomorrow', thisWeek: 'This week', lastWeek: 'Last week', nextWeek: 'Next week',
+  thisMonth: 'This month', lastMonth: 'Last month', nextMonth: 'Next month', pastDays: 'Past N days', nextDays: 'Next N days',
+};
+const timeZones = ['UTC', ...Intl.supportedValuesOf('timeZone')];
 
 export function QueryEditor({ fields, filter, sort, onFilter, onSort, section }: {
   fields: Field[]; filter: GroupDraft; sort: SortRule[]; section?: 'filter' | 'sort' | undefined;
@@ -66,6 +73,7 @@ function FilterGroupEditor({ fields, group, onChange, remaining, depth = 0, path
 }
 
 function FilterRule({ fields, rule, onChange, path }: { fields: Field[]; rule: RuleDraft; onChange(rule: RuleDraft): void; path: string }) {
+  const timeZoneList = useId();
   const original = fields.find(field => field.id === rule.fieldId)!;
   const field = queryValueField(original);
   const operators = filterOperators(original);
@@ -81,10 +89,27 @@ function FilterRule({ fields, rule, onChange, path }: { fields: Field[]; rule: R
       const operator = event.target.value as FilterOperator;
       const value = operator === 'hasAny' ? Array.isArray(rule.value) ? rule.value : []
         : collection ? null : operator === 'contains' ? rule.value ?? '' : rule.value;
-      onChange({ ...rule, operator, value });
+      onChange({ ...rule, operator, value, ...(operator === 'relativeDate' ? {
+        relative: rule.relative ?? { period: 'today', timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+      } : {}) });
     }}>{operators.map(operator => <option value={operator} key={operator}>{collection && (operator === 'eq' || operator === 'neq')
       ? operator === 'eq' ? 'is not set (null)' : 'is set (not null)' : operatorNames[operator]}</option>)}</select>
-    {!empty && !nullOnly && <FieldInput field={{ ...field, name: 'Value', required: ordered,
+    {rule.operator === 'relativeDate' && <div className="relative-date-rule">
+      <label>Period<select aria-label="Relative period" value={rule.relative!.period} onChange={event => {
+        const period = event.target.value as RelativeDateFilter['period'];
+        onChange({ ...rule, relative: { period, timeZone: rule.relative!.timeZone,
+          ...(period === 'pastDays' || period === 'nextDays' ? { days: rule.relative!.days ?? 7 } : {}) } });
+      }}>{relativeDatePeriods.map(period => <option key={period} value={period}>{periodNames[period]}</option>)}</select></label>
+      {(rule.relative!.period === 'pastDays' || rule.relative!.period === 'nextDays') && <label>Days<input aria-label="Calendar days" type="number"
+        min={1} max={maxRelativeDays} step={1} required value={rule.relative!.days ?? ''}
+        onChange={event => onChange({ ...rule, relative: { ...rule.relative!, days: event.target.valueAsNumber } })} /></label>}
+      <label>Time zone<input aria-label="Relative time zone" required list={timeZoneList} value={rule.relative!.timeZone} placeholder="Asia/Shanghai"
+        onChange={event => onChange({ ...rule, relative: { ...rule.relative!, timeZone: event.target.value } })} /></label>
+      <datalist id={timeZoneList}>{timeZones.map(zone => <option value={zone} key={zone} />)}</datalist>
+      <small>{rule.relative!.period === 'pastDays' || rule.relative!.period === 'nextDays' ? 'The day count includes today. ' : ''}
+        Calendar periods use this time zone; weeks start Monday. Refresh to use the latest period.</small>
+    </div>}
+    {!empty && !nullOnly && rule.operator !== 'relativeDate' && <FieldInput field={{ ...field, name: 'Value', required: ordered,
       ...(field.relation ? { relation: { ...field.relation, multiple: true } } : {}) }} value={rule.value} onChange={value => onChange({ ...rule, value })} />}
   </div>;
 }
