@@ -91,9 +91,11 @@
 .rowweave-app .discard-confirmation p { margin: 0 0 12px; }
 .rowweave-app .discard-confirmation > div { display: flex; gap: 8px; }
 .rowweave-app .workspace-dialog.anchored-dialog { position: fixed; inset: auto; margin: 0; width: 600px; max-width: calc(100vw - 24px); padding: 18px; border-radius: 8px; box-shadow: 0 8px 32px #17243b30; }
+.rowweave-app .workspace-dialog.anchored-dialog:not(.wide-dialog) { width: 460px; }
 .rowweave-app .anchored-dialog::backdrop { background: transparent; }
 .rowweave-app .workspace-dialog.anchored-dialog h2 { margin-bottom: 14px; font-size: 17px; }
 .rowweave-app .anchored-dialog input, .rowweave-app .anchored-dialog select { padding: 8px; font-size: 13px; }
+.rowweave-app .anchored-dialog .form-field { margin-top: 12px; margin-bottom: 12px; }
 .rowweave-app .anchored-dialog .query-section { margin: 0; }
 .rowweave-app .anchored-dialog .query-heading h3 { display: none; }
 .rowweave-app .anchored-dialog .query-heading { justify-content: flex-end; margin-bottom: 10px; }
