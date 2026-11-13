@@ -56,6 +56,7 @@ const page = {
 };
 export const recordQuery = z.strictObject({ ...page, ...query, recordIds: z.array(id).exactOptional(), groupBy: id.exactOptional() });
 export const recordGroups = z.strictObject({
+  window: z.enum(['displayRows', 'expandedRecords']).describe('Offsets count display rows by default; expandedRecords skips all headings and collapsed records.').exactOptional(),
   viewId: id.exactOptional(), expectedViewVersion: version.exactOptional(), groupBy: id.exactOptional(),
   filter: filter.exactOptional(), search: z.string().exactOptional(),
   offset: page.offset, limit: page.limit, expectedRevision: page.expectedRevision, expectedDateContext: page.expectedDateContext,

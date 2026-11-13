@@ -64,6 +64,15 @@ try {
     assert.equal(page.total, count);
     assert.deepEqual(page.records.map(record => record.values[groupBy]), Array.from({ length: 50 }, (_, index) => key(50000 + index)));
   });
+  const expanded = () => service.queryGroups(table.id, { groupBy, window: 'expandedRecords', limit: 50,
+    collapse: { defaultCollapsed: true, exceptions: [key(1), key(count - 2)] } });
+  expanded(); expanded();
+  measure('sparseExpandedWindow', expanded, layout => {
+    assert.equal(layout.window, 'expandedRecords'); assert.equal(layout.totalRows, 100003);
+    assert.equal(layout.totalGroups, 100001); assert.equal(layout.totalRecords, count);
+    assert.deepEqual(layout.groups.map(group => [group.key, group.count, group.recordOffset, group.rowStart, group.expandedOffset]),
+      [[key(1), 1, 1, 1, 0], [key(count - 2), 1, count - 2, count - 1, 1]]);
+  });
   assert.deepEqual(service.workspaceState({ tableId: table.id }), before);
   result.correctness = 'Every sample checked complete counts, typed keys, offsets, contiguous window coverage or matching record order; no workspace state changed.';
   result.summary = Object.fromEntries(Object.entries(result.samples).map(([name, samples]) => {
