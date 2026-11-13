@@ -1,4 +1,4 @@
-import { maxPageSize, maxTextLength, valueField, isLookupSummary, supportsScalarGrouping, relativeDatePeriods, maxRelativeDays,
+import { maxPageSize, maxTextLength, maxGroupLevels, valueField, isLookupSummary, supportsScalarGrouping, relativeDatePeriods, maxRelativeDays,
   type Field, type FieldFilter, type FilterGroup, type RecordQuery, type RelativeDateFilter, type Table } from '../../contracts/src/index.js';
 import { ServiceError } from './errors.js';
 import { validateValue } from './field-values.js';
@@ -28,11 +28,16 @@ export function parseQuery(table: Table, input: unknown): CheckedQuery {
   }
   const query: CheckedQuery = { offset: offset as number, limit: limit as number };
   if (source['groupBy'] !== undefined) {
-    const selected = field(source['groupBy']);
-    if (!supportsScalarGrouping(selected)) {
-      return invalid('Group by a text, number, checkbox, date, timestamp or single-select field.');
+    const values = Array.isArray(source['groupBy']) ? source['groupBy'] : [source['groupBy']];
+    if (!values.length || values.length > maxGroupLevels || new Set(values).size !== values.length) {
+      return invalid(`Group by one to ${maxGroupLevels} distinct scalar fields.`);
     }
-    query.groupBy = selected.id;
+    const ids = values.map(value => {
+      const selected = field(value);
+      if (!supportsScalarGrouping(selected)) return invalid('Group by a text, number, checkbox, date, timestamp or single-select field.');
+      return selected.id;
+    });
+    query.groupBy = ids.length === 1 ? ids[0]! : ids;
   }
   if (source['recordIds'] !== undefined) {
     const ids = source['recordIds'];

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { maxRelativeDays, relativeDatePeriods, maxGroupCollapseKeys } from '../../../packages/contracts/src/index.js';
+import { maxRelativeDays, relativeDatePeriods, maxGroupCollapseKeys, maxGroupLevels } from '../../../packages/contracts/src/index.js';
 
 const id = z.string().describe('Stable ID from the workspace schema or a query result; never a display name or position.');
 const version = z.number().int().describe('Version from the most recent read of this object.');
@@ -54,14 +54,18 @@ const page = {
   fields: z.array(id).exactOptional(), expectedRevision: version.describe('Reuse the first page revision for consistent continuation pages.').exactOptional(),
   expectedDateContext: z.string().regex(/^[a-f0-9]{64}$/).describe('Reuse dateContext from the first page or summary; DATA_CHANGED requires refreshing after the calendar period changes.').exactOptional(),
 };
-export const recordQuery = z.strictObject({ ...page, ...query, recordIds: z.array(id).exactOptional(), groupBy: id.exactOptional() });
+const groupFields = z.union([id, z.array(id).min(1).max(maxGroupLevels)]);
+export const recordQuery = z.strictObject({ ...page, ...query, recordIds: z.array(id).exactOptional(), groupBy: groupFields.exactOptional() });
 const summaryMeasures = z.array(z.strictObject({ fieldId: id, operation: z.enum(['sum', 'average', 'min', 'max']) })).max(12);
 export const recordGroups = z.strictObject({
   window: z.enum(['displayRows', 'expandedRecords']).describe('Offsets count display rows by default; expandedRecords skips all headings and collapsed records.').exactOptional(),
-  viewId: id.exactOptional(), expectedViewVersion: version.exactOptional(), groupBy: id.exactOptional(),
+  viewId: id.exactOptional(), expectedViewVersion: version.exactOptional(), groupBy: groupFields.exactOptional(),
   filter: filter.exactOptional(), search: z.string().exactOptional(),
   offset: page.offset, limit: page.limit, expectedRevision: page.expectedRevision, expectedDateContext: page.expectedDateContext,
-  collapse: z.strictObject({ defaultCollapsed: z.boolean(), exceptions: z.array(scalar).max(maxGroupCollapseKeys) }).exactOptional(),
+  collapse: z.union([
+    z.strictObject({ defaultCollapsed: z.boolean(), exceptions: z.array(scalar).max(maxGroupCollapseKeys) }),
+    z.strictObject({ defaultCollapsed: z.boolean(), exceptions: z.array(z.array(scalar).min(1).max(maxGroupLevels)).max(maxGroupCollapseKeys) }),
+  ]).exactOptional(),
   measures: summaryMeasures.exactOptional(),
 });
 export const recordSummary = z.strictObject({

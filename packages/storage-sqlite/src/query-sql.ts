@@ -2,7 +2,7 @@ import type { SQLInputValue } from 'node:sqlite';
 import type { CellValue, Field, FieldFilter, FilterGroup, Table } from '../../contracts/src/index.js';
 import type { CheckedQuery } from '../../core/src/record-query.js';
 import { lookupSql } from './lookups.js';
-import { valueField, isLookupSummary } from '../../contracts/src/index.js';
+import { groupFieldIds, valueField, isLookupSummary } from '../../contracts/src/index.js';
 import type { DateRange } from './relative-date-ranges.js';
 
 function sqlLiteral(value: string | number | null): string {
@@ -127,11 +127,12 @@ export function querySql(table: Pick<Table, 'id' | 'fields'>, query: CheckedQuer
   const countParameters = { ...parameters };
   if (!computed.size) sourceWhere = clauses.join(' AND ');
   const order: string[] = [];
-  if (query.groupBy) {
-    const field = fields.get(query.groupBy)!;
+  const groups = groupFieldIds(query.groupBy);
+  for (const id of groups) {
+    const field = fields.get(id)!;
     order.push(...groupOrder(field, raw(field)));
   }
-  order.push(...(query.sort ?? []).filter(sort => sort.fieldId !== query.groupBy).flatMap(sort => {
+  order.push(...(query.sort ?? []).filter(sort => !groups.includes(sort.fieldId)).flatMap(sort => {
     const expression = display(fields.get(sort.fieldId)!, forIndex ? '' : 'r', true);
     return [`(${expression} IS NULL) ASC`, `${expression} COLLATE NOCASE ${sort.direction === 'asc' ? 'ASC' : 'DESC'}`];
   }));

@@ -151,6 +151,12 @@ Optional `collapse: { defaultCollapsed: boolean, exceptions: ScalarValue[] }` fl
 
 Text (including URLs), numbers, booleans, dates, timestamps, scalar formulas, automatic fields and scalar lookup summaries are supported. Arrays, raw links and attachments are not scalar grouping keys. Groups use raw ascending scalar order, with null last; text ordering is case-sensitive. Single-select groups use configured option order. Null always has a heading; checkbox values and configured options retain empty headings. Empty text and null are distinct. These group types also work in saved grids and the desktop; see [grouped records](grouped-records.md).
 
+For nested reads, set `groupBy` to an ordered array of two or three distinct scalar field IDs. `queryRecords` accepts the same array and sorts within each final group. A one-element array normalizes to the existing single-level response. Saved views and desktop configuration still accept one grouping field in this delivery step.
+
+Nested segments also contain `path: ScalarValue[]` and `leaf: boolean`. A path identifies the group by its complete ancestry; identical child values under different parents are distinct. `key` and `label` describe the last path element. Parent counts and numeric measures cover all matching descendants. Expanded parent headings occupy one display row; only expanded leaves contain record rows. `recordOffset` is the first matching source record position, independent of collapse. `totalGroups` counts visible headings, `totalRows` counts those headings plus expanded records, and `totalRecords` always counts each matching record once. A bounded window can begin beneath an offscreen parent without returning that parent's heading.
+
+Nested collapse uses `{ defaultCollapsed, exceptions: ScalarValue[][] }`, with paths from one element through the configured depth. Each path toggles only that group's own state; a collapsed ancestor hides its descendants while retaining their choices. Keys use the corresponding field's checked types, including null, false and zero. Paths must be distinct after normalization. `expandedRecords` windows return only expanded leaves, with their original source positions and expanded offsets. Root groups retain configured empty options and null; child groups contain actual matching values, avoiding a Cartesian product of empty option combinations. These read-only settings do not persist or change the database format.
+
 ### Record pages
 
 ```json

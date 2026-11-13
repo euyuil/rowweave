@@ -4,8 +4,9 @@ import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { summarize } from './record-summary.js';
 import { groupLayout } from './group-layout.js';
+import { nestedGroupLayout } from './nested-group-layout.js';
 import type { CheckedGroupQuery } from '../../core/src/record-groups.js';
-import type { GroupCollapse, GroupLayout } from '../../contracts/src/index.js';
+import { groupFieldIds, type GroupCollapse, type GroupPathCollapse, type GroupLayout } from '../../contracts/src/index.js';
 import type { CheckedSummary } from '../../core/src/record-summary.js';
 import type { RecordSummary, RecordHistoryQuery, RecordHistoryPage, RecordChangeDetail, RecordRestore, RecordTrashPage } from '../../contracts/src/index.js';
 import { RecordHistory, type HistoryContext } from './record-history.js';
@@ -440,11 +441,14 @@ export class SqliteRecordStore implements RecordStore {
     }, 'DEFERRED');
   }
 
-  queryGroups(table: Table, query: CheckedGroupQuery, collapse: GroupCollapse, view?: GridView): GroupLayout {
+  queryGroups(table: Table, query: CheckedGroupQuery, collapse: GroupCollapse | GroupPathCollapse, view?: GridView): GroupLayout {
     return this.transaction(() => {
       const { current, sql, dateContext } = this.prepareQuery(table, query, view);
-      const field = current.fields.find(field => field.id === query.groupBy)!;
-      return { ...groupLayout(this.db, current, field, collapse, sql.where, sql.countParameters, query.offset, query.limit, query.window, query.measures),
+      const groups = groupFieldIds(query.groupBy).map(id => current.fields.find(field => field.id === id)!);
+      const layout = groups.length === 1
+        ? groupLayout(this.db, current, groups[0]!, collapse as GroupCollapse, sql.where, sql.countParameters, query.offset, query.limit, query.window, query.measures)
+        : nestedGroupLayout(this.db, current, groups, collapse as GroupPathCollapse, sql.where, sql.countParameters, query.offset, query.limit, query.window, query.measures);
+      return { ...layout,
         ...(dateContext ? { dateContext } : {}), ...(view ? { viewId: view.id, viewVersion: view.version } : {}) };
     }, 'DEFERRED');
   }

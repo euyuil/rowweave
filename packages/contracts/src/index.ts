@@ -251,9 +251,13 @@ export interface SortRule {
   direction: 'asc' | 'desc';
 }
 
+export const maxGroupLevels = 3;
+export const groupFieldIds = (groupBy: string | readonly string[] | undefined): readonly string[] =>
+  groupBy === undefined ? [] : typeof groupBy === 'string' ? [groupBy] : groupBy;
+
 export interface RecordQuery {
   recordIds?: string[];
-  groupBy?: string;
+  groupBy?: string | string[];
   offset?: number;
   limit?: number;
   filter?: FilterGroup;
@@ -306,15 +310,16 @@ export interface RecordSummary {
 
 export const maxGroupCollapseKeys = 100_000;
 export interface GroupCollapse { defaultCollapsed: boolean; exceptions: ScalarValue[] }
+export interface GroupPathCollapse { defaultCollapsed: boolean; exceptions: ScalarValue[][] }
 export type GroupWindow = 'displayRows' | 'expandedRecords';
 export interface GroupQuery extends Pick<RecordQuery, 'groupBy' | 'filter' | 'search' | 'offset' | 'limit' | 'expectedRevision' | 'expectedDateContext'> {
   window?: GroupWindow;
   measures?: SummaryMeasure[];
   viewId?: string;
   expectedViewVersion?: number;
-  collapse?: GroupCollapse;
+  collapse?: GroupCollapse | GroupPathCollapse;
 }
-export interface GroupSegment { key: ScalarValue; label: string; count: number; recordOffset: number; rowStart: number; expandedOffset: number; collapsed: boolean; values?: Array<number | null> }
+export interface GroupSegment { key: ScalarValue; label: string; count: number; recordOffset: number; rowStart: number; expandedOffset: number; collapsed: boolean; values?: Array<number | null>; path?: ScalarValue[]; leaf?: boolean }
 export interface GroupLayout {
   window: GroupWindow;
   groups: GroupSegment[];
