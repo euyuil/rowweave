@@ -160,6 +160,7 @@ export async function verifyCsvWorkflow(page, application, directory) {
   await page.waitForFunction(() => document.querySelector('.grid-host')?.getAttribute('aria-busy') === 'false');
   const bounds = await page.locator('canvas').first().boundingBox();
   await page.mouse.click(bounds.x + 100, bounds.y + 58);
+  await page.waitForFunction(() => document.querySelector('canvas')?.contains(document.activeElement));
   await page.keyboard.press('Enter');
   await page.getByRole('textbox', { name: 'Cell value', exact: true }).fill('Unsaved');
   await page.getByText('Editing cell…', { exact: true }).waitFor();
