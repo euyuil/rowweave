@@ -108,12 +108,21 @@ export interface RecordPage {
   records: RowRecord[];
 }
 
-export type FilterOperator = 'eq' | 'neq' | 'contains' | 'gt' | 'gte' | 'lt' | 'lte' | 'isEmpty' | 'isNotEmpty' | 'hasAny';
+export const relativeDatePeriods = ['today', 'yesterday', 'tomorrow', 'thisWeek', 'lastWeek', 'nextWeek', 'thisMonth', 'lastMonth', 'nextMonth', 'pastDays', 'nextDays'] as const;
+export const maxRelativeDays = 3660;
+export interface RelativeDateFilter {
+  period: typeof relativeDatePeriods[number];
+  timeZone: string;
+  days?: number;
+}
+
+export type FilterOperator = 'eq' | 'neq' | 'contains' | 'gt' | 'gte' | 'lt' | 'lte' | 'isEmpty' | 'isNotEmpty' | 'hasAny' | 'relativeDate';
 
 export interface FieldFilter {
   fieldId: string;
   operator: FilterOperator;
   value?: CellValue;
+  relative?: RelativeDateFilter;
 }
 
 export interface FilterGroup {
@@ -135,12 +144,14 @@ export interface RecordQuery {
   search?: string;
   fields?: string[];
   expectedRevision?: number;
+  expectedDateContext?: string;
 }
 
 export interface QueryPage extends RecordPage {
   total: number;
   revision: number;
   schemaVersion: number;
+  dateContext?: string;
 }
 
 export interface SummaryMeasure {
@@ -158,6 +169,7 @@ export interface SummaryRequest {
   offset?: number;
   limit?: number;
   expectedRevision?: number;
+  expectedDateContext?: string;
 }
 
 export interface SummaryValues {
@@ -172,6 +184,7 @@ export interface RecordSummary {
   offset: number;
   revision: number;
   schemaVersion: number;
+  dateContext?: string;
 }
 
 export interface ViewColumn {
@@ -210,7 +223,7 @@ export interface ViewUpdate extends Partial<ViewCreate> {
   expectedVersion: number;
 }
 
-export interface ViewPageRequest extends Pick<RecordQuery, 'offset' | 'limit' | 'fields' | 'expectedRevision' | 'search'> {
+export interface ViewPageRequest extends Pick<RecordQuery, 'offset' | 'limit' | 'fields' | 'expectedRevision' | 'expectedDateContext' | 'search'> {
   expectedViewVersion?: number;
   lane?: string | null;
 }

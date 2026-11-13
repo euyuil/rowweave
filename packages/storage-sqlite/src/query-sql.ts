@@ -3,6 +3,7 @@ import type { CellValue, Field, FieldFilter, FilterGroup, Table } from '../../co
 import type { CheckedQuery } from '../../core/src/record-query.js';
 import { lookupSql } from './lookups.js';
 import { valueField, isLookupSummary } from '../../contracts/src/index.js';
+import type { DateRange } from './relative-date-ranges.js';
 
 function sqlLiteral(value: string | number | null): string {
   if (value === null) return 'NULL';
@@ -10,7 +11,8 @@ function sqlLiteral(value: string | number | null): string {
   return value.includes('\0') ? `CAST(X'${Buffer.from(value).toString('hex')}' AS TEXT)` : `'${value.replaceAll("'", "''")}'`;
 }
 
-export function querySql(table: Pick<Table, 'id' | 'fields'>, query: CheckedQuery, targets: Map<string, Table>, forIndex = false) {
+export function querySql(table: Pick<Table, 'id' | 'fields'>, query: CheckedQuery, targets: Map<string, Table>, forIndex = false,
+  dateRanges: ReadonlyMap<FieldFilter, DateRange> = new Map()) {
   const fields = new Map(table.fields.map(field => [field.id, field]));
   const parameters: Record<string, SQLInputValue> = forIndex ? {} : { ':table': table.id };
   let parameterIndex = 0;
@@ -63,6 +65,12 @@ export function querySql(table: Pick<Table, 'id' | 'fields'>, query: CheckedQuer
     }
     const field = fields.get(filter.fieldId)!;
     const value = raw(field);
+    if (filter.operator === 'relativeDate') {
+      const [start, end] = dateRanges.get(filter)!;
+      const range = (expression: string) => `(${expression} >= ${bind(start)} AND ${expression} < ${bind(end)})`;
+      return field.type === 'lookup' && !isLookupSummary(field)
+        ? `EXISTS (SELECT 1 FROM json_each(${value}) entry WHERE ${range('entry.value')})` : range(value);
+    }
     if (field.type === 'lookup' && !isLookupSummary(field)) {
       if (filter.operator === 'isEmpty' || filter.operator === 'isNotEmpty') {
         const hasValue = `EXISTS (SELECT 1 FROM json_each(${value}) entry WHERE entry.value IS NOT NULL AND entry.value <> '')`;

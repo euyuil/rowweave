@@ -61,6 +61,39 @@ async function setup(t: Context) {
   return { service, server, token, environment };
 }
 
+test('MCP and CLI preserve relative date rules and reject continuation after calendar rollover', async t => {
+  let now = new Date('2026-07-01T23:59:00Z');
+  const service = new RecordService(fixture(t, null, () => now).open());
+  const token = randomBytes(32).toString('hex');
+  const server = await startServer({ service, token }); t.after(() => server.close());
+  const environment = { ROWWEAVE_URL: server.url, ROWWEAVE_TOKEN: token };
+  const { json, call } = await connect(t, environment);
+  let table = await json<Table>('tables_create', { name: 'Relative dates' });
+  table = await json<Table>('fields_create', { tableId: table.id, input: { expectedVersion: table.version, name: 'Due', type: 'date' } });
+  const due = table.fields[1]!.id;
+  await json<BatchResult>('records_create', { tableId: table.id, records: ['2026-07-01', '2026-07-02'].map(value => ({ values: { [due]: value } })) });
+  const query = { filter: { conjunction: 'and', conditions: [{ fieldId: due, operator: 'relativeDate', relative: { period: 'today', timeZone: 'UTC' } }] } };
+  const view = await json<GridView>('views_create', { tableId: table.id, input: { name: 'Today', query } });
+  const first = await json<QueryPage>('views_query', { tableId: table.id, viewId: view.id, query: {} });
+  assert.equal(first.records[0]!.values[due], '2026-07-01'); assert.match(first.dateContext!, /^[a-f0-9]{64}$/);
+  const guard = { expectedRevision: first.revision, expectedDateContext: first.dateContext };
+  const summary = await json<{ dateContext: string; totals: { count: number } }>('records_summarize', { tableId: table.id, input: { viewId: view.id, ...guard } });
+  assert.equal(summary.totals.count, 1); assert.equal(summary.dateContext, first.dateContext);
+  const directory = await mkdtemp(join(tmpdir(), 'rowweave-dates-cli-')); t.after(() => rm(directory, { recursive: true, force: true }));
+  const input = join(directory, 'query.json'); await writeFile(input, JSON.stringify({ ...query, ...guard }));
+  const args = [resolve('apps/cli/dist/rowweave.js'), 'records', 'query', table.id, '--input', input];
+  const cli = JSON.parse((await runFile(process.execPath, args, { env: { ...process.env, ...environment } })).stdout) as QueryPage;
+  assert.equal(cli.dateContext, first.dateContext); assert.equal(cli.total, 1);
+  now = new Date('2026-07-02T00:00:00Z');
+  const stale = await call('views_query', { tableId: table.id, viewId: view.id, query: guard });
+  assert.equal(stale.isError, true); assert.match(text(stale), /DATA_CHANGED/);
+  await assert.rejects(runFile(process.execPath, args, { env: { ...process.env, ...environment } }), error => /DATA_CHANGED/.test(String((error as { stderr: string }).stderr)));
+  assert.equal((await json<QueryPage>('views_query', { tableId: table.id, viewId: view.id, query: {} })).records[0]!.values[due], '2026-07-02');
+  assert.equal((await call('records_query', { tableId: table.id, query: { filter: { conjunction: 'and', conditions: [
+    { fieldId: due, operator: 'relativeDate', relative: { period: 'pastDays', timeZone: 'UTC', days: 0 } },
+  ] } } })).isError, true);
+});
+
 test('MCP and CLI create paired fields and update the same relationship from either side', async t => {
   const { environment, service } = await setup(t);
   const { json, call } = await connect(t, environment);

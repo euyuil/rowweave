@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { maxRelativeDays, relativeDatePeriods } from '../../../packages/contracts/src/index.js';
 
 const id = z.string().describe('Stable ID from the workspace schema or a query result; never a display name or position.');
 const version = z.number().int().describe('Version from the most recent read of this object.');
@@ -32,7 +33,10 @@ export const fieldUpdate = z.strictObject({
   precision: z.number().int().nullable().exactOptional(),
 });
 export const conversion = z.strictObject({ ...expectedVersion, field });
-const condition = z.strictObject({ fieldId: id, operator: z.enum(['eq', 'neq', 'contains', 'gt', 'gte', 'lt', 'lte', 'isEmpty', 'isNotEmpty', 'hasAny']), value: value.exactOptional() });
+const condition = z.strictObject({ fieldId: id, operator: z.enum(['eq', 'neq', 'contains', 'gt', 'gte', 'lt', 'lte', 'isEmpty', 'isNotEmpty', 'hasAny', 'relativeDate']), value: value.exactOptional(),
+  relative: z.strictObject({ period: z.enum(relativeDatePeriods), timeZone: z.string().describe('Named time zone, such as Asia/Shanghai or UTC.'),
+    days: z.int().min(1).max(maxRelativeDays).describe('For pastDays/nextDays only; includes today. Weeks start Monday.').exactOptional() }).exactOptional(),
+});
 const filter = z.strictObject({
   conjunction: z.enum(['and', 'or']),
   get conditions(): z.ZodArray<z.ZodUnion<[typeof condition, typeof filter]>> { return z.array(z.union([condition, filter])); },
@@ -45,13 +49,14 @@ const query = {
 const page = {
   offset: z.number().int().exactOptional(), limit: z.number().int().describe('At most 500; use small pages and project only needed fields.').exactOptional(),
   fields: z.array(id).exactOptional(), expectedRevision: version.describe('Reuse the first page revision for consistent continuation pages.').exactOptional(),
+  expectedDateContext: z.string().regex(/^[a-f0-9]{64}$/).describe('Reuse dateContext from the first page or summary; DATA_CHANGED requires refreshing after the calendar period changes.').exactOptional(),
 };
 export const recordQuery = z.strictObject({ ...page, ...query, recordIds: z.array(id).exactOptional() });
 export const recordSummary = z.strictObject({
   viewId: id.exactOptional(), expectedViewVersion: version.exactOptional(),
   filter: filter.exactOptional(), search: z.string().exactOptional(), groupBy: id.exactOptional(),
   measures: z.array(z.strictObject({ fieldId: id, operation: z.enum(['sum', 'average', 'min', 'max']) })).max(12).exactOptional(),
-  offset: page.offset, limit: page.limit, expectedRevision: page.expectedRevision,
+  offset: page.offset, limit: page.limit, expectedRevision: page.expectedRevision, expectedDateContext: page.expectedDateContext,
 });
 export const recordCreate = z.array(z.strictObject({ values }));
 export const recordUpdate = z.array(z.strictObject({ id, ...expectedVersion, values }));

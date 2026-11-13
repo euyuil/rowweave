@@ -40,6 +40,7 @@ export class TableModel {
   private generation = 0;
   private disposed = false;
   private queryRevision: number | undefined;
+  private queryDateContext: string | undefined;
   private query: TableQuery = {};
   private visibleFields: Field[] = [];
   private readonly listeners = new Set<() => void>();
@@ -63,6 +64,7 @@ export class TableModel {
   getSnapshot = () => this.revision;
   get queryVersion(): number { return this.generation; }
   get dataRevision(): number | undefined { return this.queryRevision; }
+  get dateContext(): string | undefined { return this.queryDateContext; }
   get canUndo(): boolean { return !this.saving && this.undoStack.length > 0; }
   get canRedo(): boolean { return !this.saving && this.redoStack.length > 0; }
   get fields(): Field[] { return this.visibleFields; }
@@ -131,7 +133,7 @@ export class TableModel {
   private failRead(error: unknown): never {
     if (error instanceof ApiFailure && ['DATA_CHANGED', 'SCHEMA_CONFLICT', 'VIEW_CONFLICT'].includes(error.code)) {
       this.stale = true;
-      this.error = 'The table changed. Refresh to load current rows; your drafts are retained.';
+      this.error = `${error.message} Refresh to load current rows; your drafts are retained.`;
       this.emit();
     }
     throw error;
@@ -156,12 +158,14 @@ export class TableModel {
     const controller = new AbortController();
     const task = this.api.readPage(index * this.pageSize, this.pageSize, {
       ...this.query, ...(this.queryRevision === undefined ? {} : { expectedRevision: this.queryRevision }),
+      ...(this.queryDateContext ? { expectedDateContext: this.queryDateContext } : {}),
     }, controller.signal).then(page => {
       if (generation !== this.generation) return this.loadPage(index);
       if (page.schemaVersion !== this.table!.version) {
         throw new ApiFailure('SCHEMA_CONFLICT', 'The table schema changed. Reload before editing.', 409);
       }
       this.queryRevision = page.revision;
+      this.queryDateContext = page.dateContext;
       this.rowCount = page.total;
       this.pages.set(index, page);
       while (this.pages.size > this.maxPages) this.pages.delete(this.pages.keys().next().value!);
@@ -218,6 +222,7 @@ export class TableModel {
         const controller = new AbortController();
         const request = this.api.readPage(offset, limit, { ...this.query,
           ...(this.queryRevision === undefined ? {} : { expectedRevision: this.queryRevision }),
+          ...(this.queryDateContext ? { expectedDateContext: this.queryDateContext } : {}),
         }, controller.signal);
         this.batchReads.set(controller, request);
         let page: QueryPage;
@@ -227,6 +232,7 @@ export class TableModel {
         if (page.schemaVersion !== this.table!.version) throw new ApiFailure('SCHEMA_CONFLICT', 'The table schema changed. Reload before editing.', 409);
         if (page.records.length !== limit) throw new Error('The service returned an incomplete page.');
         this.queryRevision = page.revision;
+        this.queryDateContext = page.dateContext;
         for (const record of page.records) {
           const draft = this.edits.drafts.get(record.id);
           if (draft && draft.base.version !== record.version) this.conflicted = true;
@@ -365,13 +371,14 @@ export class TableModel {
     this.requests.clear();
     this.pages.clear();
     this.queryRevision = undefined;
+    this.queryDateContext = undefined;
     this.edits = { ...this.edits, rows: new Map() };
     this.stale = false;
     this.undoStack = [];
     this.redoStack = [];
   }
 
-  async setQuery(query: Omit<TableQuery, 'offset' | 'limit' | 'expectedRevision'>): Promise<void> {
+  async setQuery(query: Omit<TableQuery, 'offset' | 'limit' | 'expectedRevision' | 'expectedDateContext'>): Promise<void> {
     if (this.saving) throw new Error('Wait for the current save to finish.');
     this.query = query;
     this.updateFields();

@@ -7,8 +7,9 @@ import { GroupedRows } from '../../client/src/grouped-rows.js';
 export function useGroupedRows(model: TableModel, api: WorkspaceApi, view: GridView | undefined, search: string) {
   const table = model.table;
   const revision = model.dataRevision;
+  const dateContext = model.dateContext;
   const enabled = view?.type === 'grid' && !!view.groupBy;
-  const key = JSON.stringify([view?.id, view?.version, model.queryVersion, table?.version, revision, search]);
+  const key = JSON.stringify([view?.id, view?.version, model.queryVersion, table?.version, revision, dateContext, search]);
   const namespace = `${view?.id}:${view?.groupBy}`;
   const [summaries, setSummary] = useState<{ key: string; value: RecordSummary }>();
   const [failure, setFailure] = useState<{ key: string; message: string }>();
@@ -18,7 +19,7 @@ export function useGroupedRows(model: TableModel, api: WorkspaceApi, view: GridV
     const controller = new AbortController();
     void (async () => {
       const result = await api.summarizeRecords(table.id, { viewId: view.id, expectedViewVersion: view.version,
-        expectedRevision: revision, groupBy: view.groupBy!, search, limit: 500 }, controller.signal);
+        expectedRevision: revision, ...(dateContext ? { expectedDateContext: dateContext } : {}), groupBy: view.groupBy!, search, limit: 500 }, controller.signal);
       if (controller.signal.aborted) return;
       if (result.schemaVersion !== table.version) throw new Error('The table schema changed. Reload to see the current groups.');
       setSummary({ key, value: result });

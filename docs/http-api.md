@@ -68,6 +68,8 @@ Records referenced by another record or a linked-field default cannot be deleted
 
 ## Queries
 
+Date and timestamp fields support [relative calendar filters](relative-date-filters.md), including saved time zones and dynamic week/month/day ranges. Query and summary responses containing these filters also return `dateContext`. Reuse it as `expectedDateContext` on continuation pages and paired summary/board-lane requests. `DATA_CHANGED` requires restarting pagination when the calendar range changes, even if the data revision is unchanged.
+
 ### Summaries
 
 Use `POST /tables/:table/summary` to summarize the entire matching set, independently of loaded record pages:
@@ -114,6 +116,7 @@ Filters combine `and`/`or` groups with at most 100 conditions and four nested le
 - `eq`, `neq`: scalar equality/inequality, including null. For multiple-select/relation fields, use these only with null; use `hasAny` to match IDs.
 - `contains`: literal, case-insensitive substring matching for text/multiline fields.
 - `gt`, `gte`, `lt`, `lte`: typed number/date/timestamp comparisons.
+- `relativeDate`: date/timestamp period with `relative: { period, timeZone, days? }` instead of `value`; see the [periods and time-zone contract](relative-date-filters.md).
 - `hasAny`: one or more existing option IDs or linked-record IDs (an empty list matches none).
 - `isEmpty`, `isNotEmpty`: null, empty text, and empty arrays count as empty; zero and false do not.
 
@@ -130,7 +133,7 @@ Sort rules are ordered and use distinct fields with `asc`/`desc`. Nulls sort las
 | `GET /tables/:table/views/:view` | None | `GridView` / `getView(id, viewId)` |
 | `PATCH /tables/:table/views/:view` | `{ expectedVersion, name?, query?, columns?, rowHeight?, frozenColumns?, type?, groupBy? }` | `GridView` / `updateView(id, viewId, input)` |
 | `DELETE /tables/:table/views/:view` | `{ expectedVersion }` | `{ deleted: viewId }` / `deleteView(id, viewId, version)` |
-| `POST /tables/:table/views/:view/query` | `{ offset?, limit?, fields?, expectedRevision?, expectedViewVersion?, search?, lane? }` | QueryPage plus `viewId`, `viewVersion` / `queryView(id, viewId, input, signal?)` |
+| `POST /tables/:table/views/:view/query` | `{ offset?, limit?, fields?, expectedRevision?, expectedDateContext?, expectedViewVersion?, search?, lane? }` | QueryPage plus `viewId`, `viewVersion` / `queryView(id, viewId, input, signal?)` |
 
 A saved view has `id`, `tableId`, `name`, `version`, `query`, `columns`, `rowHeight`, `frozenColumns`, and `type`. Its query contains only `filter`, `sort`, and `search`. Columns contain every field once, in display order, as `{ fieldId, width, hidden }`; widths are integer pixels from 50 to 1,000. At least one column and one view remain visible/available. Omitted columns show every field in schema order.
 
