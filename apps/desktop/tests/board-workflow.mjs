@@ -54,6 +54,9 @@ export async function verifyBoardWorkflow(page) {
   await doing.getByRole('button', { name: 'Task 000', exact: true }).waitFor();
   await todo.getByText('500', { exact: true }).waitFor();
   await doing.getByRole('button', { name: 'Task 000', exact: true }).click();
+  await page.locator('.drawer-dialog').waitFor();
+  assert.ok(await page.locator('.drawer-dialog .dialog-actions').evaluate(element => Math.abs(element.getBoundingClientRect().bottom - innerHeight) <= 2));
+  await page.screenshot({ path: '.artifacts/desktop-board-record-panel.png' });
   assert.equal(await page.getByLabel('Notes', { exact: true }).inputValue(), 'Hidden note 0');
   await page.getByLabel('Name', { exact: true }).fill('Moved task');
   await page.getByRole('button', { name: 'Save record', exact: true }).click();

@@ -22,7 +22,7 @@ The next bounded iteration improves the existing workflows' layout and interacti
 
 - [x] Compact workspace navigation with visible, keyboard-accessible view tabs and more room for records. Focused and full desktop workflows passed, including retained drafts/search, selected-view persistence, keyboard activation and 13 views at 1024 × 768. The narrow-window and populated-view screenshots were visually reviewed.
 - [x] Contextual filter and sort controls that preserve view versions, query drafts and visible table context. Focused and full desktop workflows passed, including nested typed filters, independent rule saves, temporary search, retained grid drafts, cancellation/focus, empty OR badges and concurrent-update errors. Both 1024 × 768 panel screenshots were visually reviewed.
-- [ ] Record details in a side panel with clear field/value hierarchy and explicit save/discard behavior.
+- [x] Record details in a side panel with clear field/value hierarchy and explicit save/discard behavior. Focused and full desktop workflows passed, covering many-field scrolling, formatted titles, grid and board entry points, close/Escape discard choices, cancellation without writes, Ctrl+S and retained conflict drafts. The 1024 × 768 detail screenshot and the board-panel screenshot were visually reviewed.
 - [ ] Field configuration near its column, with bounded scrolling, conversion feedback and preserved schema safeguards.
 
 ## Verification evidence
