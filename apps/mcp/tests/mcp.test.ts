@@ -65,7 +65,7 @@ async function setup(t: Context, clock?: () => Date) {
   return { service, server, token, environment };
 }
 
-test('SDK, MCP and CLI share bounded group positions and matching scalar record queries', async t => {
+test('SDK, MCP and CLI share bounded scalar and nested group positions with matching record queries', async t => {
   const { service, server, token, environment } = await setup(t), { json, call } = await connect(t, environment);
   const api = createWorkspaceClient({ url: server.url, token });
   let table = await api.createTable({ name: 'Group windows' });
@@ -115,6 +115,17 @@ test('SDK, MCP and CLI share bounded group positions and matching scalar record 
   assert.equal(cleared.groupMeasures, undefined);
   const staleView = await call('records_groups', { tableId: table.id, input: savedInput });
   assert.equal(staleView.isError, true); assert.equal(JSON.parse(text(staleView)).error.code, 'VIEW_CONFLICT');
+  const nestedInput = { groupBy: [table.primaryFieldId, amount], measures: input.measures, window: 'expandedRecords' as const, limit: 2,
+    collapse: { defaultCollapsed: true, exceptions: [['Group 601'], ['Group 601', 601]] } };
+  const nested = await api.queryGroups(table.id, nestedInput);
+  assert.equal(nested.totalGroups, 609); assert.equal(nested.totalRows, 610);
+  assert.deepEqual(nested.groups.map(group => [group.path, group.leaf, group.recordOffset, group.values]), [[['Group 601', 601], true, 601, [601]]]);
+  assert.deepEqual(await json<GroupLayout>('records_groups', { tableId: table.id, input: nestedInput }), nested);
+  const nestedCli = await runFile(process.execPath, [resolve('apps/cli/dist/rowweave.js'), 'records', 'groups', table.id, '--json', JSON.stringify(nestedInput)],
+    { env: { ...process.env, ...environment } });
+  assert.deepEqual(JSON.parse(nestedCli.stdout), nested);
+  const nestedQuery = { ...query, groupBy: nestedInput.groupBy };
+  assert.deepEqual(await json<QueryPage>('records_query', { tableId: table.id, query: nestedQuery }), await api.queryRecords(table.id, nestedQuery));
   const invalid = await call('records_groups', { tableId: table.id, input: { ...input, collapse: { defaultCollapsed: false, exceptions: [null, null] } } });
   assert.equal(invalid.isError, true); assert.equal(JSON.parse(text(invalid)).error.code, 'INVALID_QUERY');
   service.createRecords(table.id, [{ values: {} }]);

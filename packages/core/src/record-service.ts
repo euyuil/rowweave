@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { isReadOnlyField, maxPageSize, maxBatchRecords, maxBatchCells, maxFields, tableId,
+import { groupFieldIds, isReadOnlyField, maxPageSize, maxBatchRecords, maxBatchCells, maxFields, tableId,
   type BatchResult, type CellValue, type ConversionPreview, type DeleteResult, type Field, type GridView, type QueryPage, type RecordDelete, type RecordPage, type RecordUpdate, type RowRecord, type Table, type ViewPage } from '../../contracts/src/index.js';
 import { schemaName, schemaObject, schemaVersion } from './schema-validation.js';
 import { parseField } from './field-schema.js';
@@ -18,8 +18,8 @@ import { historyId, parseHistoryQuery, parseRecordRestore } from './record-histo
 import type { RecordBatchPage, RecordBatchChanges, RecordBatchUndoResult } from '../../contracts/src/index.js';
 import type { CsvImportResult, CsvPreview } from '../../contracts/src/index.js';
 import type { WorkspaceState, WorkspaceStateRequest } from '../../contracts/src/index.js';
-import type { GroupCollapse, GroupLayout } from '../../contracts/src/index.js';
-import { parseGroupCollapse, type CheckedGroupQuery } from './record-groups.js';
+import type { GroupCollapse, GroupPathCollapse, GroupLayout } from '../../contracts/src/index.js';
+import { parseGroupCollapse, parseGroupPaths, type CheckedGroupQuery } from './record-groups.js';
 export { ServiceError } from './errors.js';
 
 export interface RecordStore {
@@ -54,7 +54,7 @@ export interface RecordStore {
   applyConversion(tableId: string, version: number, field: Field, convert: (value: CellValue) => CellValue): Table;
   queryRecords(table: Table, query: CheckedQuery, view?: GridView): QueryPage;
   summarizeRecords(table: Table, query: CheckedQuery, summary: CheckedSummary, view?: GridView): RecordSummary;
-  queryGroups(table: Table, query: CheckedGroupQuery, collapse: GroupCollapse, view?: GridView): GroupLayout;
+  queryGroups(table: Table, query: CheckedGroupQuery, collapse: GroupCollapse | GroupPathCollapse, view?: GridView): GroupLayout;
   listViews(tableId: string): GridView[];
   getView(tableId: string, viewId: string): GridView;
   saveView(table: Table, view: GridView, expectedVersion?: number): GridView;
@@ -296,7 +296,8 @@ export class RecordService {
       filter: view?.query.filter ?? item['filter'], search: item['search'] === undefined ? view?.query.search : item['search'],
       offset: item['offset'], limit: item['limit'], expectedRevision: item['expectedRevision'], expectedDateContext: item['expectedDateContext'] });
     if (!query.groupBy) throw new ServiceError('INVALID_QUERY', 'Choose a grouping field or a saved grouped grid.');
-    const collapse = parseGroupCollapse(table.fields.find(field => field.id === query.groupBy)!, item['collapse']);
+    const groups = groupFieldIds(query.groupBy).map(id => table.fields.find(field => field.id === id)!);
+    const collapse = groups.length === 1 ? parseGroupCollapse(groups[0]!, item['collapse']) : parseGroupPaths(groups, item['collapse']);
     return this.store.queryGroups(table, { ...query, window, measures: parseSummary(table, {
       measures: item['measures'] === undefined ? view?.groupMeasures : item['measures'],
     }).measures }, collapse, view);
