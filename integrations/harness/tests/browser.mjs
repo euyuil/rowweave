@@ -216,6 +216,28 @@ app.on('window-all-closed', () => app.quit());`);
   service.updateView(table.id, currentGroupedView.id, { expectedVersion: currentGroupedView.version, groupBy: null });
   service.deleteField(table.id, done, { expectedVersion: groupedTable.version });
   await page.getByRole('button', { name: 'Collapse all', exact: true }).waitFor({ state: 'detached' });
+  let boardTable = service.getTable(table.id);
+  boardTable = service.createField(table.id, { expectedVersion: boardTable.version, name: 'Status', type: 'singleSelect',
+    options: [{ id: 'first', name: 'First' }, { id: 'second', name: 'Second' }] });
+  const status = boardTable.fields.at(-1).id;
+  service.updateBatch(records().map((record, index) => ({ id: record.id, expectedVersion: record.version, values: { [status]: index ? 'second' : 'first' } })), table.id);
+  const beforeBoard = service.listViews(table.id)[0];
+  service.updateView(table.id, beforeBoard.id, { expectedVersion: beforeBoard.version, type: 'board', groupBy: status });
+  const firstLane = page.getByRole('region', { name: 'First column', exact: true });
+  const secondLane = page.getByRole('region', { name: 'Second column', exact: true });
+  await firstLane.getByRole('button', { name: 'Unsaved 汉字', exact: true }).waitFor();
+  const boardMoved = records()[0];
+  service.updateBatch([{ id: boardMoved.id, expectedVersion: boardMoved.version, values: { [status]: 'second' } }], table.id);
+  await secondLane.getByRole('button', { name: 'Unsaved 汉字', exact: true }).waitFor();
+  await secondLane.getByLabel('2 records', { exact: true }).waitFor();
+  assert.equal(await hostDraft.inputValue(), 'Host draft 中文');
+  assert.equal(await hostDraft.evaluate(element => element === document.activeElement), true);
+  await page.screenshot({ path: '.artifacts/desktop-harness-board-refresh.png' });
+  const currentBoard = service.listViews(table.id)[0];
+  service.updateView(table.id, currentBoard.id, { expectedVersion: currentBoard.version, type: 'grid', groupBy: null });
+  service.deleteField(table.id, status, { expectedVersion: boardTable.version });
+  await page.getByRole('region', { name: 'First column', exact: true }).waitFor({ state: 'detached' });
+  assert.equal(await hostDraft.evaluate(element => element === document.activeElement), true);
   await verifyCrossInterfaceWorkflow({ url: serviceServer.url, token }, page, table.id, process.argv.includes('--packaged'));
   await page.evaluate(() => {
     window.originalUrlOpener = window.open;
