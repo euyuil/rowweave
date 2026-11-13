@@ -38,6 +38,7 @@ import { verifyAttachmentWorkflow } from './attachment-workflow.mjs';
 import { verifyBackgroundCalculations } from './background-calculations.mjs';
 import { verifyCalculationControls } from './calculation-controls-workflow.mjs';
 import { verifyExternalRefresh } from './external-refresh-workflow.mjs';
+import { verifyCatalogRefresh } from './catalog-refresh-workflow.mjs';
 
 const dataDirectory = await mkdtemp(join(tmpdir(), 'rowweave-workspace-'));
 await mkdir('.artifacts', { recursive: true });
@@ -295,6 +296,7 @@ try {
   await verifyGroupedWorkflow(page, application);
   await verifyRelativeDateWorkflow(page, application);
   await verifyExternalRefresh(page, application);
+  await verifyCatalogRefresh(page, application);
   console.log('External refresh acceptance passed; restarting the workspace.');
   await application.close();
   application = undefined;

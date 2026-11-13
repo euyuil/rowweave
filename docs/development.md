@@ -204,6 +204,8 @@ Desktop pagination uses the saved view ID and version as well as the data revisi
 
 Ordinary ungrouped grids also [detect and apply external changes automatically](workspace-state.md#automatic-grid-refresh) while editing is idle. Active editors, dialogs, drafts, local undo/redo, composition and clipboard reads postpone application. Selection follows stable identities where possible and otherwise clears explicitly. Grouped grids and boards currently detect changes and offer **Refresh view**.
 
+The [workspace sidebar](workspace-state.md#automatic-table-list-refresh) automatically discovers externally created, renamed and deleted tables. It retains the selected table and local work; an external deletion never forces navigation or discards drafts.
+
 **Display** saves row density, frozen columns, visibility and column arrangement for the current view. Compact, Comfortable and Spacious use row heights of 36, 48 and 64 pixels. Frozen columns are the leading visible columns in the current order; their count decreases if hiding or deleting fields leaves fewer visible columns. Other views keep their own settings. New view copies the current display settings along with its query.
 
 Every table starts with an **All records** view. A view contains a stable `id`, `tableId`, `name`, independent `version`, saved `query` (`filter`, `sort`, `search`), ordered `columns` (`fieldId`, `width`, `hidden`), `rowHeight` and `frozenColumns`. New API views default to `rowHeight: 36` and `frozenColumns: 0`. At least one column and one view remain visible/available. Column widths range from 50 to 1,000 pixels.

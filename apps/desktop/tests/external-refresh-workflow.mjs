@@ -1,14 +1,7 @@
 import assert from 'node:assert/strict';
+import { waitForResponse } from './wait-for-response.mjs';
 
 export async function verifyExternalRefresh(page, application) {
-  const waitForResponse = async (promise, label) => {
-    let timer;
-    try {
-      await Promise.race([promise, new Promise((_resolve, reject) => {
-        timer = setTimeout(() => reject(new Error(`Timed out waiting for ${label}.`)), 15_000);
-      })]);
-    } finally { clearTimeout(timer); }
-  };
   const call = (path, method = 'GET', body) => page.evaluate(async ({ path, method, body }) => {
     const connection = await window.rowweave.connection();
     const response = await fetch(connection.url + path, { method, headers: { Authorization: 'Bearer ' + connection.token, 'Content-Type': 'application/json' },
@@ -33,11 +26,13 @@ export async function verifyExternalRefresh(page, application) {
   { column, row, text }, { polling: 100 });
   const editor = page.getByRole('textbox', { name: 'Cell value', exact: true });
   const select = async row => {
+    await page.waitForFunction(() => document.querySelector('.grid-host')?.getAttribute('aria-busy') === 'false');
     const bounds = await page.locator('canvas').first().boundingBox();
     await page.mouse.click(bounds.x + 100, bounds.y + 58 + row * 36);
     await page.waitForFunction(() => document.querySelector('canvas')?.contains(document.activeElement) || !!document.querySelector('.rowweave-cell-editor'));
     if (await editor.count()) await page.keyboard.press('Escape');
     await page.waitForFunction(() => document.querySelector('canvas')?.contains(document.activeElement));
+    await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === 'Open record' && !button.disabled));
   };
   const update = async (record, values) => {
     const current = await call(root + '/records/' + record.id);
