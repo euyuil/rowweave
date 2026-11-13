@@ -99,4 +99,6 @@ Requests time out after 15 seconds. `ApiFailure` exposes `code`, `message`, and 
 
 All request/response interfaces and service limit constants are exported alongside `createWorkspaceClient`. See the [HTTP API reference](https://github.com/euyuil/rowweave/blob/main/docs/http-api.md) and [CSV semantics](https://github.com/euyuil/rowweave/blob/main/docs/data-exchange.md) for operations, values, constraints, and recovery.
 
+`recordHistory` reads bounded change metadata, `recordChange` fetches one before/after snapshot, and `restoreRecord` restores saved writable values into an existing record using its current version. Restoration preserves the UUID, applies current schema constraints, recalculates formulas and creates a new history entry. See [history and retention semantics](https://github.com/euyuil/rowweave/blob/main/docs/record-history.md) before restoring or distributing a workspace backup.
+
 The repository's package regression installs the actual archive offline into an isolated application, checks its public TypeScript declarations, and runs a schema/record/view/CSV workflow against a real temporary service.

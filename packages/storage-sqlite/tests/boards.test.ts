@@ -69,7 +69,7 @@ test('version-eight migration retains custom display settings and creates grid v
   const grid = service.listViews(table.id)[0]!;
   const changed = service.updateView(table.id, grid.id, { expectedVersion: grid.version, rowHeight: 64, frozenColumns: 1 });
   const db = new DatabaseSync(data.path);
-  db.exec("DELETE FROM views WHERE json_extract(config_json, '$.type') = 'board'; UPDATE views SET config_json = json_remove(config_json, '$.type'); ALTER TABLE records DROP COLUMN formula_errors_json; PRAGMA user_version = 8;");
+  db.exec("DROP TABLE record_changes; DELETE FROM views WHERE json_extract(config_json, '$.type') = 'board'; UPDATE views SET config_json = json_remove(config_json, '$.type'); ALTER TABLE records DROP COLUMN formula_errors_json; PRAGMA user_version = 8;");
   db.close();
   const reopened = new RecordService(data.open());
   assert.deepEqual(reopened.getView(table.id, grid.id), changed);

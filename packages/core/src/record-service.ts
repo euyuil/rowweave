@@ -10,7 +10,8 @@ import { parseView } from './grid-views.js';
 import { ServiceError } from './errors.js';
 import { prepareCsvImport, type CheckedCsvImport } from './csv.js';
 import { parseSummary, type CheckedSummary } from './record-summary.js';
-import type { RecordSummary } from '../../contracts/src/index.js';
+import type { RecordSummary, RecordHistoryQuery, RecordHistoryPage, RecordChangeDetail, RecordRestore } from '../../contracts/src/index.js';
+import { historyId, parseHistoryQuery, parseRecordRestore } from './record-history.js';
 import type { CsvImportResult, CsvPreview } from '../../contracts/src/index.js';
 export { ServiceError } from './errors.js';
 
@@ -26,6 +27,9 @@ export interface RecordStore {
   getRecord(tableId: string, recordId: string): RowRecord;
   createRecords(table: Table, values: Array<Record<string, CellValue>>): BatchResult;
   deleteRecords(tableId: string, records: RecordDelete[]): DeleteResult;
+  recordHistory(tableId: string, recordId: string, query: RecordHistoryQuery): RecordHistoryPage;
+  recordChange(tableId: string, recordId: string, changeId: number): RecordChangeDetail;
+  restoreRecord(update: RecordUpdate, tableId: string, schemaVersion: number, source: RecordRestore): RowRecord;
   previewConversion(tableId: string, version: number, field: Field, convert: (value: CellValue) => CellValue): ConversionPreview;
   applyConversion(tableId: string, version: number, field: Field, convert: (value: CellValue) => CellValue): Table;
   queryRecords(table: Table, query: CheckedQuery, view?: GridView): QueryPage;
@@ -319,6 +323,27 @@ export class RecordService {
   getRecord(id: string, recordId: string): RowRecord {
     this.store.getTable(id);
     return this.store.getRecord(id, recordId);
+  }
+
+  recordHistory(id: string, recordId: string, input: unknown): RecordHistoryPage {
+    this.store.getTable(id);
+    return this.store.recordHistory(id, recordId, parseHistoryQuery(input));
+  }
+
+  recordChange(id: string, recordId: string, changeId: unknown): RecordChangeDetail {
+    this.store.getTable(id);
+    return this.store.recordChange(id, recordId, historyId(changeId));
+  }
+
+  restoreRecord(id: string, recordId: string, input: unknown): RowRecord {
+    const restore = parseRecordRestore(input);
+    const table = this.store.getTable(id);
+    const snapshot = this.store.recordChange(id, recordId, restore.changeId)[restore.snapshot];
+    if (!snapshot) throw new ServiceError('INVALID_HISTORY', 'The record does not exist in this snapshot.');
+    const values = Object.fromEntries(table.fields.filter(field => !['lookup', 'formula'].includes(field.type) && Object.hasOwn(snapshot.values, field.id))
+      .map(field => [field.id, validateValue(field, snapshot.values[field.id])]));
+    if (!Object.keys(values).length) throw new ServiceError('INVALID_HISTORY', 'This snapshot has no current writable fields to restore.');
+    return this.store.restoreRecord({ id: recordId, expectedVersion: restore.expectedVersion, values }, id, table.version, restore);
   }
 
   createRecords(id: string, input: unknown): BatchResult {

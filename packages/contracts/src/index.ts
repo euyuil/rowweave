@@ -93,6 +93,29 @@ export interface RowRecord {
   formulaErrors?: Record<string, string>;
 }
 
+export interface RecordChange {
+  id: number;
+  batchId: string;
+  recordId: string;
+  changedAt: string;
+  beforeVersion: number | null;
+  afterVersion: number | null;
+  restoredFrom?: { changeId: number; snapshot: 'before' | 'after' };
+}
+
+export interface RecordChangeDetail extends RecordChange {
+  before: RowRecord | null;
+  after: RowRecord | null;
+}
+
+export interface RecordHistoryQuery { before?: number; limit?: number }
+export interface RecordHistoryPage { changes: RecordChange[]; nextBefore?: number }
+export interface RecordRestore {
+  changeId: number;
+  snapshot: 'before' | 'after';
+  expectedVersion: number;
+}
+
 export function valueField(field: Field): Field {
   if (isLookupSummary(field)) return field.lookup!.operation === 'count' ? { id: field.id, name: field.name, type: 'number' }
     : { ...valueField(field.lookupResult!), id: field.id, name: field.name, required: false };

@@ -166,14 +166,15 @@ async function recordLifecycle() {
   await page.screenshot({ path: '.artifacts/desktop-records.png' });
   await page.getByRole('button', { name: 'Delete records', exact: true }).click();
   await externalChange((await records())[1]);
-  await page.getByRole('button', { name: 'Delete permanently', exact: true }).click();
+  await page.getByRole('dialog').getByText('Saved snapshots remain in record history.', { exact: false }).waitFor();
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete record', exact: true }).click();
   await page.getByRole('dialog').getByRole('alert').filter({ hasText: 'changed' }).waitFor();
   assert.equal((await records()).length, 2);
   await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
   await reload();
   await selectAll();
   await page.getByRole('button', { name: 'Delete records', exact: true }).click();
-  await page.getByRole('button', { name: 'Delete permanently', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete record', exact: true }).click();
   await page.getByText('0 records · 8 fields', { exact: true }).waitFor();
   assert.deepEqual(await records(), []);
 }

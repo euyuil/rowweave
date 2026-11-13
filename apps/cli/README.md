@@ -31,6 +31,9 @@ rowweave fields create TABLE_ID --input create-field.json
 rowweave records create TABLE_ID --input records.json
 rowweave records query TABLE_ID --input query.json
 rowweave records update TABLE_ID --input updates.json
+rowweave records history TABLE_ID RECORD_ID
+rowweave records change TABLE_ID RECORD_ID --input change.json
+rowweave records restore TABLE_ID RECORD_ID --input restore.json
 ```
 
 Example request files:
@@ -42,6 +45,10 @@ Example request files:
 | `records.json` | `[{ "values": { "NAME_FIELD_ID": "Launch", "BUDGET_FIELD_ID": 1200 } }]` |
 | `query.json` | `{ "limit": 100, "sort": [{ "fieldId": "BUDGET_FIELD_ID", "direction": "desc" }] }` |
 | `updates.json` | `[{ "id": "RECORD_ID", "expectedVersion": 1, "values": { "BUDGET_FIELD_ID": 1500 } }]` |
+| `change.json` | `{ "changeId": 42 }` |
+| `restore.json` | `{ "changeId": 42, "snapshot": "before", "expectedVersion": 2 }` |
+
+History queries accept `{ limit?, before? }`; use returned `nextBefore` for continuation. Fetch and inspect a change before restoring it into an existing record with its current version. Current schema constraints apply, and the restore is itself journaled. See [record history](../../docs/record-history.md) for snapshot, schema and retention semantics.
 
 ## Commands
 
@@ -57,6 +64,9 @@ Example request files:
 | `fields delete` | Table ID, field ID | `{ expectedVersion }` |
 | `fields preview-conversion`, `fields apply-conversion` | Table ID, field ID | `{ expectedVersion, field: definition }` |
 | `records get` | Table ID, record ID | None |
+| `records history` | Table ID, record ID | `{ limit?, before? }`; defaults to `{}` |
+| `records change` | Table ID, record ID | `{ changeId }` |
+| `records restore` | Table ID, record ID | `{ changeId, snapshot: 'before' \| 'after', expectedVersion }` |
 | `records query` | Table ID | RecordQuery; defaults to `{}` |
 | `records summarize` | Table ID | SummaryRequest; defaults to `{}` for the whole-table count |
 | `records create` | Table ID | `[{ values }]` |

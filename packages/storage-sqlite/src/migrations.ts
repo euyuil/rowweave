@@ -5,8 +5,8 @@ import { syncQueryIndexes } from './query-indexes.js';
 
 export function migrate(db: DatabaseSync): boolean {
   const version = db.prepare('PRAGMA user_version').get()!['user_version'] as number;
-  if (version === 15) return false;
-  if (version < 0 || version > 15) throw new Error(`Unsupported database version: ${version}.`);
+  if (version === 16) return false;
+  if (version < 0 || version > 16) throw new Error(`Unsupported database version: ${version}.`);
   db.exec('BEGIN IMMEDIATE');
   try {
     if (version < 2) {
@@ -86,7 +86,15 @@ export function migrate(db: DatabaseSync): boolean {
     if (version < 8) db.exec("UPDATE views SET config_json = json_set(config_json, '$.rowHeight', 36, '$.frozenColumns', 0);");
     if (version < 9) db.exec("UPDATE views SET config_json = json_set(config_json, '$.type', 'grid');");
     if (version < 10) db.exec("ALTER TABLE records ADD COLUMN formula_errors_json TEXT NOT NULL DEFAULT '{}';");
-    db.exec('PRAGMA user_version = 15; COMMIT;');
+    if (version < 16) db.exec(`CREATE TABLE record_changes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, batch_id TEXT NOT NULL,
+      table_id TEXT NOT NULL REFERENCES tables(id) ON DELETE CASCADE, record_id TEXT NOT NULL, changed_at TEXT NOT NULL,
+      before_version INTEGER, before_values_json TEXT, before_errors_json TEXT,
+      after_version INTEGER, after_values_json TEXT, after_errors_json TEXT,
+      restored_from INTEGER, restored_snapshot TEXT,
+      UNIQUE(batch_id, record_id)
+    ); CREATE INDEX changes_by_record ON record_changes(table_id, record_id, id DESC);`);
+    db.exec('PRAGMA user_version = 16; COMMIT;');
     return version === 0;
   } catch (error) {
     db.exec('ROLLBACK');
