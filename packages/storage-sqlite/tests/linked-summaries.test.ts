@@ -6,6 +6,10 @@ import { fixture } from './helpers.js';
 import { RecordService } from '../../core/src/record-service.js';
 import { startServer } from '../../../apps/server/src/http-server.js';
 import { createWorkspaceClient } from '../../client/src/http-client.js';
+import { parseQuery } from '../../core/src/record-query.js';
+import { querySql } from '../src/query-sql.js';
+import { queryPage } from '../src/query-page.js';
+import type { RecordQuery } from '../../contracts/src/index.js';
 
 function setup(t: Parameters<typeof fixture>[0]) {
   const data = fixture(t, null), store = data.open(), service = new RecordService(store);
@@ -78,6 +82,41 @@ test('aggregate errors are explicit and consistent across records, queries, summ
   assert.equal(projected.formulaErrors, undefined);
   assert.throws(() => service.updateField(target.id, formula.id, { expectedVersion: formulaTarget.version, formula: { expression: '"Label"', resultType: 'text' } }), /dependent linked summaries/);
   assert.equal(service.getTable(source.id).version, changed.version);
+});
+
+test('linked query pages calculate each referenced summary once per candidate and retain empty-page counts', t => {
+  const { data, service, source, rows, link, fields } = setup(t);
+  const records = service.createRecords(source.id, [[rows[0]!.id], [rows[1]!.id], [rows[3]!.id], [], [rows[2]!.id], [rows[1]!.id]]
+    .map((ids, index) => ({ values: { [source.primaryFieldId]: ['Zero', 'Ten', 'Twenty', 'Empty', 'Null', 'Again'][index]!, [link]: ids } }))).records;
+  const sort = [{ fieldId: fields['sum']!, direction: 'desc' as const }, { fieldId: fields['count']!, direction: 'asc' as const }];
+  const filter = { conjunction: 'and' as const, conditions: [{ fieldId: fields['sum']!, operator: 'gte' as const, value: 10 }] };
+  const cases: Array<{ input: RecordQuery; total: number; visited: number; ids: string[] }> = [
+    { input: { filter, sort, limit: 2 }, total: 3, visited: 12, ids: [records[2]!.id, records[1]!.id] },
+    { input: { filter, sort, limit: 2, offset: 2 }, total: 3, visited: 12, ids: [records[5]!.id] },
+    { input: { filter, sort, offset: 3 }, total: 3, visited: 12, ids: [] },
+    { input: { filter: { conjunction: 'and', conditions: [{ fieldId: fields['sum']!, operator: 'gt', value: 100 }] }, sort }, total: 0, visited: 12, ids: [] },
+    { input: { filter: { conjunction: 'and', conditions: [{ fieldId: source.primaryFieldId, operator: 'eq', value: 'Twenty' }] }, sort }, total: 1, visited: 2, ids: [records[2]!.id] },
+    { input: { filter, sort, recordIds: [records[1]!.id, records[3]!.id] }, total: 1, visited: 4, ids: [records[1]!.id] },
+    { input: { filter, sort, recordIds: [] }, total: 0, visited: 0, ids: [] },
+  ];
+  const db = new DatabaseSync(data.path, { readOnly: true });
+  let visited = 0;
+  db.function('observeLookup', value => { visited++; return value; });
+  try {
+    for (const { input, total, visited: expectedVisits, ids } of cases) {
+      const checked = parseQuery(source, input);
+      const sql = querySql(source, checked, new Map(), { materializeLookups: true });
+      for (const column of sql.computed) column.expression = `observeLookup(${column.expression})`;
+      visited = 0;
+      const page = queryPage(db, sql, checked);
+      assert.equal(visited, expectedVisits);
+      assert.equal(page.total, total);
+      assert.deepEqual(page.rows.map(row => row.id), ids);
+      const shared = service.queryRecords(source.id, input);
+      assert.equal(shared.total, total);
+      assert.deepEqual(shared.records.map(row => row.id), ids);
+    }
+  } finally { db.close(); }
 });
 
 test('linked summaries validate numeric targets, remain read-only and preserve array lookup compatibility', t => {

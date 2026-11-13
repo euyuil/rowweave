@@ -25,7 +25,7 @@ function definition(table: Pick<Table, 'id' | 'fields'>, query: IndexedQuery): s
   if (conditions.some(condition => condition.operator === 'hasAny' || condition.operator === 'relativeDate' || ['relation', 'lookup'].includes(fields.get(condition.fieldId)!.type))) return;
   if (query.sort?.some(sort => ['relation', 'lookup', 'multiSelect'].includes(fields.get(sort.fieldId)!.type))) return;
   if (query.search && table.fields.some(field => ['relation', 'lookup', 'multiSelect'].includes(field.type))) return;
-  const sql = querySql(table, { ...query, offset: 0, limit: 1 }, new Map(), true);
+  const sql = querySql(table, { ...query, offset: 0, limit: 1 }, new Map(), { forIndex: true });
   return `ON records(table_id, ${sql.order}) WHERE ${sql.where}`;
 }
 

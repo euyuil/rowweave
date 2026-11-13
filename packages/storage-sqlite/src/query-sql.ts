@@ -11,9 +11,11 @@ function sqlLiteral(value: string | number | null): string {
   return value.includes('\0') ? `CAST(X'${Buffer.from(value).toString('hex')}' AS TEXT)` : `'${value.replaceAll("'", "''")}'`;
 }
 
-export function querySql(table: Pick<Table, 'id' | 'fields'>, query: CheckedQuery, targets: Map<string, Table>, forIndex = false,
-  dateRanges: ReadonlyMap<FieldFilter, DateRange> = new Map()) {
+export function querySql(table: Pick<Table, 'id' | 'fields'>, query: CheckedQuery, targets: Map<string, Table>,
+  options: { forIndex?: boolean; dateRanges?: ReadonlyMap<FieldFilter, DateRange>; materializeLookups?: boolean } = {}) {
+  const { forIndex = false, dateRanges = new Map(), materializeLookups = false } = options;
   const fields = new Map(table.fields.map(field => [field.id, field]));
+  const computed = new Map<string, { name: string; expression: string }>();
   const parameters: Record<string, SQLInputValue> = forIndex ? {} : { ':table': table.id };
   let parameterIndex = 0;
   const bind = (value: CellValue) => {
@@ -24,6 +26,11 @@ export function querySql(table: Pick<Table, 'id' | 'fields'>, query: CheckedQuer
     return name;
   };
   const raw = (field: Field, alias = forIndex ? '' : 'r') => {
+    if (materializeLookups && alias === 'r' && isLookupSummary(field)) {
+      let column = computed.get(field.id);
+      if (!column) { column = { name: `lookupValue${computed.size}`, expression: lookupSql(field) }; computed.set(field.id, column); }
+      return `r.${column.name}`;
+    }
     if (field.type === 'lookup') return lookupSql(field, alias);
     const path = `$.${JSON.stringify(field.id)}`;
     return `json_extract(${alias ? `${alias}.` : ''}values_json, '${path.replaceAll("'", "''")}')`;
@@ -102,12 +109,14 @@ export function querySql(table: Pick<Table, 'id' | 'fields'>, query: CheckedQuer
   }
   const clauses = [forIndex ? `table_id = ${sqlLiteral(table.id)}` : 'r.table_id = :table'];
   if (query.recordIds) clauses.push(`r.id IN (SELECT value FROM json_each(${bind(query.recordIds)}))`);
+  let sourceWhere = clauses.join(' AND ');
   if (query.filter) clauses.push(condition(query.filter));
   if (query.search) {
     const search = bind(query.search);
     clauses.push(`(${table.fields.map(field => `instr(lower(CAST(${display(field)} AS TEXT)), lower(${search})) > 0`).join(' OR ')})`);
   }
   const countParameters = { ...parameters };
+  if (!computed.size) sourceWhere = clauses.join(' AND ');
   const order: string[] = [];
   if (query.groupBy) {
     const field = fields.get(query.groupBy)!;
@@ -122,5 +131,6 @@ export function querySql(table: Pick<Table, 'id' | 'fields'>, query: CheckedQuer
     return [`(${expression} IS NULL) ASC`, `${expression} COLLATE NOCASE ${sort.direction === 'asc' ? 'ASC' : 'DESC'}`];
   }));
   order.push(forIndex ? 'position ASC' : 'r.position ASC');
-  return { where: clauses.join(' AND '), order: order.join(', '), parameters, countParameters };
+  return { where: clauses.join(' AND '), order: order.join(', '), parameters, countParameters,
+    computed: [...computed.values()], sourceWhere };
 }
