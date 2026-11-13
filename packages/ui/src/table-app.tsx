@@ -58,8 +58,14 @@ function gridCell(record: RowRecord | undefined, field: Field | undefined, reado
     allowOverlay: !readonly, readonly, field, rawValue: value, row, gridRow } as EditableCell;
 }
 
-function groupHeadingCell(group: GroupRow, column: number, end: number): GridCell {
-  const label = `${group.collapsed ? '▸' : '▾'} ${group.label} · ${group.count.toLocaleString()} ${group.count === 1 ? 'record' : 'records'}`;
+const measureNames = { sum: 'Sum', average: 'Average', min: 'Minimum', max: 'Maximum' };
+const measureNumber = new Intl.NumberFormat(undefined, { maximumSignificantDigits: 15 });
+function groupHeading(group: GroupRow, measures: readonly string[]): string {
+  const values = group.values?.map((value, index) => `${measures[index]}: ${value === null ? '—' : measureNumber.format(value)}`) ?? [];
+  return [`${group.collapsed ? '▸' : '▾'} ${group.label} · ${group.count.toLocaleString()} ${group.count === 1 ? 'record' : 'records'}`, ...values].join(' · ');
+}
+function groupHeadingCell(group: GroupRow, column: number, end: number, measures: readonly string[]): GridCell {
+  const label = groupHeading(group, measures);
   return { kind: GridCellKind.Text, data: column <= end ? label : '', copyData: '', displayData: column <= end ? label : '', allowOverlay: false, readonly: true,
     ...(column <= end ? { span: [0, end] as const } : {}) };
 }
@@ -133,6 +139,11 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   const locked = busy || model.saving || offline || transfers > 0;
   const pending = model.pendingCells;
   const grouping = useGroupedRows(model, api, view, appliedSearch.current, visible);
+  const measureLabels = useMemo(() => {
+    if (!grouping.reader) return [];
+    const { table, view } = grouping.reader.context;
+    return (view.groupMeasures ?? []).map(measure => `${measureNames[measure.operation]} ${table.fields.find(field => field.id === measure.fieldId)!.name}`);
+  }, [grouping.reader]);
   canRefresh.current = () => {
     const workspace = rootHost.current?.closest('.rowweave-app'), active = document.activeElement;
     return ready && !locked && !grouping.pending && !busyRef.current && !activeEditor.current && !selectionReads.current && !pointerActive.current && !boardDragging.current &&
@@ -565,11 +576,11 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   };
   const getCellContent = useCallback(([column, row]: readonly [number, number]): GridCell => {
     const mapped = grouping.rows?.at(row);
-    if (mapped?.kind === 'group') return groupHeadingCell(mapped.group, column, (view!.frozenColumns || fields.length) - 1);
+    if (mapped?.kind === 'group') return groupHeadingCell(mapped.group, column, (view!.frozenColumns || fields.length) - 1, measureLabels);
     const index = recordIndex(row);
     return gridCell(index === undefined ? undefined : model.getRecord(index), fields[column],
       locked || model.stale || grouping.pending || grouping.stale, index ?? row, row);
-  }, [model, fields, locked, revision, grouping.rows, grouping.enabled, grouping.pending, grouping.stale, view]);
+  }, [model, fields, locked, revision, grouping.rows, grouping.enabled, grouping.pending, grouping.stale, view, measureLabels]);
 
   const getCellsForSelection = (rectangle: Rectangle, signal: AbortSignal) => async () => {
     if (rectangle.height > maxBatchRecords || rectangle.width * rectangle.height > maxBatchCells) {
@@ -587,7 +598,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       const byIndex = new Map(indices.map((index, position) => [index, records[position]!]));
       return Array.from({ length: rectangle.height }, (_, index) => Array.from({ length: rectangle.width }, (_, x) => {
         const row = rectangle.y + index, column = rectangle.x + x, mapped = rows?.at(row);
-        if (mapped?.kind === 'group') return groupHeadingCell(mapped.group, column, (view!.frozenColumns || fields.length) - 1);
+        if (mapped?.kind === 'group') return groupHeadingCell(mapped.group, column, (view!.frozenColumns || fields.length) - 1, measureLabels);
         const record = mapped?.kind === 'record' ? mapped.index : row;
         return gridCell(byIndex.get(record), fields[column], true, record, row);
       }));
@@ -744,6 +755,10 @@ export function TableApp({ tableId, model, api, host, onManage }: {
             previous.y === region.y && previous.height === region.height ? previous : { y: region.y, height: region.height })}
           gridSelection={selection} onGridSelectionChange={setSelection}
           rowMarkers={grouping.enabled ? 'checkbox' : 'both'} rowHeight={view!.rowHeight} freezeColumns={view!.frozenColumns} headerHeight={40} rangeSelect="rect" rowSelectionMode="multi"
+          onItemHovered={event => {
+            const row = event.kind === 'cell' ? grouping.rows?.at(event.location[1]) : undefined;
+            if (gridHost.current) gridHost.current.title = row?.kind === 'group' ? groupHeading(row.group, measureLabels) : '';
+          }}
           getRowThemeOverride={row => grouping.rows?.at(row)?.kind === 'group' ? { bgCell: '#edf2fa', textDark: '#244570' } : undefined}
           cellActivationBehavior="double-click"
           keybindings={{ paste: false, copy: false }}

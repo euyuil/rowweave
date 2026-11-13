@@ -146,7 +146,7 @@ Lookup fields can return count/sum/average/min/max through the existing relation
 
 ### Grouped grids
 
-See [grouped table records](grouped-records.md) for saved scalar grouping, editing and interface semantics. SQLite orders each view by group and then its record sort, including CSV exports; the client combines revision-checked group windows with the existing paged model. Group-window queries can also calculate numeric measures over complete matching groups. Visual headings never become record identities. Format 29 protects saved scalar grouping semantics; the read-only measure request adds no database migration.
+See [grouped table records](grouped-records.md) for saved scalar grouping, editing and interface semantics. SQLite orders each view by group and then its record sort, including CSV exports; the client combines revision-checked group windows with the existing paged model. Group-window queries calculate numeric measures over complete matching groups. Groups settings save those measures in the view and display them in headings, with explicit read overrides available to shared clients. Visual headings never become record identities. Format 29 protects saved scalar grouping semantics; format 30 protects saved group measures.
 
 ### Read-only lookups
 

@@ -175,6 +175,8 @@
 .rowweave-app fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 .rowweave-app .form-row { display: flex; gap: 14px; }
 .rowweave-app .form-row > * { flex: 1; min-width: 0; }
+.rowweave-app .group-measure-row { align-items: center; }
+.rowweave-app .group-measure-row > button { flex: 0 0 auto; margin-top: 24px; }
 .rowweave-app .check-field { display: flex; align-items: center; gap: 9px; margin: 18px 0; }
 .rowweave-app .form-note { color: #69768b; font-size: 13px; }
 .rowweave-app .trash-toolbar { display: flex; align-items: center; gap: 8px; position: sticky; top: -24px; padding: 12px 0; background: white; z-index: 1; }

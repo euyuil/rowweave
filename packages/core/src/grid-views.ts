@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { supportsScalarGrouping, type FieldFilter, type FilterGroup, type GridView, type RowHeight, type Table, type ViewQuery } from '../../contracts/src/index.js';
 import { parseQuery } from './record-query.js';
+import { parseSummary } from './record-summary.js';
 import { schemaName, schemaObject } from './schema-validation.js';
 import { ServiceError } from './errors.js';
 
@@ -21,6 +22,10 @@ export function parseView(table: Table, input: unknown, previous = defaultView(t
       !table.fields.some(field => field.id === groupBy && supportsScalarGrouping(field)))) {
     throw new ServiceError('INVALID_VIEW', 'Group a grid by a scalar field, or remove grouping.');
   }
+  const grouped = type === 'grid' && groupBy != null;
+  const measures = parseSummary(table, { measures: item['groupMeasures'] === undefined
+    ? (grouped ? previous.groupMeasures : undefined) : item['groupMeasures'] }).measures;
+  if (measures.length && !grouped) throw new ServiceError('INVALID_VIEW', 'Group a grid before adding group measures.');
   const query = parseQuery(table, item['query'] === undefined ? previous.query : item['query']);
   const saved: ViewQuery = {};
   if (query.filter) saved.filter = query.filter;
@@ -49,10 +54,10 @@ export function parseView(table: Table, input: unknown, previous = defaultView(t
   if (!Number.isInteger(frozenColumns) || (frozenColumns as number) < 0 || (frozenColumns as number) > visible) {
     throw new ServiceError('INVALID_VIEW', 'Freeze a whole number of leading columns, up to the number of visible fields.');
   }
-  const { groupBy: _previousGroup, ...base } = previous;
+  const { groupBy: _previousGroup, groupMeasures: _previousMeasures, ...base } = previous;
   return { ...base, name: item['name'] === undefined ? previous.name : schemaName(item['name']), query: saved, columns,
     rowHeight: rowHeight as RowHeight, frozenColumns: frozenColumns as number, type,
-    ...(groupBy == null ? {} : { groupBy: groupBy as string }) };
+    ...(groupBy == null ? {} : { groupBy: groupBy as string }), ...(measures.length ? { groupMeasures: measures } : {}) };
 }
 
 export function groupedViewQuery(view: GridView): ViewQuery & { groupBy?: string } {

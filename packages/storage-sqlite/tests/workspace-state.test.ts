@@ -139,8 +139,8 @@ test('format 28 migration preserves saved identities and versions and state surv
   assert.equal(state.catalogRevision, 1); assert.equal(state.table!.viewsRevision, 1);
   assert.deepEqual(new RecordService(data.open()).workspaceState(request), state);
   const backup = join(dirname(data.path), 'backup.sqlite'), restored = join(dirname(data.path), 'restored.sqlite');
-  assert.equal((await backupWorkspace(data.path, backup)).version, 29);
-  assert.equal((await restoreWorkspace(backup, restored)).version, 29);
+  assert.equal((await backupWorkspace(data.path, backup)).version, 30);
+  assert.equal((await restoreWorkspace(backup, restored)).version, 30);
   const copy = new SqliteRecordStore(restored);
   try {
     assert.deepEqual(copy.workspaceState(request), state);

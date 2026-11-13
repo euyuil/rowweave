@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { supportsScalarGrouping, type GridView, type RowHeight, type SortRule, type Table, type ViewColumn } from '../../contracts/src/index.js';
+import { supportsScalarGrouping, valueField, type GridView, type RowHeight, type SortRule, type SummaryMeasure, type Table, type ViewColumn } from '../../contracts/src/index.js';
 import type { WorkspaceApi } from '../../client/src/http-client.js';
 import { Dialog, type DialogAnchor } from './dialog.js';
 import { QueryEditor } from './query-editor.js';
@@ -17,6 +17,7 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
   const [frozenColumns, setFrozenColumns] = useState(view.frozenColumns);
   const [type, setType] = useState(view.type);
   const [groupBy, setGroupBy] = useState(view.groupBy ?? '');
+  const [groupMeasures, setGroupMeasures] = useState<SummaryMeasure[]>(view.groupMeasures ?? []);
   const [filter, setFilter] = useState(() => filterDraft(view.query.filter, table.fields));
   const [sort, setSort] = useState<SortRule[]>(view.query.sort ?? []);
   const [busy, setBusy] = useState(false);
@@ -27,6 +28,7 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
   const groupOnly = kind === 'group';
   const visibleCount = columns.filter(column => !column.hidden).length;
   const fields = new Map(table.fields.map(field => [field.id, field]));
+  const numericFields = table.fields.filter(field => valueField(field).type === 'number');
   useEffect(() => () => setDirty(false), [setDirty]);
   const move = (index: number, delta: number) => {
     const next = [...columns];
@@ -49,11 +51,12 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
       void (async () => {
         let result: GridView | undefined;
         const display = { columns, rowHeight, frozenColumns: Math.min(frozenColumns, visibleCount) };
-        const config = { name, ...display, type, groupBy: groupBy || null, query: { filter: filterValue(filter, table.fields), sort, search: savedSearch } };
+        const groups = { groupBy: groupBy || null, groupMeasures: type === 'grid' && groupBy ? groupMeasures : [] };
+        const config = { name, ...display, type, ...groups, query: { filter: filterValue(filter, table.fields), sort, search: savedSearch } };
         if (deleting) await api.deleteView(table.id, view.id, view.version);
         else if (kind === 'create') result = await api.createView(table.id, config);
         else result = await api.updateView(table.id, view.id, { ...(queryOnly ? { query: { ...view.query,
-          ...(kind === 'filter' ? { filter: config.query.filter } : { sort }) } } : groupOnly ? { groupBy: groupBy || null } : displayOnly ? display : config), expectedVersion: view.version });
+          ...(kind === 'filter' ? { filter: config.query.filter } : { sort }) } } : groupOnly ? groups : displayOnly ? display : config), expectedVersion: view.version });
         setDirty(false);
         onSaved(result);
       })().catch(error => { setError(error instanceof Error ? error.message : 'The view could not be saved.'); setBusy(false); });
@@ -77,6 +80,24 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
               <option key={field.id} value={field.id}>{field.name}</option>)}
           </select></label>
           <p className="form-note">Empty values have their own group. Options follow their configured order; other values sort in ascending order. Sorting applies within each group. Records move to their new group after saving. Expand and collapse choices are remembered on this device.</p>
+          {groupBy && <><h3>Group measures</h3>
+            <p className="form-note">Show totals and other numeric measures in each heading. They include all saved records matching this view, even in collapsed groups. Hover a heading to read its full summary.</p>
+            {groupMeasures.map((measure, index) => <div className="form-row group-measure-row" key={index}>
+              <label className="form-field">Field<select aria-label={`Measure ${index + 1} field`} value={measure.fieldId}
+                onChange={event => setGroupMeasures(current => current.map((item, position) => position === index ? { ...item, fieldId: event.target.value } : item))}>
+                {numericFields.map(field => <option key={field.id} value={field.id}>{field.name}</option>)}
+              </select></label>
+              <label className="form-field">Calculation<select aria-label={`Measure ${index + 1} calculation`} value={measure.operation}
+                onChange={event => setGroupMeasures(current => current.map((item, position) => position === index ? { ...item, operation: event.target.value as SummaryMeasure['operation'] } : item))}>
+                <option value="sum">Sum</option><option value="average">Average</option><option value="min">Minimum</option><option value="max">Maximum</option>
+              </select></label>
+              <button type="button" aria-label={`Remove measure ${index + 1}`} onClick={() => { setGroupMeasures(current => current.filter((_, position) => position !== index)); setDirty(true); }}>Remove</button>
+            </div>)}
+            <button type="button" disabled={!numericFields.length || groupMeasures.length === 12} onClick={() => {
+              setGroupMeasures(current => [...current, { fieldId: numericFields[0]!.id, operation: 'sum' }]); setDirty(true);
+            }}>Add measure</button>
+            {!numericFields.length && <p className="form-note">Add a numeric field to calculate group measures.</p>}
+          </>}
         </>}
         {!displayOnly && !groupOnly && <>{!queryOnly && <label className="form-field">Saved search<input value={savedSearch} onChange={event => setSavedSearch(event.target.value)} /></label>}
         <QueryEditor fields={table.fields} filter={filter} sort={sort} section={queryOnly ? kind : undefined}
