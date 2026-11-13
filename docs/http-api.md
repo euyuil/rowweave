@@ -60,6 +60,8 @@ Records have `{ id, version, values }`, with values keyed by field ID. Relation 
 | `POST /tables/:table/records/:record/restore` | `{ changeId, snapshot: 'before' \| 'after', expectedVersion }` | `RowRecord` / `restoreRecord(tableId, recordId, input)` |
 | `POST /tables/:table/trash/query` | `{ limit?, before? }` | `RecordTrashPage` / `recordTrash(tableId, query)` |
 | `POST /tables/:table/trash/restore` | Array of `{ id, deletionId, values? }` | `BatchResult` / `restoreDeletedRecords(tableId, records)` |
+| `POST /tables/:table/batches/query` | `{ limit?, before? }` | `RecordBatchPage` / `recordBatches(tableId, query)` |
+| `POST /tables/:table/batches/:batch` | `{ limit?, before? }` | `RecordBatchChanges` / `recordBatchChanges(tableId, batchId, query)` |
 | `GET /tables/:table/records?offset=0&limit=100` | None | `{ offset, records }` in insertion order; prefer the query endpoint for revision-aware pagination. |
 | `POST /tables/:table/records` | `[{ values: { fieldId: value } }]` | `201 { records }` / `createRecords(id, inputs)` |
 | `PATCH /tables/:table/records` | `[{ id, expectedVersion, values: { fieldId: value } }]` | `{ records }` with new versions / `updateRecords(id, updates)` |
@@ -74,6 +76,8 @@ Records referenced by another record or a linked-field default cannot be deleted
 [Record history](record-history.md) persists committed snapshots, including deleted records, until their table is deleted. History pages contain metadata only (default 20, maximum 100); continue with `before: nextBefore`. Fetch a single change to inspect stored values and formula errors. Snapshot restoration requires an existing record and its current version. It keeps the UUID and later-added fields, validates current constraints, recalculates formulas and journals the restoration. `INVALID_HISTORY`, `HISTORY_NOT_FOUND` and ordinary schema/value/link/version errors explain rejected requests.
 
 Trash uses the same cursor limits and lists only currently deleted records with their latest deletion IDs. Deleted-record restoration is atomic, preserves UUIDs, advances versions, appends rows and applies current constraints. Optional writable `values` explicitly repair historical values; later fields use current defaults/null. Restore linked sets together where needed. An old deletion ID or already restored record returns `VERSION_CONFLICT`. See [trash semantics](record-history.md#deleted-records) before restoring or retrying an uncertain result.
+
+Transaction receipts use the same page limits and show original and remaining change counts. Batch inspection includes metadata from every affected table, with `tableId` on each change. `recordWrite` distinguishes record operations from schema side effects. Receipts start at format 18; old record history is preserved without inventing complete transaction counts. See [transaction inspection](record-history.md#inspect-a-complete-transaction).
 
 ## Queries
 

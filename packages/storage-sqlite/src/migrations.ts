@@ -5,8 +5,8 @@ import { syncQueryIndexes } from './query-indexes.js';
 
 export function migrate(db: DatabaseSync): boolean {
   const version = db.prepare('PRAGMA user_version').get()!['user_version'] as number;
-  if (version === 17) return false;
-  if (version < 0 || version > 17) throw new Error(`Unsupported database version: ${version}.`);
+  if (version === 18) return false;
+  if (version < 0 || version > 18) throw new Error(`Unsupported database version: ${version}.`);
   db.exec('BEGIN IMMEDIATE');
   try {
     if (version < 2) {
@@ -95,7 +95,15 @@ export function migrate(db: DatabaseSync): boolean {
       UNIQUE(batch_id, record_id)
     ); CREATE INDEX changes_by_record ON record_changes(table_id, record_id, id DESC);`);
     if (version < 17) db.exec('CREATE INDEX changes_deleted ON record_changes(table_id, id DESC) WHERE after_version IS NULL;');
-    db.exec('PRAGMA user_version = 17; COMMIT;');
+    if (version < 18) db.exec(`CREATE TABLE record_batches (
+      sequence INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE,
+      changed_at TEXT NOT NULL, record_count INTEGER NOT NULL, record_write INTEGER NOT NULL
+    ); CREATE TABLE record_batch_tables (
+      table_id TEXT NOT NULL REFERENCES tables(id) ON DELETE CASCADE,
+      batch_id TEXT NOT NULL REFERENCES record_batches(id), sequence INTEGER NOT NULL,
+      PRIMARY KEY(table_id, batch_id)
+    ); CREATE INDEX batches_by_table ON record_batch_tables(table_id, sequence DESC);`);
+    db.exec('PRAGMA user_version = 18; COMMIT;');
     return version === 0;
   } catch (error) {
     db.exec('ROLLBACK');
