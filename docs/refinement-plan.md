@@ -1,5 +1,7 @@
 # Everyday table workflows
 
+The owner's subsequent instruction makes [Workflow gap closure](gap-closure-plan.md) the active completion scope. The completed milestones below remain implementation history; they do not authorize ending the overall goal while that inventory has material gaps.
+
 This bounded iteration extends the first product release in [completion-plan.md](completion-plan.md), following the owner's 2026-11-13 acceptance feedback. The aim is a flexible, usable table workspace with complete workflows, not a collection of isolated settings. Only the items below expand the original scope.
 
 ## Delivery and acceptance
