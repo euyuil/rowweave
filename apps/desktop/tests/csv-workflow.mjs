@@ -78,7 +78,7 @@ export async function verifyCsvWorkflow(page, application, directory) {
     filter: { conjunction: 'and', conditions: [{ fieldId: count, operator: 'gt', value: 0 }] }, sort: [{ fieldId: count, direction: 'desc' }] },
     columns: [{ fieldId: count, width: 120, hidden: false }, { fieldId: name, width: 180, hidden: false }, { fieldId: notes, width: 180, hidden: true }] });
   await reload();
-  await page.getByLabel('Current view', { exact: true }).selectOption(view.id);
+  await page.getByRole('tab', { name: view.name, exact: true }).click();
   await page.getByText('2 records · 2 fields', { exact: true }).waitFor();
   await page.getByLabel('Search records', { exact: true }).fill('中文');
   await page.getByText('1 record · 2 fields', { exact: true }).waitFor();
@@ -116,7 +116,7 @@ export async function verifyCsvWorkflow(page, application, directory) {
   await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
   await application.evaluate(({ dialog }) => { dialog.showSaveDialog = globalThis.csvOriginalSaveDialog; });
 
-  await page.getByLabel('Current view', { exact: true }).selectOption({ label: 'All records' });
+  await page.getByRole('tab', { name: 'All records', exact: true }).click();
   await page.getByRole('button', { name: 'Import CSV', exact: true }).click();
   await upload('Name,Count\nAfter schema change,1');
   await preview();

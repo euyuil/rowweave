@@ -43,6 +43,17 @@ export async function verifyViewWorkflow(page) {
   };
   await page.getByRole('button', { name: 'Reload', exact: true }).click();
   await page.getByText('3 records · 2 fields', { exact: true }).waitFor();
+  const tabs = page.getByRole('tablist', { name: 'Views', exact: true });
+  await tabs.getByRole('tab', { name: 'All records', exact: true }).focus();
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await tabs.getByRole('tab', { name: 'Reverse', exact: true }).evaluate(element => element === document.activeElement), true);
+  assert.equal(await tabs.getByRole('tab', { name: 'All records', exact: true }).getAttribute('aria-selected'), 'true');
+  await page.keyboard.press('Enter');
+  await page.getByRole('tabpanel', { name: 'Reverse', exact: true }).waitFor();
+  await tabs.getByRole('tab', { name: 'Reverse', exact: true }).waitFor({ state: 'visible' });
+  await page.keyboard.press('Home');
+  await page.keyboard.press('Enter');
+  await page.getByRole('tabpanel', { name: 'All records', exact: true }).waitFor();
   await page.getByRole('button', { name: 'New view', exact: true }).click();
   await page.getByLabel('View name', { exact: true }).fill('Compact');
   await page.getByLabel('Saved search', { exact: true }).fill('beta');
@@ -82,7 +93,7 @@ export async function verifyViewWorkflow(page) {
   }, { id: fixture.table.id, view: reordered });
   await page.getByRole('button', { name: 'Refresh view', exact: true }).click();
   await page.getByText('1 unsaved cell', { exact: true }).waitFor();
-  await page.getByLabel('Current view', { exact: true }).selectOption({ label: 'Reverse' });
+  await page.getByRole('tab', { name: 'Reverse', exact: true }).click();
   await page.getByText('3 records · 2 fields', { exact: true }).waitFor();
   await selectCell(2, 1);
   await page.keyboard.press('Enter');
@@ -98,15 +109,18 @@ export async function verifyViewWorkflow(page) {
   assert.equal(await page.getByText('3 records · 2 fields', { exact: true }).count(), 1);
   await search.dispatchEvent('compositionend', { data: 'gamma' });
   await page.getByText('1 record · 2 fields', { exact: true }).waitFor();
+  await page.getByRole('tab', { name: 'Reverse', exact: true }).click();
+  assert.equal(await search.inputValue(), 'gamma');
+  await page.getByText('1 record · 2 fields', { exact: true }).waitFor();
   await search.fill('');
   await page.getByText('3 records · 2 fields', { exact: true }).waitFor();
-  await page.getByLabel('Current view', { exact: true }).selectOption({ label: 'Notes only' });
+  await page.getByRole('tab', { name: 'Notes only', exact: true }).click();
   await page.getByText('3 records · 1 field', { exact: true }).waitFor();
   await page.screenshot({ path: '.artifacts/desktop-views.png' });
   await page.reload();
   await page.getByRole('navigation', { name: 'Tables', exact: true }).getByRole('button', { name: 'Views lab', exact: true }).click();
   await page.getByText('3 records · 1 field', { exact: true }).waitFor();
-  assert.equal(await page.getByLabel('Current view', { exact: true }).inputValue(), compact.id);
+  assert.equal(await page.getByRole('tab', { name: 'Notes only', exact: true }).getAttribute('aria-selected'), 'true');
   await page.getByRole('button', { name: 'View settings', exact: true }).click();
   await page.getByLabel('View name', { exact: true }).fill('Keep my view draft');
   await page.evaluate(async ({ id, view }) => {

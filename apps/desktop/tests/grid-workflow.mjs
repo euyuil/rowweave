@@ -52,7 +52,7 @@ export async function verifyGridWorkflow(page) {
     }
   };
   const open = async name => {
-    await page.getByLabel('Current view', { exact: true }).selectOption({ label: name });
+    await page.getByRole('tab', { name, exact: true }).click();
     await select();
     await page.keyboard.press('Enter');
     await page.locator('.rowweave-cell-editor').waitFor();
@@ -117,7 +117,7 @@ export async function verifyGridWorkflow(page) {
   await page.getByText('All changes saved', { exact: true }).waitFor();
   assert.equal(await value('Tags'), null);
 
-  await page.getByLabel('Current view', { exact: true }).selectOption({ label: 'Done' });
+  await page.getByRole('tab', { name: 'Done', exact: true }).click();
   await select();
   await page.keyboard.press('Space');
   await page.getByText('1 unsaved cell', { exact: true }).waitFor();

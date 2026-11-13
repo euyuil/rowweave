@@ -47,7 +47,7 @@ export async function verifySummaryWorkflow(page) {
   await page.getByRole('alert').filter({ hasText: 'Close this dialog and reload the table' }).waitFor();
   await page.getByRole('button', { name: 'Done', exact: true }).click();
   await page.getByRole('button', { name: 'Reload', exact: true }).click();
-  await page.getByLabel('Current view', { exact: true }).selectOption({ label: 'Open tasks' });
+  await page.getByRole('tab', { name: 'Open tasks', exact: true }).click();
   await page.getByText('401 records · 3 fields', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Summarize', exact: true }).click();
   await page.getByRole('row', { name: 'All matching records 401 802', exact: true }).waitFor();

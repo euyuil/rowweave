@@ -16,7 +16,16 @@ Each item is one coherent, independently validated improvement. Split an item fu
 
 This iteration keeps the existing Windows desktop, standalone service and shared host interfaces. Enterprise organization management, a built-in AI runtime, cloud collaboration, public forms, billing and new operating systems remain outside scope. Formulas and a status-board view are explicit additions to the original release boundaries.
 
-## Verification
+## Workspace UI refinement
+
+The next bounded iteration improves the existing workflows' layout and interaction. Each item is a separate PR with automated UI acceptance and screenshot review. It adds no data types, host integrations, automation runtime or collaboration scope.
+
+- [x] Compact workspace navigation with visible, keyboard-accessible view tabs and more room for records. Focused and full desktop workflows passed, including retained drafts/search, selected-view persistence, keyboard activation and 13 views at 1024 × 768. The narrow-window and populated-view screenshots were visually reviewed.
+- [ ] Contextual filter and sort controls that preserve view versions, query drafts and visible table context.
+- [ ] Record details in a side panel with clear field/value hierarchy and explicit save/discard behavior.
+- [ ] Field configuration near its column, with bounded scrolling, conversion feedback and preserved schema safeguards.
+
+## Verification evidence
 
 Business rules use Node, SQLite, HTTP and protocol/subprocess regression tests. UI changes add automated desktop or component acceptance cases; use screenshots to assess layout when available. Test data stays isolated. Avoid Computer Use for routine implementation validation.
 

@@ -64,7 +64,7 @@ export async function verifyCrossInterfaceWorkflow(connection, harnessPage, tabl
     assert.deepEqual(await sdk.getRecord(tableId, record.id), updated);
 
     const editFromUi = async (page, expected, next) => {
-      await page.getByLabel('Current view', { exact: true }).selectOption(view.id);
+      await page.getByRole('tab', { name: view.name, exact: true }).click();
       await page.waitForFunction(() => document.querySelector('.grid-host')?.getAttribute('aria-busy') === 'false');
       const bounds = await page.locator('canvas').first().boundingBox();
       await page.mouse.click(bounds.x + 100, bounds.y + 58);
