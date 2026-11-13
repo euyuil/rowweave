@@ -283,6 +283,11 @@ app.on('window-all-closed', () => app.quit());`);
   assert.deepEqual(errors, []);
   console.log('Harness archive installation, official module/slot lifecycle, typed editing, draft navigation guard, CSV import and download passed.');
 } catch (error) {
+  if (application) {
+    const page = await application.firstWindow();
+    console.error(await page.locator('body').innerText());
+    await page.screenshot({ path: '.artifacts/harness-failure.png' });
+  }
   console.error(error);
   throw error;
 } finally {
