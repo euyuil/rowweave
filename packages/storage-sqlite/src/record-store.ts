@@ -4,7 +4,7 @@ import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { summarize } from './record-summary.js';
 import type { CheckedSummary } from '../../core/src/record-summary.js';
-import type { RecordSummary, RecordHistoryQuery, RecordHistoryPage, RecordChangeDetail, RecordRestore } from '../../contracts/src/index.js';
+import type { RecordSummary, RecordHistoryQuery, RecordHistoryPage, RecordChangeDetail, RecordRestore, RecordTrashPage } from '../../contracts/src/index.js';
 import { RecordHistory } from './record-history.js';
 import { tableId, type BatchResult, type CellValue, type ConversionPreview, type DeleteResult, type Field, type GridView, type QueryPage, type RecordDelete, type RecordPage, type RecordUpdate, type RowRecord, type Table } from '../../contracts/src/index.js';
 import { ServiceError, type RecordStore } from '../../core/src/record-service.js';
@@ -540,20 +540,36 @@ export class SqliteRecordStore implements RecordStore {
   createRecords(table: Table, values: Array<Record<string, CellValue>>): BatchResult {
     return this.transaction(() => {
       this.checkSchema(table.id, table.version);
-      let position = (this.db.prepare('SELECT COALESCE(MAX(position), -1) AS last FROM records WHERE table_id = ?')
-        .get(table.id)!['last'] as number) + 1;
-      const calculate = compileFormulas(table, { skipLinked: true });
-      const insert = this.db.prepare('INSERT INTO records (id, table_id, position, version, values_json, formula_errors_json) VALUES (?, ?, ?, 1, ?, ?)');
-      const records = values.map(values => {
-        const id = randomUUID();
-        const result = calculate(values);
-        insert.run(id, table.id, position++, JSON.stringify(result.values), JSON.stringify(result.formulaErrors ?? {}));
-        return { id, version: 1, ...result };
-      });
-      const linked = this.relations.write(table, records);
-      for (const record of records) if (linked.values.has(record.id)) record.values = linked.values.get(record.id)!;
-      const computed = this.finishRecordWrite(table.id, records.map(record => record.id), linked);
-      return { records: this.lookups.hydrate(table, this.relations.hydrate(table, records.map(record => computed.has(record.id) ? this.readRecord(table.id, record.id) : record))) };
+      return this.insertRecords(table, values.map(values => ({ id: randomUUID(), version: 1, values })));
+    });
+  }
+
+  private insertRecords(table: Table, input: Array<{ id: string; version: number; values: Record<string, CellValue> }>): BatchResult {
+    let position = (this.db.prepare('SELECT COALESCE(MAX(position), -1) AS last FROM records WHERE table_id = ?').get(table.id)!['last'] as number) + 1;
+    const calculate = compileFormulas(table, { skipLinked: true });
+    const insert = this.db.prepare('INSERT INTO records (id, table_id, position, version, values_json, formula_errors_json) VALUES (?, ?, ?, ?, ?, ?)');
+    const records = input.map(({ id, version, values }) => {
+      const result = calculate(values);
+      insert.run(id, table.id, position++, version, JSON.stringify(result.values), JSON.stringify(result.formulaErrors ?? {}));
+      return { id, version, ...result };
+    });
+    const linked = this.relations.write(table, records);
+    for (const record of records) if (linked.values.has(record.id)) record.values = linked.values.get(record.id)!;
+    const computed = this.finishRecordWrite(table.id, records.map(record => record.id), linked);
+    return { records: this.lookups.hydrate(table, this.relations.hydrate(table, records.map(record => computed.has(record.id) ? this.readRecord(table.id, record.id) : record))) };
+  }
+
+  recordTrash(table: Table, query: RecordHistoryQuery): RecordTrashPage {
+    return this.transaction(() => { this.checkSchema(table.id, table.version); return this.history.trash(table, query); }, 'DEFERRED');
+  }
+
+  restoreDeletedRecords(table: Table, records: Array<{ id: string; deletionId: number; version: number; values: Record<string, CellValue> }>): BatchResult {
+    return this.transaction(() => {
+      this.checkSchema(table.id, table.version);
+      for (const record of records) this.history.checkDeleted(table.id, record.id, record.deletionId);
+      const result = this.insertRecords(table, records);
+      for (const record of records) this.history.markRestored(record.id, record.deletionId);
+      return result;
     });
   }
 

@@ -1,6 +1,6 @@
 import type { WorkspaceApi, TableCreate, TableUpdate, FieldCreate, FieldUpdate, FieldConversion, RecordCreate,
   RecordUpdate, RecordDelete, RecordQuery, ViewCreate, ViewUpdate, ViewPageRequest, SummaryRequest,
-  RecordHistoryQuery, RecordRestore } from '../../../packages/client/src/index.js';
+  RecordHistoryQuery, RecordRestore, DeletedRecordRestore } from '../../../packages/client/src/index.js';
 
 export class UsageError extends Error {}
 
@@ -30,6 +30,8 @@ export const commands: Record<string, Command> = {
   'records history': { ids: 2, input: 'optional', run: (api, [id, record], input) => api.recordHistory(id!, record!, input as RecordHistoryQuery) },
   'records change': { ids: 2, input: 'required', run: (api, [id, record], input) => api.recordChange(id!, record!, inputObject(input)['changeId'] as number) },
   'records restore': { ids: 2, input: 'required', run: (api, [id, record], input) => api.restoreRecord(id!, record!, input as RecordRestore) },
+  'records trash': { ids: 1, input: 'optional', run: (api, [id], input) => api.recordTrash(id!, input as RecordHistoryQuery) },
+  'records restore-deleted': { ids: 1, input: 'required', run: (api, [id], input) => api.restoreDeletedRecords(id!, input as DeletedRecordRestore[]) },
   'records query': { ids: 1, input: 'optional', run: (api, [id], input) => api.queryRecords(id!, input as RecordQuery) },
   'records summarize': { ids: 1, input: 'optional', run: (api, [id], input) => api.summarizeRecords(id!, input as SummaryRequest) },
   'records create': { ids: 1, input: 'required', run: (api, [id], input) => api.createRecords(id!, input as RecordCreate[]) },
@@ -49,7 +51,7 @@ Usage: rowweave <resource> <action> [table-id] [field/record/view-id] [options]
 
   tables   list | get | create | update | delete
   fields   create | update | delete | preview-conversion | apply-conversion
-  records  get | query | summarize | create | update | delete | history | change | restore
+  records  get | query | summarize | create | update | delete | history | change | restore | trash | restore-deleted
   views    list | get | create | update | delete | query
   csv      preview | import | export
 

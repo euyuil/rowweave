@@ -5,7 +5,7 @@ import {
   type ViewCreate, type ViewPage, type ViewPageRequest, type ViewUpdate,
   type CsvImportRequest, type CsvPreview, type CsvImportResult, type CsvExportRequest,
 } from '../../contracts/src/index.js';
-import type { RecordSummary, SummaryRequest, RecordHistoryQuery, RecordHistoryPage, RecordChangeDetail, RecordRestore } from '../../contracts/src/index.js';
+import type { RecordSummary, SummaryRequest, RecordHistoryQuery, RecordHistoryPage, RecordChangeDetail, RecordRestore, RecordTrashPage, DeletedRecordRestore } from '../../contracts/src/index.js';
 
 export interface Connection {
   url: string;
@@ -71,6 +71,8 @@ export function createWorkspaceClient(connection: Connection, request: typeof fe
     recordHistory: (id: string, recordId: string, query: RecordHistoryQuery = {}) => write<RecordHistoryPage>(`${record(id, recordId)}/history`, 'POST', query),
     recordChange: (id: string, recordId: string, changeId: number) => call<RecordChangeDetail>(`${record(id, recordId)}/history/${changeId}`),
     restoreRecord: (id: string, recordId: string, input: RecordRestore) => write<RowRecord>(`${record(id, recordId)}/restore`, 'POST', input),
+    recordTrash: (id: string, query: RecordHistoryQuery = {}) => write<RecordTrashPage>(`${root(id)}/trash/query`, 'POST', query),
+    restoreDeletedRecords: (id: string, input: DeletedRecordRestore[]) => write<BatchResult>(`${root(id)}/trash/restore`, 'POST', input),
     queryRecords: (id: string, input: RecordQuery, signal?: AbortSignal) => write<QueryPage>(`${root(id)}/query`, 'POST', input, signal),
     summarizeRecords: (id: string, input: SummaryRequest, signal?: AbortSignal) => write<RecordSummary>(`${root(id)}/summary`, 'POST', input, signal),
     previewCsv: (id: string, input: CsvImportRequest, signal?: AbortSignal) => write<CsvPreview>(`${root(id)}/import/preview`, 'POST', input, signal),

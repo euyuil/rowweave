@@ -15,7 +15,7 @@ test('the workspace-file command creates restorable snapshots with JSON results 
   const backup = join(dirname(data.path), 'backup with spaces.sqlite');
   const result = await run(process.execPath, [command, 'backup', data.path, backup]);
   assert.equal(JSON.parse(result.stdout).path, backup);
-  assert.equal(JSON.parse(result.stdout).version, 16);
+  assert.equal(JSON.parse(result.stdout).version, 17);
   assert.equal(result.stderr, '');
   const restored = join(dirname(data.path), 'restored.sqlite');
   assert.equal(JSON.parse((await run(process.execPath, [command, 'restore', backup, restored])).stdout).path, restored);

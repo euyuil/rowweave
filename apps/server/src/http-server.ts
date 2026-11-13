@@ -61,6 +61,12 @@ export async function startServer({ service, token, ...options }: ServerOptions)
       throw new ServiceError('UNAUTHORIZED', 'A valid access token is required.', 401);
     }
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+    const trash = url.pathname.match(/^\/tables\/([^/]+)\/trash\/(query|restore)$/);
+    if (trash && request.method === 'POST') {
+      const input = await readJson(request);
+      send(response, 200, trash[2] === 'query' ? service.recordTrash(trash[1]!, input) : service.restoreDeletedRecords(trash[1]!, input));
+      return;
+    }
     const history = url.pathname.match(/^\/tables\/([^/]+)\/records\/([^/]+)\/(history|restore)(?:\/([^/]+))?$/);
     if (history) {
       const [, tableId, recordId, action, changeId] = history;

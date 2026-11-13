@@ -122,7 +122,7 @@ test('version-six migration builds saved-query indexes and preserves records, vi
   for (const index of indexes()) db.exec(`DROP INDEX "${index['name']}"`);
   db.exec('DROP TABLE record_changes; ALTER TABLE records DROP COLUMN formula_errors_json; PRAGMA user_version = 6;');
   const reopened = new RecordService(data.open());
-  assert.equal(db.prepare('PRAGMA user_version').get()!['user_version'], 16);
+  assert.equal(db.prepare('PRAGMA user_version').get()!['user_version'], 17);
   assert.equal(indexes().length, 1);
   assert.deepEqual(reopened.getView(table.id, view.id), view);
   assert.deepEqual(reopened.queryView(table.id, view.id, {}), before);

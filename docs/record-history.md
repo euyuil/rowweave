@@ -23,7 +23,27 @@ await api.restoreRecord(tableId, recordId, {
 });
 ```
 
-The chosen side must contain a record. This API restores saved values into an existing record; a deleted-record restore and batch undo are subsequent required delivery steps. Deletion retains snapshots for inspection by record ID. Table deletion removes its records and history. There is no automatic history expiration in this version, so journal storage grows with committed changes. Backups include it; copying a workspace or backup copies its historical values too.
+The chosen side must contain a record. This API restores saved values into an existing record. Use trash restoration for a deleted record, as described below. Table deletion removes its records and history. There is no automatic history expiration in this version, so journal storage grows with committed changes. Backups include it; copying a workspace or backup copies its historical values too.
+
+## Deleted records
+
+`recordTrash(tableId, { limit?, before? })` returns a bounded page of currently deleted records, newest deletion first, with the same 20-default/100-maximum cursor limits. Each entry contains its UUID, `deletionId`, transaction `batchId`, deletion timestamp, last saved version and stored primary display value. It omits complete snapshots; fetch one with `recordChange(tableId, id, deletionId)`. Changing the primary display field uses that field's stored value, or null if it did not exist in the snapshot.
+
+Send an array of `{ id, deletionId, values? }` to `restoreDeletedRecords`. The service atomically restores up to 2,000 records and 20,000 writable cells. Only each record's latest deletion is eligible, and a live record cannot be overwritten. A repeated request, an obsolete deletion ID, or a concurrent restore fails with `VERSION_CONFLICT`; refresh trash before deciding what to do next.
+
+Restoration preserves each UUID and uses its last saved version plus one, rejecting writes based on a pre-deletion version. It appends restored records to the table in request order; original row positions are not retained. Current fields receive their stored values, or current defaults/null when added after deletion. Removed fields stay removed. Formulas use current definitions and target values, and reciprocal relationships are rebuilt. Every directly restored record references its own deletion entry in `restoredFrom`, and all resulting changes share one transaction batch.
+
+Current required/type/option/relationship constraints apply to the entire batch. To repair an incompatible historical value, explicitly supply that writable field in `values`; unknown and computed fields are rejected. Missing linked targets or occupied single-link reverse fields reject the whole batch. A closed set of mutually linked records in one table can be restored together. Restore deleted targets in other tables first, or explicitly repair the links; there is no silent unlinking. Inspect current schema and snapshots before choosing repairs.
+
+```ts
+const trash = await api.recordTrash(tableId, { limit: 20 });
+const deleted = trash.records[0]!;
+const snapshot = await api.recordChange(tableId, deleted.id, deleted.deletionId);
+// After reviewing snapshot.before and the current schema:
+await api.restoreDeletedRecords(tableId, [{ id: deleted.id, deletionId: deleted.deletionId }]);
+```
+
+Trash survives restart and backup/restore. This release exposes it through HTTP, SDK, CLI and MCP; the desktop trash workflow and saved batch undo remain required delivery work.
 
 ## Desktop workflow
 
@@ -35,6 +55,6 @@ You may inspect history while a form has unsaved changes, but restoration stays 
 
 ## Storage and verification
 
-Workspace format 16 adds the journal and prevents older programs from opening it. Migration preserves existing records, UUIDs, versions, views and schemas without creating fictitious past events. The first subsequent edit captures the previous stored state. Service connections install temporary SQLite triggers on `main.records`, with transaction-local context; this captures indirect writes without spreading journal calls across relationship and calculation code. Direct SQLite edits outside the service are unsupported and are not journaled. Online backup/restore retains the durable journal, not the temporary connection context.
+Workspace format 16 introduced the journal; format 17 adds an index for bounded trash queries. Migration preserves existing records, UUIDs, versions, views, schemas and journal entries without creating fictitious past events. The first subsequent edit captures the previous stored state. Service connections install temporary SQLite triggers on `main.records`, with transaction-local context; this captures indirect writes without spreading journal calls across relationship and calculation code. Direct SQLite edits outside the service are unsupported and are not journaled. Online backup/restore retains the durable journal, not the temporary connection context. Older programs reject newer workspace formats.
 
-Regression coverage includes typed snapshots, rollback after a late batch conflict, stable pagination, current-schema restoration, retained later fields, recalculated formulas, missing targets, reverse links, coalesced calculations, multiple connections, CSV/conversion writes, restart, backup, migration, authenticated HTTP/SDK and real CLI/MCP subprocesses. Automated desktop acceptance verifies history pagination, keyboard entry, before/after comparison, current-value preview, draft retention, cancellation, stale restores and successful restoration with recalculation. Screenshots at 1024 × 768 were reviewed; native input-method checks remain a final-candidate task. Trash and batch undo remain open in [the active delivery plan](gap-closure-plan.md).
+Regression coverage includes typed snapshots, rollback after a late batch conflict, stable pagination, current-schema restoration, retained later fields, recalculated formulas, missing targets, reverse links, coalesced calculations, multiple connections, CSV/conversion writes, restart, backup, migration, authenticated HTTP/SDK and real CLI/MCP subprocesses. Trash tests cover deletion cycles, stale requests, explicit field repairs, reciprocal cardinality, late rollback and closed self-linked batches. Automated desktop acceptance verifies history pagination, keyboard entry, before/after comparison, current-value preview, draft retention, cancellation, stale restores and successful restoration with recalculation. Screenshots at 1024 × 768 were reviewed; native input-method checks remain a final-candidate task. Desktop trash and batch undo remain open in [the active delivery plan](gap-closure-plan.md).

@@ -101,4 +101,6 @@ All request/response interfaces and service limit constants are exported alongsi
 
 `recordHistory` reads bounded change metadata, `recordChange` fetches one before/after snapshot, and `restoreRecord` restores saved writable values into an existing record using its current version. Restoration preserves the UUID, applies current schema constraints, recalculates formulas and creates a new history entry. See [history and retention semantics](https://github.com/euyuil/rowweave/blob/main/docs/record-history.md) before restoring or distributing a workspace backup.
 
+`recordTrash` reads bounded pages of deleted records and their latest deletion IDs. `restoreDeletedRecords` atomically restores an array of `{ id, deletionId, values? }`, preserving UUIDs with newer versions and appending them to the table. Optional writable values repair incompatible historical fields; current schema and linked-target constraints apply. Repeated restores and stale deletion IDs fail with `VERSION_CONFLICT` and are never retried automatically.
+
 The repository's package regression installs the actual archive offline into an isolated application, checks its public TypeScript declarations, and runs a schema/record/view/CSV workflow against a real temporary service.
