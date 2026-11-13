@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { DatabaseSync } from 'node:sqlite';
 import { fixture } from './helpers.js';
 import { RecordService, ServiceError } from '../../core/src/record-service.js';
 import type { GroupPathCollapse, SummaryMeasure } from '../../contracts/src/index.js';
+import { nestedGroupLayout } from '../src/nested-group-layout.js';
 
 function setup(t: Parameters<typeof fixture>[0]) {
   const data = fixture(t, null), store = data.open(), service = new RecordService(store);
@@ -154,4 +156,74 @@ test('nested timestamp paths normalize offsets and preserve relative-date contin
   now = new Date('2026-12-01T00:00:00Z');
   assert.throws(() => service.queryGroups(table.id, { groupBy, filter, expectedDateContext: month.dateContext }), /relative date range changed/);
   assert.equal(service.queryGroups(table.id, { groupBy, filter }).totalRecords, 0);
+});
+
+test('nested null leaves share their root headings with configured empty seeds', t => {
+  const service = new RecordService(fixture(t, null).open());
+  let table = service.createTable({ name: 'Null leaves' });
+  table = service.createField(table.id, { expectedVersion: table.version, name: 'Status', type: 'singleSelect',
+    options: [{ id: 'a', name: 'A' }, { id: 'empty', name: 'Empty' }] });
+  table = service.createField(table.id, { expectedVersion: table.version, name: 'Done', type: 'checkbox' });
+  table = service.createField(table.id, { expectedVersion: table.version, name: 'Number', type: 'number' });
+  const [, status, done, number] = table.fields.map(field => field.id) as [string, string, string, string];
+  const records = service.createRecords(table.id, [
+    { values: { [status]: 'a', [done]: null, [number]: null } },
+    { values: { [status]: 'a', [done]: false, [number]: 0 } },
+    { values: { [status]: null, [done]: null, [number]: null } },
+  ]).records;
+  const groupBy = [status, done, number];
+  const layout = service.queryGroups(table.id, { groupBy, measures: [{ fieldId: number, operation: 'sum' }] });
+  assert.equal(layout.totalGroups, 9); assert.equal(layout.totalRows, 12); assert.equal(layout.totalRecords, 3);
+  assert.deepEqual(layout.groups.map(group => group.path), [
+    ['a'], ['a', false], ['a', false, 0], ['a', null], ['a', null, null], ['empty'], [null], [null, null], [null, null, null],
+  ]);
+  assert.deepEqual(layout.groups.filter(group => group.path!.length === 1).map(group => [group.count, group.values]), [[2, [0]], [0, [null]], [1, [null]]]);
+  assert.deepEqual(service.queryRecords(table.id, { groupBy }).records.map(record => record.id), [records[1]!.id, records[0]!.id, records[2]!.id]);
+  const collapse = { defaultCollapsed: true, exceptions: [['a'], ['a', null], ['a', null, null]] };
+  const sparse = service.queryGroups(table.id, { groupBy, collapse, window: 'expandedRecords' });
+  assert.equal(sparse.totalGroups, 6); assert.equal(sparse.totalRows, 7);
+  assert.deepEqual(sparse.groups.map(group => [group.path, group.count, group.recordOffset, group.rowStart]), [[['a', null, null], 1, 1, 3]]);
+});
+
+test('nested measures retain the count snapshot when another connection commits between reads', t => {
+  const { data, service, table, groupBy, measures, records, amount } = setup(t);
+  const reader = new DatabaseSync(data.path), prepare = reader.prepare.bind(reader);
+  let reads = 0;
+  reader.prepare = sql => {
+    if (++reads === 2) {
+      service.updateBatch([{ id: records[0]!.id, expectedVersion: records[0]!.version, values: { [amount]: 100 } }], table.id);
+      service.createRecords(table.id, [{ values: { [groupBy[0]!]: 'a', [groupBy[1]!]: 'Same', [groupBy[2]!]: 0, [amount]: 200 } }]);
+    }
+    return prepare(sql);
+  };
+  const snapshot = service.getTable(table.id);
+  reader.exec('BEGIN');
+  try {
+    const layout = nestedGroupLayout(reader, snapshot, groupBy.map(id => table.fields.find(field => field.id === id)!),
+      { defaultCollapsed: false, exceptions: [] }, 'r.table_id = :table', { ':table': table.id }, 0, 100, 'displayRows', measures);
+    assert.equal(reads, 2); assert.equal(layout.totalRecords, 6); assert.equal(layout.revision, snapshot.revision);
+    assert.deepEqual(layout.groups.find(group => JSON.stringify(group.path) === '["a"]')!.values, [17, 4.25]);
+    assert.deepEqual(layout.groups.find(group => JSON.stringify(group.path) === '["a","Same",0]')!.values, [5, 2.5]);
+  } finally { reader.exec('ROLLBACK'); reader.close(); }
+  const fresh = service.queryGroups(table.id, { groupBy, measures });
+  assert.equal(fresh.totalRecords, 7);
+  assert.deepEqual(fresh.groups.find(group => JSON.stringify(group.path) === '["a"]')!.values, [315, 63]);
+  assert.throws(() => service.queryGroups(table.id, { groupBy, expectedRevision: snapshot.revision }), { code: 'DATA_CHANGED' });
+});
+
+test('parent numeric measures use complete SQLite aggregates across many distinct leaves', t => {
+  const service = new RecordService(fixture(t, null).open());
+  let table = service.createTable({ name: 'Complete numeric measures' });
+  table = service.createField(table.id, { expectedVersion: table.version, name: 'Leaf', type: 'number' });
+  table = service.createField(table.id, { expectedVersion: table.version, name: 'Amount', type: 'number' });
+  const [root, leaf, amount] = table.fields.map(field => field.id) as [string, string, string];
+  service.createRecords(table.id, [1e16, 1, -1e16, 0.5, -0.25].map((value, index) => ({ values: { [root]: 'A', [leaf]: index, [amount]: value } })));
+  const measures: SummaryMeasure[] = ['sum', 'average', 'min', 'max'].map(operation => ({ fieldId: amount, operation: operation as SummaryMeasure['operation'] }));
+  const expected = service.summarizeRecords(table.id, { measures }).totals.values;
+  assert.deepEqual(expected, [1.25, 0.25, -1e16, 1e16]);
+  for (const collapse of [{ defaultCollapsed: false, exceptions: [] }, { defaultCollapsed: false, exceptions: [['A']] }]) {
+    const result = service.queryGroups(table.id, { groupBy: [root, leaf], measures, collapse, limit: 1 });
+    assert.deepEqual(result.groups[0]!.values, expected);
+    assert.equal(result.groups[0]!.count, 5);
+  }
 });
