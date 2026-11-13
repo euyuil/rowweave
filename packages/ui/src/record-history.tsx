@@ -3,7 +3,7 @@ import type { CellValue, Field, RecordChangeDetail, RecordHistoryPage, RecordRes
 import type { WorkspaceApi } from '../../client/src/http-client.js';
 import { sameValue } from '../../client/src/cell-values.js';
 
-function display(field: Field | undefined, value: CellValue | undefined, error?: string): string {
+export function historyValue(field: Field | undefined, value: CellValue | undefined, error?: string): string {
   if (error) return `#ERROR: ${error}`;
   if (value === undefined) return 'Not present';
   if (value === null) return 'Empty';
@@ -77,8 +77,8 @@ export function RecordHistoryPanel({ table, record, api, hasDraft, busy, onResto
       <h3>{detail.beforeVersion === null ? 'Record created' : `Version ${detail.beforeVersion}`} → {detail.afterVersion === null ? 'Record deleted' : `Version ${detail.afterVersion}`}</h3>
       {changed.length ? <div className="history-comparison"><table><thead><tr><th>Field</th><th>Before</th><th>After</th></tr></thead>
         <tbody>{changed.map(id => <tr key={id}><th scope="row" title={id}>{name(id)}</th>
-          <td><pre>{display(fields.get(id), detail.before?.values[id], detail.before?.formulaErrors?.[id])}</pre></td>
-          <td><pre>{display(fields.get(id), detail.after?.values[id], detail.after?.formulaErrors?.[id])}</pre></td></tr>)}</tbody></table></div>
+          <td><pre>{historyValue(fields.get(id), detail.before?.values[id], detail.before?.formulaErrors?.[id])}</pre></td>
+          <td><pre>{historyValue(fields.get(id), detail.after?.values[id], detail.after?.formulaErrors?.[id])}</pre></td></tr>)}</tbody></table></div>
         : <p>The saved values did not change.</p>}
       <p className="form-note">Historical links use record IDs. Removed fields remain visible here.</p>
       <div className="history-restore-actions"><button type="button" disabled={busy || hasDraft || !detail.before} onClick={() => setRestoreSide('before')}>Restore before change</button>
@@ -88,8 +88,8 @@ export function RecordHistoryPanel({ table, record, api, hasDraft, busy, onResto
       <h3>Restore version {snapshot.version}?</h3>
       <p>{restoring.length} current field value{restoring.length === 1 ? '' : 's'} will change. Newer fields stay as they are; formulas recalculate using current definitions.</p>
       {restoring.length > 0 && <div className="history-comparison"><table><thead><tr><th>Field</th><th>Current</th><th>Restore to</th></tr></thead>
-        <tbody>{restoring.map(field => <tr key={field.id}><th scope="row">{field.name}</th><td><pre>{display(field, record.values[field.id])}</pre></td>
-          <td><pre>{display(field, snapshot.values[field.id])}</pre></td></tr>)}</tbody></table></div>}
+        <tbody>{restoring.map(field => <tr key={field.id}><th scope="row">{field.name}</th><td><pre>{historyValue(field, record.values[field.id])}</pre></td>
+          <td><pre>{historyValue(field, snapshot.values[field.id])}</pre></td></tr>)}</tbody></table></div>}
       <div className="history-restore-actions"><button type="button" disabled={busy} onClick={() => setRestoreSide(undefined)}>Cancel restoration</button>
         <button type="button" className="primary" disabled={busy || hasDraft} onClick={() => {
           setError(undefined);

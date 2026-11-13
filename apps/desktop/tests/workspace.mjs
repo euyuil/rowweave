@@ -24,6 +24,7 @@ import { verifyRelativeDateWorkflow } from './relative-date-workflow.mjs';
 import { verifyNavigationWorkflow } from './navigation-workflow.mjs';
 import { verifyRecordPanelWorkflow } from './record-panel-workflow.mjs';
 import { verifyHistoryWorkflow } from './history-workflow.mjs';
+import { verifyTrashWorkflow } from './trash-workflow.mjs';
 import { verifyFieldPanelWorkflow } from './field-panel-workflow.mjs';
 
 const dataDirectory = await mkdtemp(join(tmpdir(), 'rowweave-workspace-'));
@@ -167,7 +168,7 @@ async function recordLifecycle() {
   await page.screenshot({ path: '.artifacts/desktop-records.png' });
   await page.getByRole('button', { name: 'Delete records', exact: true }).click();
   await externalChange((await records())[1]);
-  await page.getByRole('dialog').getByText('Saved snapshots remain in record history.', { exact: false }).waitFor();
+  await page.getByRole('dialog').getByText('You can recover them from Trash.', { exact: false }).waitFor();
   await page.getByRole('dialog').getByRole('button', { name: 'Delete record', exact: true }).click();
   await page.getByRole('dialog').getByRole('alert').filter({ hasText: 'changed' }).waitFor();
   assert.equal((await records()).length, 2);
@@ -251,6 +252,7 @@ try {
   await recordLifecycle();
   await verifyRecordPanelWorkflow(page, application);
   await verifyHistoryWorkflow(page, application);
+  await verifyTrashWorkflow(page, application);
   await verifyViewWorkflow(page);
   await verifyNavigationWorkflow(page, application);
   await verifyQueryWorkflow(page, application);
