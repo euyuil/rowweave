@@ -1,5 +1,7 @@
 # Everyday workflow candidate verification
 
+This is the earlier functional/performance baseline. See the [UI candidate report](ui-refinement-validation.md) for the subsequent package, layout changes and current manual acceptance items. Measurements below retain their original source and binary identifiers.
+
 This report covers the bounded [refinement plan](refinement-plan.md). The owner performs final acceptance using the [walkthrough](acceptance.md). It does not claim a public release or acceptance on the owner's behalf.
 
 ## Exact candidate
