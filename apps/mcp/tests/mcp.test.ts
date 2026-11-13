@@ -14,6 +14,7 @@ import { fixture } from '../../../packages/storage-sqlite/tests/helpers.js';
 import { RecordService } from '../../../packages/core/src/record-service.js';
 import { parseCsv } from '../../../packages/core/src/csv.js';
 import { startServer } from '../../server/src/http-server.js';
+import type { Attachment } from '../../../packages/contracts/src/index.js';
 
 const runFile = promisify(execFile);
 const entry = resolve('apps/mcp/dist/rowweave-mcp.js');
@@ -321,7 +322,7 @@ test('MCP discovers all operations and runs versioned schema, records, views and
   const { service, environment } = await setup(t);
   const { client, call, json, used, stderr } = await connect(t, environment);
   const tools = (await client.listTools()).tools;
-  assert.equal(tools.length, 33);
+  assert.equal(tools.length, 38);
   assert.ok(tools.every(tool => tool.inputSchema.type === 'object' && tool.inputSchema.additionalProperties === false));
   assert.equal(tools.find(tool => tool.name === 'records_query')!.annotations!.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === 'records_update')!.annotations!.destructiveHint, true);
@@ -332,6 +333,15 @@ test('MCP discovers all operations and runs versioned schema, records, views and
   assert.match((usage.contents[0] as { text: string }).text, /Writes are never retried/);
   assert.deepEqual(await json('tables_list'), []);
   let table = await json<Table>('tables_create', { name: 'MCP projects' });
+  const fileData = Buffer.from([0, 255, 13, 10, 128]).toString('base64');
+  const file = await json<Attachment>('attachments_upload', { tableId: table.id, input: { filename: '设计.bin', mediaType: 'application/octet-stream', data: fileData } });
+  const fileArgs = { tableId: table.id, attachmentId: file.id };
+  assert.deepEqual(await json('attachments_get', fileArgs), file);
+  assert.deepEqual(await json('attachments_list', { tableId: table.id, query: { limit: 1 } }), { attachments: [file] });
+  assert.deepEqual(await json('attachments_download', fileArgs), { data: fileData });
+  assert.equal(JSON.parse(text(await call('attachments_upload', { tableId: table.id, input: { filename: '../bad', mediaType: 'text/plain', data: '' } }))).error.code, 'INVALID_ATTACHMENT');
+  await json('attachments_delete', fileArgs);
+  assert.equal(JSON.parse(text(await call('attachments_get', fileArgs))).error.code, 'ATTACHMENT_NOT_FOUND');
   assert.deepEqual(await json('tables_get', { tableId: table.id }), table);
   table = await json<Table>('tables_update', { tableId: table.id, input: { expectedVersion: table.version, name: 'Renamed' } });
   table = await json<Table>('fields_create', { tableId: table.id, input: { expectedVersion: table.version, name: 'Budget', type: 'number' } });

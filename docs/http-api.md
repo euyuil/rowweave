@@ -4,7 +4,19 @@ RowWeave exposes one bearer-authenticated HTTP/JSON API. The desktop, [TypeScrip
 
 Send `Authorization: Bearer <token>` on every operation, and `Content-Type: application/json` for request bodies, including DELETE bodies. The token has at least 32 printable ASCII characters without spaces. Default loopback settings permit the bundled file renderer (`Origin: null`) and clients without an Origin header. Independent services support explicit IP binding and exact Host/origin allowlists; see [service configuration](service.md). Browser preflights do not require a token, but actual operations always do. Keep credentials outside source and logs.
 
-Successful JSON responses contain the resource/result directly. Errors use a non-success status and `{ "error": { "code": "VERSION_CONFLICT", "message": "..." } }`. CSV export is the one successful non-JSON response. Writes are not idempotent unless the operation itself makes them so; clients must not automatically retry creates/imports after an uncertain response.
+Successful JSON responses contain the resource/result directly. Errors use a non-success status and `{ "error": { "code": "VERSION_CONFLICT", "message": "..." } }`. CSV export returns text; attachment downloads return binary bytes. Writes are not idempotent unless the operation itself makes them so; clients must not automatically retry creates/imports/uploads after an uncertain response.
+
+## Attachment storage
+
+The authenticated file API stores immutable, table-scoped files up to 8 MiB inside the workspace database. See [file limits, lifecycle and interface examples](attachments.md). Attachment fields and their UI remain in delivery scope.
+
+| Method and path | Request body | Result / SDK method |
+| --- | --- | --- |
+| `POST /tables/:table/attachments` | `{ filename, mediaType, data }`, canonical base64 `data` | `201 Attachment` / `uploadAttachment(id, input)` |
+| `POST /tables/:table/attachments/query` | `{ before?, limit? }`, maximum 100 | `{ attachments, nextBefore? }` / `listAttachments(id, query)` |
+| `GET /tables/:table/attachments/:attachment` | None | `Attachment` / `getAttachment(id, attachmentId)` |
+| `GET /tables/:table/attachments/:attachment/content` | None | Original bytes / `downloadAttachment(id, attachmentId)` returns `Uint8Array` |
+| `DELETE /tables/:table/attachments/:attachment` | None | `{ deleted: attachmentId }` / `deleteAttachment(id, attachmentId)` |
 
 ## Tables and schema
 

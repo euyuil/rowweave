@@ -1,6 +1,19 @@
 export type ScalarValue = string | number | boolean | null;
 export type CellValue = ScalarValue | ScalarValue[];
 
+export const maxAttachmentBytes = 8 * 1024 * 1024;
+export interface AttachmentUpload { filename: string; mediaType: string; data: string }
+export interface Attachment {
+  id: string;
+  filename: string;
+  mediaType: string;
+  size: number;
+  sha256: string;
+  createdAt: string;
+}
+export interface AttachmentQuery { before?: number; limit?: number }
+export interface AttachmentPage { attachments: Attachment[]; nextBefore?: number }
+
 export interface SelectOption {
   id: string;
   name: string;

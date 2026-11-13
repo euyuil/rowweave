@@ -158,11 +158,11 @@ test('complete saved undo and its receipt survive restart, backup and format-18 
   service.updateBatch([{ id: row.id, expectedVersion: 1, values: { [amount]: 2 } }], table.id);
   const batch = service.recordBatches(table.id, {}).batches[0]!;
   store.close();
-  const db = new DatabaseSync(data.path); db.exec('DROP TABLE field_sequences; ALTER TABLE record_batches DROP COLUMN undo_of; PRAGMA user_version = 18;'); db.close();
+  const db = new DatabaseSync(data.path); db.exec('DROP TABLE attachments; DROP TABLE field_sequences; ALTER TABLE record_batches DROP COLUMN undo_of; PRAGMA user_version = 18;'); db.close();
   const restarted = new RecordService(data.open()), result = restarted.undoRecordBatch(table.id, batch.id);
   assert.equal(restarted.getRecord(table.id, row.id).values[amount], 1);
   const backup = join(dirname(data.path), 'backup.sqlite'), restoredPath = join(dirname(data.path), 'restored.sqlite');
-  await backupWorkspace(data.path, backup); assert.equal((await restoreWorkspace(backup, restoredPath)).version, 22);
+  await backupWorkspace(data.path, backup); assert.equal((await restoreWorkspace(backup, restoredPath)).version, 23);
   const restoredStore = new SqliteRecordStore(restoredPath);
   try {
     const restored = new RecordService(restoredStore);

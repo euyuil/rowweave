@@ -3,6 +3,8 @@ import { isReadOnlyField, maxPageSize, maxBatchRecords, maxBatchCells, maxFields
   type BatchResult, type CellValue, type ConversionPreview, type DeleteResult, type Field, type GridView, type QueryPage, type RecordDelete, type RecordPage, type RecordUpdate, type RowRecord, type Table, type ViewPage } from '../../contracts/src/index.js';
 import { schemaName, schemaObject, schemaVersion } from './schema-validation.js';
 import { parseField } from './field-schema.js';
+import type { Attachment, AttachmentPage } from '../../contracts/src/index.js';
+import { parseAttachmentUpload, parseAttachmentQuery, type CheckedAttachmentUpload, type AttachmentFile } from './attachments.js';
 import { validateValue } from './field-values.js';
 import { convertValue } from './field-conversion.js';
 import { parseQuery, type CheckedQuery } from './record-query.js';
@@ -17,6 +19,11 @@ import type { CsvImportResult, CsvPreview } from '../../contracts/src/index.js';
 export { ServiceError } from './errors.js';
 
 export interface RecordStore {
+  uploadAttachment(tableId: string, input: CheckedAttachmentUpload): Attachment;
+  listAttachments(tableId: string, query: ReturnType<typeof parseAttachmentQuery>): AttachmentPage;
+  getAttachment(tableId: string, id: string): Attachment;
+  downloadAttachment(tableId: string, id: string): AttachmentFile;
+  deleteAttachment(tableId: string, id: string): void;
   listTables(): Table[];
   getTable(id?: string): Table;
   createTable(table: Table): Table;
@@ -50,6 +57,12 @@ export interface RecordStore {
 
 export class RecordService {
   constructor(private readonly store: RecordStore) {}
+
+  uploadAttachment(tableId: string, input: unknown): Attachment { return this.store.uploadAttachment(tableId, parseAttachmentUpload(input)); }
+  listAttachments(tableId: string, input: unknown): AttachmentPage { return this.store.listAttachments(tableId, parseAttachmentQuery(input)); }
+  getAttachment(tableId: string, id: string): Attachment { return this.store.getAttachment(tableId, id); }
+  downloadAttachment(tableId: string, id: string): AttachmentFile { return this.store.downloadAttachment(tableId, id); }
+  deleteAttachment(tableId: string, id: string): void { this.store.deleteAttachment(tableId, id); }
 
   listTables(): Table[] {
     return this.store.listTables();

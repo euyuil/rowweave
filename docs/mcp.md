@@ -43,6 +43,9 @@ Tools have discoverable strict JSON schemas. Read descriptions and use stable ID
 
 | Tools | Arguments |
 | --- | --- |
+| `attachments_upload` | `{ tableId, input: { filename, mediaType, data: base64 } }` |
+| `attachments_list` | `{ tableId, query: { before?, limit? } }` |
+| `attachments_get`, `attachments_download`, `attachments_delete` | `{ tableId, attachmentId }`; download returns base64 bytes |
 | `tables_list` | `{}` |
 | `tables_get` | `{ tableId }` |
 | `tables_create` | `{ name }` |
