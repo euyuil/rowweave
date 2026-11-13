@@ -47,6 +47,7 @@ export async function verifyConnectedFormulaWorkflow(page) {
   await picker.selectOption(subtotal);
   assert.equal(await page.getByLabel('Formula', { exact: true }).inputValue(), '["Subtotal"]');
   await page.getByLabel('Formula', { exact: true }).fill('["Subtotal"] * 2');
+  assert.equal(await page.getByLabel('Formula', { exact: true }).inputValue(), '["Subtotal"] * 2');
   await page.getByLabel('Number format', { exact: true }).selectOption('currency');
   await page.screenshot({ path: '.artifacts/desktop-connected-formula-editor.png' });
   await page.getByRole('button', { name: 'Save field', exact: true }).click();

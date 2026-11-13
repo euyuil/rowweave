@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ConversionPreview, Field, FieldCreate, FieldType, SelectOption, Table } from '../../contracts/src/index.js';
 import type { WorkspaceApi } from '../../client/src/http-client.js';
 import { cellText } from '../../client/src/cell-values.js';
@@ -54,6 +54,14 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved, ancho
     ? rewriteFormulaReferences(field.formula.expression, id => referenceName(table.fields.find(candidate => candidate.id === id)!)) : '');
   const [resultType, setResultType] = useState<NonNullable<Field['formula']>['resultType']>(field?.formula?.resultType ?? 'number');
   const formulaInput = useRef<HTMLTextAreaElement>(null);
+  const insertedPosition = useRef<number>();
+  useLayoutEffect(() => {
+    if (insertedPosition.current === undefined) return;
+    const input = formulaInput.current!;
+    input.focus();
+    input.setSelectionRange(insertedPosition.current, insertedPosition.current);
+    insertedPosition.current = undefined;
+  }, [expression]);
   const relation = table.fields.find(field => field.id === lookupRelation);
   useEffect(() => {
     if (type === 'relation') void api.listTables().then(setTargets).catch(error => setError(error.message));
@@ -140,9 +148,9 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved, ancho
             const input = formulaInput.current!;
             const token = `[${JSON.stringify(referenceName(candidate))}]`;
             const start = input.selectionStart, end = input.selectionEnd;
+            insertedPosition.current = start + token.length;
             setExpression(expression.slice(0, start) + token + expression.slice(end));
             changed();
-            requestAnimationFrame(() => { input.focus(); input.setSelectionRange(start + token.length, start + token.length); });
           }}><option value="" disabled>Choose a field…</option>{formulaFields.map(candidate =>
             <option key={candidate.id} value={candidate.id}>{referenceName(candidate)}</option>)}</select></label>
           <p className="form-note">Calculated after saving, including changes to linked summary inputs. Field references survive renaming. Empty inputs stay empty unless you use COALESCE.</p>
