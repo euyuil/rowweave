@@ -77,6 +77,32 @@ test('three-level windows preserve parent measures, configured root order and so
   assert.deepEqual(service.queryGroups(table.id, { groupBy, measures, search: 'absent' }).groups.map(group => group.path), [['b'], ['a'], ['empty'], [null]]);
 });
 
+test('deep nested windows inside large leaves retain complete counts and skip collapsed source spans', t => {
+  const service = new RecordService(fixture(t, null).open());
+  let table = service.createTable({ name: 'Large nested leaves' });
+  table = service.createField(table.id, { expectedVersion: table.version, name: 'Done', type: 'checkbox' });
+  table = service.createField(table.id, { expectedVersion: table.version, name: 'Amount', type: 'number' });
+  const root = table.primaryFieldId, done = table.fields[1]!.id, amount = table.fields[2]!.id, groupBy = [root, done];
+  const records = service.createRecords(table.id, Array.from({ length: 1205 }, (_, index) => ({ values: {
+    [root]: 'Root', [done]: index >= 602, [amount]: index < 602 ? 2 : 3,
+  } }))).records;
+  const measures = [{ fieldId: amount, operation: 'sum' }];
+  const layout = service.queryGroups(table.id, { groupBy, measures, offset: 600, limit: 8 });
+  assert.equal(layout.totalRecords, 1205); assert.equal(layout.totalGroups, 4); assert.equal(layout.totalRows, 1209);
+  assert.deepEqual(layout.groups.map(group => [group.path, group.count, group.rowStart, group.recordOffset, group.values]), [
+    [['Root', false], 602, 1, 0, [1204]], [['Root', true], 603, 604, 602, [1809]],
+  ]);
+  const expanded = service.queryGroups(table.id, { groupBy, measures, window: 'expandedRecords', offset: 600, limit: 8 });
+  assert.deepEqual(expanded.groups, layout.groups);
+  assert.deepEqual(service.queryRecords(table.id, { groupBy, offset: 600, limit: 8 }).records.map(row => row.id), records.slice(600, 608).map(row => row.id));
+  const folded = service.queryGroups(table.id, { groupBy, measures, window: 'expandedRecords', offset: 600, limit: 8,
+    collapse: { defaultCollapsed: false, exceptions: [['Root', false]] } });
+  assert.equal(folded.totalRows, 607);
+  assert.deepEqual(folded.groups.map(group => [group.path, group.count, group.recordOffset, group.expandedOffset, group.values]), [
+    [['Root', true], 603, 602, 0, [1809]],
+  ]);
+});
+
 test('typed paths distinguish same-name children and ancestor collapse clips every display and expanded window', t => {
   const { service, table, groupBy, measures } = setup(t);
   const choices: GroupPathCollapse[] = [

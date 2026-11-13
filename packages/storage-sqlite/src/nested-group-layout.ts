@@ -30,8 +30,7 @@ export function nestedGroupLayout(db: DatabaseSync, table: Table, fields: readon
   const statement = db.prepare(`WITH input AS (
     SELECT ${inputKeys.join(', ')}, 1 AS weight FROM records r WHERE ${where}
     UNION ALL SELECT configured.value${keys.slice(1).map(() => ', NULL').join('')}, 0 FROM json_each(:nestedConfigured) configured)
-    SELECT ${keys.join(', ')}, SUM(weight) AS count FROM input
-    GROUP BY ${order.map(term => term.replace(/ ASC$/, '')).join(', ')} ORDER BY ${order.join(', ')}`);
+    SELECT * FROM input ORDER BY ${order.join(', ')}`);
   statement.setReturnArrays(true);
   const iterator = statement.iterate({ ...parameters, ...bindings, ':nestedConfigured': JSON.stringify(configured) }) as unknown as Iterable<ScalarValue[]>;
   const rootExceptions = new Set<ScalarValue>(), childExceptions = new Map<ScalarValue, Set<string>>();
@@ -70,7 +69,7 @@ export function nestedGroupLayout(db: DatabaseSync, table: Table, fields: readon
     for (const group of active) group.count += count;
     const leaf = active[last];
     if (leaf && !leaf.collapsed) {
-      if (window === 'displayRows' ? leaf.rowStart < offset + limit && leaf.rowStart + 1 + count > offset
+      if (window === 'displayRows' ? leaf.rowStart < offset + limit && leaf.rowStart + 1 + leaf.count > offset
         : count > 0 && expanded < offset + limit && expanded + count > offset) capture(leaf, path, last);
       totalRows += count; expanded += count;
     }
