@@ -159,7 +159,7 @@
 .rowweave-app button.danger { background: #b33e2f; border-color: #b33e2f; color: #fff; }
 .rowweave-app .record-toolbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 14px; }
 .rowweave-app .record-toolbar button { padding: 7px 10px; font-size: 12px; }
-.rowweave-app .record-toolbar > span { font-size: 11px; color: #69768b; }
+.rowweave-app .record-toolbar > span { flex-basis: 100%; font-size: 11px; line-height: 16px; color: #69768b; }
 .rowweave-app .field-label { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .rowweave-app button.clear-value { background: none; border: 0; color: #315cbe; padding: 0; font-size: 12px; font-weight: 400; }
 .rowweave-app .form-field small { font-weight: 400; font-size: 11px; color: #738098; }
@@ -177,6 +177,8 @@
 .rowweave-app .form-row > * { flex: 1; min-width: 0; }
 .rowweave-app .group-measure-row { align-items: center; }
 .rowweave-app .group-measure-row > button { flex: 0 0 auto; margin-top: 24px; }
+.rowweave-app .group-level-row { align-items: center; }
+.rowweave-app .group-level-row > button { flex: 0 0 auto; margin-top: 24px; }
 .rowweave-app .check-field { display: flex; align-items: center; gap: 9px; margin: 18px 0; }
 .rowweave-app .form-note { color: #69768b; font-size: 13px; }
 .rowweave-app .trash-toolbar { display: flex; align-items: center; gap: 8px; position: sticky; top: -24px; padding: 12px 0; background: white; z-index: 1; }

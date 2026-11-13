@@ -1,10 +1,10 @@
 # Grouped table records
 
-In a grid view, choose **Groups**, select a field, and save. Supported fields include text, multiline text, numbers, dates, timestamps, URLs, single-selects, checkboxes, automatic fields, scalar formulas and scalar linked summaries. Each group shows its matching record count and the actual editable rows. Click a heading, or select it with the arrow keys and press Enter or Space, to expand or collapse it. **Collapse all** and **Expand all** work across the complete view.
+In a grid view, choose **Groups**, select a field, and save. Use **Add grouping level** to nest up to three distinct fields in order; move or remove levels in Groups or View settings. Supported fields include text, multiline text, numbers, dates, timestamps, URLs, single-selects, checkboxes, automatic fields, scalar formulas and scalar linked summaries. Each heading shows its matching record count; records appear under the last level. Click a heading, or select it with the arrow keys and press Enter or Space, to expand or collapse it. **Collapse all** and **Expand all** work across the complete view.
 
 Single-select groups follow the field's option order. Checkbox groups show unchecked, checked, then no value. Other values sort ascending: text is case-sensitive, numbers sort numerically, and dates use normalized values. **No value** and **Empty text** are distinct groups. Filters and search determine the matching records; sorting applies within each group. Hidden grouping fields still define their groups. Each view keeps its own grouping configuration.
 
-Expand/collapse choices are remembered on this device when you close a table or restart the app. Each view, grouping field and field type has separate choices, identified by stable UUIDs and typed values. Renaming a field or option retains the choices; removed options are pruned. Filters and search can temporarily hide groups without discarding their choices. These are local presentation preferences, so folding a group does not change the shared query version or disrupt cell drafts. They are not included in a database backup and do not synchronize to other clients.
+Expand/collapse choices are remembered on this device when you close a table or restart the app. Each view and ordered combination of grouping field UUIDs/types has separate choices. Nested choices use the complete typed path, so identically named children under different parents remain independent. Collapsing a parent retains its children's choices. Renaming a field or option retains the choices; paths containing removed options are pruned. Filters and search can temporarily hide groups without discarding their choices. These are local presentation preferences, so folding a group does not change the shared query version or disrupt cell drafts. They are not included in a database backup and do not synchronize to other clients.
 
 A failed group read retains the previous usable layout and does not save the failed choice. If local preference storage is unavailable, the app reports it while keeping the current layout usable; it does not retry the write automatically. Invalid stored choices reset visibly to expanded groups.
 
@@ -14,7 +14,7 @@ External changes load automatically while editing is idle. Group counts and visi
 
 Choose **Groups → Add measure** to save up to 12 numeric sums, averages, minimums or maximums in a view. Each heading displays its count and configured measures, including when collapsed; hover it for the full text. Measures include every saved record matching the view's filters and search, regardless of visible pages. Unsaved cell drafts do not contribute until saved. Empty groups show a dash for each measure. Numeric formulas, automatic numbers and scalar linked summaries are supported. Remove a measure before deleting its field or converting it to an incompatible type. Renames retain the field UUID and update the displayed label. Removing grouping clears its saved measures.
 
-The desktop currently supports one scalar grouping level. Multi-selects, raw relation lists and array lookups are not scalar groups; a linked summary such as a sum or count can be grouped. Nested grouping remains required delivery work. Use **Summarize** for separate scalar summary/group operations. Native input-method and external spreadsheet round trips remain final-candidate acceptance checks.
+Nested headings are indented; hover a heading to read its full ancestry and measures when its parent is offscreen. Parent counts and measures include all matching descendants. Root groups retain configured empty options, checkbox states and a null group; children contain actual matching values. Multi-selects, raw relation lists and array lookups are not scalar groups; a linked summary such as a sum or count can be grouped. Use **Summarize** for separate scalar summary/group operations. Native input-method and external spreadsheet round trips remain final-candidate acceptance checks.
 
 ## Shared interfaces
 
@@ -22,9 +22,9 @@ HTTP, SDK, CLI and MCP use the existing view operations:
 
 ```json
 {
-  "name": "By status",
+  "name": "By status and category",
   "type": "grid",
-  "groupBy": "<status-field-id>",
+  "groupBy": ["<status-field-id>", "<category-field-id>"],
   "groupMeasures": [{ "fieldId": "<amount-field-id>", "operation": "sum" }],
   "query": {
     "sort": [{ "fieldId": "<amount-field-id>", "direction": "desc" }]
@@ -40,7 +40,7 @@ SQLite format 29 protects saved scalar grouping semantics; format 14 introduced 
 
 `queryGroups(tableId, input, signal?)`, CLI `rowweave records groups TABLE_ID --input groups.json`, and MCP `records_groups` expose the same read-only [layout contract](http-api.md#group-layout-windows). For example, `{ "groupBy": "text-field-id", "offset": 10000, "limit": 50, "collapse": { "defaultCollapsed": true, "exceptions": ["Active"] } }` reads a deep display window while only the Active group is expanded. It does not download every preceding group.
 
-The shared query interfaces also accept `groupBy: [firstFieldId, secondFieldId, thirdFieldId]` for up to three levels. Nested segments identify typed ancestry through `path` and distinguish leaf record runs through `leaf`. Parent measures cover all matching descendants. Collapse exceptions are prefix paths such as `[["Active"], ["Active", false]]`; ancestor collapse hides child headings and records. Use the same ordered fields with `queryRecords` to follow source offsets. [Nested layout semantics](http-api.md#group-layout-windows) define empty groups, visible heading counts and bounded expanded-record windows. Saved nested views and desktop editing remain the next required step.
+The shared query interfaces and saved grids accept `groupBy: [firstFieldId, secondFieldId, thirdFieldId]` for up to three levels. A single field ID retains the scalar contract; a one-element array normalizes to that form. Nested segments identify typed ancestry through `path` and distinguish leaf record runs through `leaf`. Parent measures cover all matching descendants. Collapse exceptions are prefix paths such as `[["Active"], ["Active", false]]`; ancestor collapse hides child headings and records. Use the same ordered fields with `queryRecords`, or the saved view with `queryView`, to follow source offsets. [Nested layout semantics](http-api.md#group-layout-windows) define empty groups, visible heading counts and bounded expanded-record windows. SQLite format 31 gates saved nested arrays without rewriting records; view versions, schema dependencies, restart and backups include the full ordered hierarchy. Boards retain one single-select field.
 
 The service calculates complete counts and prefix positions in one SQLite read snapshot. Only groups intersecting the requested display rows leave storage. Record offsets remain independent of collapse and match ordinary record queries with the same scalar `groupBy` or the saved grouped-grid query. Groups include configured empty select/checkbox headings and a null heading. Raw text is case-sensitive, numbers sort numerically, and dates/timestamps use stored normalized values. Group keys retain their types and never become display names.
 

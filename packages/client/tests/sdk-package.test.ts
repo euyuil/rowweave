@@ -48,6 +48,7 @@ const groups: Promise<GroupLayout> = api.queryGroups('table', { groupBy: 'amount
   window: 'expandedRecords', collapse: { defaultCollapsed: true, exceptions: [0, null] } }, new AbortController().signal);
 void api.createView('table', { name: 'Saved measures', groupBy: 'amount', groupMeasures: [{ fieldId: 'amount', operation: 'sum' }] });
 void api.queryGroups('table', { groupBy: ['done', 'amount'], collapse: { defaultCollapsed: true, exceptions: [[false], [false, 0]] } });
+void api.createView('table', { name: 'Nested', groupBy: ['done', 'amount'] });
 void api.exportCsv('table', { viewId: 'view', expectedViewVersion: 1 });
 // @ts-expect-error Record writes require numeric versions.
 void api.updateRecords('table', [{ id: 'record', expectedVersion: 'stale', values: {} }]);
@@ -95,6 +96,11 @@ assert.deepEqual(nested.groups.map(group => [group.path, group.leaf, group.count
   [[5], false, 2, [10]], [[5, 'SDK 中文'], true, 2, [10]], [[null], false, 0, [null]],
 ]);
 assert.equal(nested.totalRows, 5);
+const nestedView = await api.createView(table.id, { name: 'Nested cost groups', groupBy: [cost, table.primaryFieldId],
+  groupMeasures: [{ fieldId: cost, operation: 'sum' }] });
+assert.deepEqual((await api.queryGroups(table.id, { viewId: nestedView.id, expectedViewVersion: nestedView.version,
+  collapse: { defaultCollapsed: true, exceptions: [[5], [5, 'SDK 中文']] } })).groups, nested.groups);
+assert.deepEqual((await api.queryView(table.id, nestedView.id, {})).records.map(row => row.id), rows.map(row => row.id));
 assert.deepEqual((await api.queryGroups(table.id, { groupBy: cost, window: 'expandedRecords' })).groups.map(group =>
   [group.key, group.count, group.expandedOffset]), [[5, 2, 0]]);
 assert.equal((await api.queryRecords(table.id, { groupBy: cost, offset: groups.groups[0].recordOffset,

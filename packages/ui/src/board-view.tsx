@@ -20,7 +20,7 @@ function RecordValue({ field, record }: { field: Field; record: RowRecord }) {
 }
 
 export function BoardView({ table, view, search, generation, revision, dateContext, prepared, api, disabled, onWindow, onDragChange, onOpen, onCreate, onMove, onRefresh }: {
-  table: Table; view: GridView; search: string; generation: number; revision: number; dateContext: string | undefined;
+  table: Table; view: Extract<GridView, { type: 'board' }>; search: string; generation: number; revision: number; dateContext: string | undefined;
   prepared: BoardSnapshot | undefined; api: WorkspaceApi; disabled: boolean;
   onWindow(lane: string | null, window: BoardWindow | undefined): void; onDragChange(active: boolean): void;
   onOpen(record: RowRecord): void; onCreate(lane: string | null): void;

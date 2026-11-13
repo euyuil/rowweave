@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { supportsScalarGrouping, type FieldFilter, type FilterGroup, type GridView, type RowHeight, type Table, type ViewQuery } from '../../contracts/src/index.js';
+import { type FieldFilter, type FilterGroup, type GridView, type RecordQuery, type RowHeight, type Table, type ViewQuery } from '../../contracts/src/index.js';
 import { parseQuery } from './record-query.js';
 import { parseSummary } from './record-summary.js';
 import { schemaName, schemaObject } from './schema-validation.js';
@@ -14,13 +14,17 @@ export function parseView(table: Table, input: unknown, previous = defaultView(t
   const item = schemaObject(input);
   const type = item['type'] === undefined ? previous.type : item['type'];
   if (type !== 'grid' && type !== 'board') throw new ServiceError('INVALID_VIEW', 'Choose a grid or board view.');
-  const groupBy = item['groupBy'] === undefined ? (type === previous.type ? previous.groupBy : undefined) : item['groupBy'];
-  if (type === 'board' && (typeof groupBy !== 'string' || !table.fields.some(field => field.id === groupBy && field.type === 'singleSelect'))) {
+  const grouping = item['groupBy'] === undefined ? (type === previous.type ? previous.groupBy : undefined) : item['groupBy'];
+  if (type === 'board' && (typeof grouping !== 'string' || !table.fields.some(field => field.id === grouping && field.type === 'singleSelect'))) {
     throw new ServiceError('INVALID_VIEW', 'A board needs a single-select grouping field. Choose another field or change the view to a grid.');
   }
-  if (type === 'grid' && groupBy != null && (typeof groupBy !== 'string' ||
-      !table.fields.some(field => field.id === groupBy && supportsScalarGrouping(field)))) {
-    throw new ServiceError('INVALID_VIEW', 'Group a grid by a scalar field, or remove grouping.');
+  let groupBy: RecordQuery['groupBy'];
+  if (grouping != null) {
+    try { groupBy = parseQuery(table, { groupBy: grouping }).groupBy; }
+    catch (error) {
+      if (error instanceof ServiceError) throw new ServiceError('INVALID_VIEW', `Group a grid by one to three distinct scalar fields, or remove grouping. ${error.message}`);
+      throw error;
+    }
   }
   const grouped = type === 'grid' && groupBy != null;
   const measures = parseSummary(table, { measures: item['groupMeasures'] === undefined
@@ -56,11 +60,12 @@ export function parseView(table: Table, input: unknown, previous = defaultView(t
   }
   const { groupBy: _previousGroup, groupMeasures: _previousMeasures, ...base } = previous;
   return { ...base, name: item['name'] === undefined ? previous.name : schemaName(item['name']), query: saved, columns,
-    rowHeight: rowHeight as RowHeight, frozenColumns: frozenColumns as number, type,
-    ...(groupBy == null ? {} : { groupBy: groupBy as string }), ...(measures.length ? { groupMeasures: measures } : {}) };
+    rowHeight: rowHeight as RowHeight, frozenColumns: frozenColumns as number,
+    ...(type === 'board' ? { type, groupBy: groupBy as string } : { type, ...(groupBy === undefined ? {} : { groupBy }) }),
+    ...(measures.length ? { groupMeasures: measures } : {}) };
 }
 
-export function groupedViewQuery(view: GridView): ViewQuery & { groupBy?: string } {
+export function groupedViewQuery(view: GridView): ViewQuery & Pick<RecordQuery, 'groupBy'> {
   return { ...view.query, ...(view.type === 'grid' && view.groupBy ? { groupBy: view.groupBy } : {}) };
 }
 

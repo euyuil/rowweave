@@ -45,6 +45,7 @@ import { verifyGroupedRefresh } from './grouped-refresh-workflow.mjs';
 import { verifyScalarGroups } from './scalar-groups-workflow.mjs';
 import { verifySaveSelection } from './save-selection-workflow.mjs';
 import { verifyGroupMeasures } from './group-measures-workflow.mjs';
+import { verifyNestedGroups, verifyNestedGroupsAfterRestart } from './nested-groups-workflow.mjs';
 import { verifyGroupPreferences, verifyGroupPreferencesAfterRestart } from './group-preferences-workflow.mjs';
 
 const dataDirectory = await mkdtemp(join(tmpdir(), 'rowweave-workspace-'));
@@ -307,6 +308,7 @@ try {
   await verifyScalarGroups(page);
   await verifySaveSelection(page);
   await verifyGroupMeasures(page);
+  const nestedGroups = await verifyNestedGroups(page);
   const groupPreferences = await verifyGroupPreferences(page);
   await verifyRelativeDateWorkflow(page, application);
   await verifyExternalRefresh(page, application);
@@ -325,6 +327,7 @@ try {
   await page.getByRole('heading', { name: 'Projects 项目', exact: true }).waitFor();
   assert.equal((await tables()).find(table => table.id === original.id).name, 'Projects 项目');
   await verifyGroupPreferencesAfterRestart(page, groupPreferences);
+  await verifyNestedGroupsAfterRestart(page, nestedGroups);
   for (const name of ['Projects 项目', 'Tasks']) {
     await choose(name);
     await page.getByRole('heading', { name, exact: true }).waitFor();

@@ -176,7 +176,7 @@ test('format 29 migration preserves existing schema, records, history and view v
   assert.deepEqual(reopened.workspaceState({ tableId: table.id, viewId: view.id }), state);
   assert.deepEqual(reopened.recordHistory(table.id, record.id, {}), history);
   const check = new DatabaseSync(data.path);
-  try { assert.equal(check.prepare('PRAGMA user_version').get()!['user_version'], 30); } finally { check.close(); }
+  try { assert.equal(check.prepare('PRAGMA user_version').get()!['user_version'], 31); } finally { check.close(); }
   const grouped = reopened.updateView(table.id, view.id, { expectedVersion: saved.version, groupBy: table.primaryFieldId });
   assert.equal(reopened.queryGroups(table.id, { viewId: grouped.id }).groups[0]!.key, 'Preserved');
 });

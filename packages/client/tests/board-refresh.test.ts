@@ -19,6 +19,7 @@ function setup(t: Parameters<typeof fixture>[0]) {
   } }))).records;
   const view = service.createView(table.id, { name: 'Status board', type: 'board', groupBy: status,
     columns: table.fields.map(field => ({ fieldId: field.id, hidden: field.id === hidden, width: 180 })) });
+  assert.ok(view.type === 'board');
   const api: Pick<WorkspaceApi, 'summarizeRecords' | 'queryView'> = {
     summarizeRecords: async (id, input) => service.summarizeRecords(id, input),
     queryView: async (id, viewId, input) => service.queryView(id, viewId, input),
@@ -94,6 +95,7 @@ test('board snapshots reject an expired relative-date context and load the new p
   const records = service.createRecords(table.id, ['2024-02-29', '2024-03-01'].map(date => ({ values: { [status]: 'todo', [due]: date } }))).records;
   const view = service.createView(table.id, { name: 'Today', type: 'board', groupBy: status,
     query: { filter: { conjunction: 'and', conditions: [{ fieldId: due, operator: 'relativeDate', relative: { period: 'today', timeZone: 'UTC' } }] } } });
+  assert.ok(view.type === 'board');
   const api: Pick<WorkspaceApi, 'summarizeRecords' | 'queryView'> = {
     summarizeRecords: async (id, input) => service.summarizeRecords(id, input),
     queryView: async (id, viewId, input) => service.queryView(id, viewId, input),

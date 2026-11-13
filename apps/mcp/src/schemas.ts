@@ -86,7 +86,7 @@ const view = {
   columns: z.array(z.strictObject({ fieldId: id, width: z.number(), hidden: z.boolean() })).exactOptional(),
   rowHeight: z.union([z.literal(36), z.literal(48), z.literal(64)]).exactOptional(),
   frozenColumns: z.int().min(0).exactOptional(),
-  type: z.enum(['grid', 'board']).exactOptional(), groupBy: id.nullable().exactOptional(),
+  type: z.enum(['grid', 'board']).exactOptional(), groupBy: groupFields.nullable().exactOptional(),
   groupMeasures: summaryMeasures.exactOptional(),
 };
 export const viewCreate = z.strictObject(view);

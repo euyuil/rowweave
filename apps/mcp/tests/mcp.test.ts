@@ -124,6 +124,17 @@ test('SDK, MCP and CLI share bounded scalar and nested group positions with matc
   const nestedCli = await runFile(process.execPath, [resolve('apps/cli/dist/rowweave.js'), 'records', 'groups', table.id, '--json', JSON.stringify(nestedInput)],
     { env: { ...process.env, ...environment } });
   assert.deepEqual(JSON.parse(nestedCli.stdout), nested);
+  const nestedView = await json<GridView>('views_update', { tableId: table.id, viewId: saved.id,
+    input: { expectedVersion: cleared.version, groupBy: nestedInput.groupBy, groupMeasures: input.measures } });
+  assert.deepEqual(nestedView.groupBy, nestedInput.groupBy);
+  const nestedSavedInput = { viewId: nestedView.id, expectedViewVersion: nestedView.version,
+    collapse: nestedInput.collapse, window: nestedInput.window, limit: nestedInput.limit };
+  const nestedSaved = await api.queryGroups(table.id, nestedSavedInput);
+  assert.deepEqual(nestedSaved.groups, nested.groups);
+  assert.deepEqual(await json<GroupLayout>('records_groups', { tableId: table.id, input: nestedSavedInput }), nestedSaved);
+  const nestedSavedCli = await runFile(process.execPath, [resolve('apps/cli/dist/rowweave.js'), 'records', 'groups', table.id, '--json', JSON.stringify(nestedSavedInput)],
+    { env: { ...process.env, ...environment } });
+  assert.deepEqual(JSON.parse(nestedSavedCli.stdout), nestedSaved);
   const nestedQuery = { ...query, groupBy: nestedInput.groupBy };
   assert.deepEqual(await json<QueryPage>('records_query', { tableId: table.id, query: nestedQuery }), await api.queryRecords(table.id, nestedQuery));
   const invalid = await call('records_groups', { tableId: table.id, input: { ...input, collapse: { defaultCollapsed: false, exceptions: [null, null] } } });

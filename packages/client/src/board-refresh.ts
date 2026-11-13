@@ -15,14 +15,14 @@ export interface BoardSnapshot {
   pages: ReadonlyMap<string | null, ViewPage>;
 }
 
-export function boardCardFields(table: Table, view: GridView): Field[] {
+export function boardCardFields(table: Table, view: Extract<GridView, { type: 'board' }>): Field[] {
   const fields = new Map(table.fields.map(field => [field.id, field]));
   return view.columns.filter(column => !column.hidden).map(column => fields.get(column.fieldId)!)
     .filter(field => field.id !== table.primaryFieldId && field.id !== view.groupBy).slice(0, 3);
 }
 
 export async function prepareBoardSnapshot(api: Pick<WorkspaceApi, 'summarizeRecords' | 'queryView'>, table: Table,
-  view: GridView, first: Pick<QueryPage, 'revision' | 'dateContext'>, search: string, windows: readonly BoardWindow[],
+  view: Extract<GridView, { type: 'board' }>, first: Pick<QueryPage, 'revision' | 'dateContext'>, search: string, windows: readonly BoardWindow[],
   signal: AbortSignal): Promise<BoardSnapshot> {
   const check = (result: { schemaVersion: number }) => {
     if (result.schemaVersion !== table.version) throw new ApiFailure('SCHEMA_CONFLICT', 'The table schema changed while checking board updates.', 409);
