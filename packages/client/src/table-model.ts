@@ -29,6 +29,16 @@ interface HistoryEntry {
   cells: number;
 }
 
+export interface TableRefresh {
+  generation: number;
+  sourceRevision: number;
+  signal: AbortSignal;
+  table: Table;
+  query: TableQuery;
+  first: QueryPage;
+  pages: ReadonlyMap<number, QueryPage>;
+}
+
 export class TableModel {
   table: Table | undefined;
   rowCount = 0;
@@ -48,6 +58,7 @@ export class TableModel {
   private readonly pages = new Map<number, QueryPage>();
   private readonly requests = new Map<number, { promise: Promise<QueryPage>; controller: AbortController }>();
   private readonly batchReads = new Map<AbortController, Promise<QueryPage>>();
+  private refreshRequest: AbortController | undefined;
   private edits: EditState = { drafts: new Map(), rows: new Map() };
   private undoStack: HistoryEntry[] = [];
   private redoStack: HistoryEntry[] = [];
@@ -91,7 +102,7 @@ export class TableModel {
 
   get cacheStats() {
     return { pages: this.pages.size, rows: [...this.pages.values()].reduce((n, page) => n + page.records.length, 0),
-      inFlight: this.requests.size + this.batchReads.size, historyCells: this.undoStack.reduce((n, entry) => n + entry.cells, 0) };
+      inFlight: this.requests.size + this.batchReads.size + (this.refreshRequest ? 1 : 0), historyCells: this.undoStack.reduce((n, entry) => n + entry.cells, 0) };
   }
 
   async initialize(): Promise<void> {
@@ -366,6 +377,8 @@ export class TableModel {
 
   private resetPages(): void {
     this.generation++;
+    this.refreshRequest?.abort();
+    this.refreshRequest = undefined;
     for (const request of this.requests.values()) request.controller.abort();
     for (const controller of this.batchReads.keys()) controller.abort();
     this.batchReads.clear();
@@ -396,6 +409,56 @@ export class TableModel {
     this.error = undefined;
     this.conflicted = false;
     await this.initialize();
+  }
+
+  async prepareRefresh(query: TableQuery, { start = 0, count = this.pageSize, signal: callerSignal }: {
+    start?: number; count?: number; signal?: AbortSignal;
+  } = {}): Promise<TableRefresh> {
+    if (this.disposed) throw new Error('This table was closed.');
+    this.refreshRequest?.abort();
+    const controller = new AbortController();
+    this.refreshRequest = controller;
+    const signal = callerSignal ? AbortSignal.any([callerSignal, controller.signal]) : controller.signal;
+    const generation = this.generation, sourceRevision = this.revision;
+    const { expectedRevision: _revision, expectedDateContext: _date, ...currentQuery } = query;
+    try {
+      const table = await this.api.getTable(signal);
+      const first = await this.api.readPage(0, this.pageSize, { ...currentQuery, expectedRevision: table.revision }, signal);
+      const check = (page: QueryPage) => {
+        if (page.schemaVersion !== table.version) throw new ApiFailure('SCHEMA_CONFLICT', 'The table schema changed while checking for updates.', 409);
+      };
+      check(first);
+      const pages = new Map<number, QueryPage>([[0, first]]);
+      const offset = Math.max(0, Math.min(start, first.total - 1));
+      const startPage = Math.floor(offset / this.pageSize);
+      const pageCount = Math.min(this.maxPages, Math.ceil((offset % this.pageSize + count) / this.pageSize));
+      for (let index = startPage; index < startPage + pageCount && index * this.pageSize < first.total; index++) {
+        if (index === 0) continue;
+        const page = await this.api.readPage(index * this.pageSize, this.pageSize, { ...currentQuery,
+          expectedRevision: first.revision, ...(first.dateContext ? { expectedDateContext: first.dateContext } : {}) }, signal);
+        check(page);
+        pages.set(index, page);
+        while (pages.size > this.maxPages) pages.delete(pages.keys().next().value!);
+      }
+      return { generation, sourceRevision, signal, table, query: currentQuery, first, pages };
+    } finally { if (this.refreshRequest === controller) this.refreshRequest = undefined; }
+  }
+
+  commitRefresh(snapshot: TableRefresh): boolean {
+    if (this.disposed || this.saving || this.edits.drafts.size || this.undoStack.length || this.redoStack.length || snapshot.signal.aborted ||
+        snapshot.generation !== this.generation || snapshot.sourceRevision !== this.revision) return false;
+    this.resetPages();
+    this.table = snapshot.table;
+    this.query = snapshot.query;
+    this.queryRevision = snapshot.first.revision;
+    this.queryDateContext = snapshot.first.dateContext;
+    this.rowCount = snapshot.first.total;
+    for (const [index, page] of snapshot.pages) this.pages.set(index, page);
+    this.updateFields();
+    this.error = undefined;
+    this.conflicted = false;
+    this.emit();
+    return true;
   }
 
   async save(): Promise<void> {
@@ -434,6 +497,8 @@ export class TableModel {
   dispose(): void {
     this.disposed = true;
     this.generation++;
+    this.refreshRequest?.abort();
+    this.refreshRequest = undefined;
     for (const request of this.requests.values()) request.controller.abort();
     for (const controller of this.batchReads.keys()) controller.abort();
     this.batchReads.clear();

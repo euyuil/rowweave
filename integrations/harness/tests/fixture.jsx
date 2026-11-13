@@ -44,6 +44,7 @@ function Frame({ renderSlot, usePanelInfo }) {
     <nav aria-label="Harness panels" style={{ display: 'flex', gap: 12, padding: 8 }}>
       <button onClick={() => layout.selectPanel(null)}>Conversation</button>
       <button onClick={() => layout.selectPanel('rowweave')}>RowWeave</button>
+      <input aria-label="Harness draft" placeholder="Host input" />
       {renderSlot('sidebar.panellist', { size: 24, active: active === 'rowweave' })}
     </nav>
     <div style={{ flex: 1, minHeight: 0 }}>{renderSlot('main', {}, { entryKey: active ?? 'conversation' })}</div>

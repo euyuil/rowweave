@@ -6,7 +6,7 @@ import { FieldInput } from './field-input.js';
 import { fromFormValue, toFormValue, type FormValue } from './field-input-values.js';
 import { AttachmentContext } from './attachment-context.js';
 
-export interface EditableCell extends TextCell { field: Field; rawValue: CellValue; row: number }
+export interface EditableCell extends TextCell { field: Field; rawValue: CellValue; row: number; gridRow: number }
 type Movement = readonly [-1 | 0 | 1, -1 | 0 | 1];
 export interface EditorHandle { finish(commit: boolean, movement?: Movement): boolean; contains(target: Node): boolean }
 interface EditorBridge {

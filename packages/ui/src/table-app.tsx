@@ -5,7 +5,7 @@ import DataEditor, {
 import '@glideapps/glide-data-grid/dist/index.css';
 import { isReadOnlyField, maxBatchCells, maxBatchRecords, type CellValue, type Field, type GridView, type RecordLink, type RowRecord, type Table, type ViewUpdate } from '../../contracts/src/index.js';
 import type { TableModel } from '../../client/src/table-model.js';
-import { queryForView, type WorkspaceApi } from '../../client/src/http-client.js';
+import { ApiFailure, queryForView, type WorkspaceApi } from '../../client/src/http-client.js';
 import { cellDisplay, cellText } from '../../client/src/cell-values.js';
 import { parseTextValue } from '../../core/src/field-values.js';
 import { CellEditor, EditorContext, type EditableCell, type EditorHandle } from './cell-editor.js';
@@ -25,6 +25,7 @@ import { ColumnActions, type ColumnAction } from './column-actions.js';
 import { BoardView } from './board-view.js';
 import { ViewTabs } from './view-tabs.js';
 import { useGroupedRows } from './use-grouped-rows.js';
+import { refreshSelection } from './refresh-selection.js';
 import type { DialogAnchor } from './dialog.js';
 import './table-app.css';
 
@@ -37,7 +38,7 @@ export interface TableHost {
   saveFile(filename: string, bytes: Uint8Array): Promise<boolean | 'download-started'>;
 }
 
-function gridCell(record: RowRecord | undefined, field: Field | undefined, readonly: boolean, row: number): GridCell {
+function gridCell(record: RowRecord | undefined, field: Field | undefined, readonly: boolean, row: number, gridRow: number): GridCell {
   if (!record || !field) return { kind: GridCellKind.Loading, allowOverlay: false };
   readonly ||= isReadOnlyField(field);
   if (record.formulaErrors?.[field.id]) return { kind: GridCellKind.Text, data: '#ERROR: ' + record.formulaErrors[field.id],
@@ -48,7 +49,7 @@ function gridCell(record: RowRecord | undefined, field: Field | undefined, reado
   const display = record.attachments?.[field.id] ? ((value ?? []) as string[]).map(id => record.attachments![field.id]!.find(file => file.id === id)?.filename ?? 'File').join(', ')
     : field.type === 'relation' ? ((value ?? []) as string[]).map(id => record.links?.[field.id]?.find(link => link.id === id)?.label || id).join(', ') : cellDisplay(field, value);
   return { kind: GridCellKind.Text, data: text, copyData: text, displayData: display,
-    allowOverlay: !readonly, readonly, field, rawValue: value, row } as EditableCell;
+    allowOverlay: !readonly, readonly, field, rawValue: value, row, gridRow } as EditableCell;
 }
 
 export function TableApp({ tableId, model, api, host, onManage }: {
@@ -88,6 +89,14 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   const [csvAction, setCsvAction] = useState<'import' | 'export'>();
   const [summarizing, setSummarizing] = useState(false);
   const [notice, setNotice] = useState<string>();
+  const [externalUpdate, setExternalUpdate] = useState<'pending' | 'missing'>();
+  const [refreshFailure, setRefreshFailure] = useState<string>();
+  const knownViewsRevision = useRef<number>();
+  const interaction = useRef(0);
+  const pointerActive = useRef(false);
+  const selectionReads = useRef(0);
+  const canRefresh = useRef<() => boolean>(() => false);
+  const checkExternal = useRef<(signal: AbortSignal) => Promise<void>>();
   const activeEditor = useRef<EditorHandle>();
   const [size, setSize] = useState({ width: 900, height: 500 });
   const [visible, setVisible] = useState({ y: 0, height: 50 });
@@ -100,6 +109,13 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   const busyRef = useRef(false);
   const locked = busy || model.saving || offline || transfers > 0;
   const pending = model.pendingCells;
+  canRefresh.current = () => {
+    const workspace = rootHost.current?.closest('.rowweave-app'), active = document.activeElement;
+    return ready && !locked && !busyRef.current && !activeEditor.current && !selectionReads.current && !pointerActive.current &&
+      !model.saving && !model.pendingCells && !model.canUndo && !model.canRedo && !formDirty && !searchComposing && search === appliedSearch.current &&
+      !workspace?.querySelector('dialog[open]') &&
+      !(active instanceof Element && workspace?.contains(active) && active.closest('input, textarea, select, [contenteditable="true"]'));
+  };
   const grouping = useGroupedRows(model, api, view, appliedSearch.current);
   const gridRowCount = grouping.enabled ? grouping.rows?.rowCount ?? 0 : model.rowCount;
   const recordIndex = (row: number) => {
@@ -148,6 +164,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   }, []);
 
   const loadView = useCallback(async (discard = false) => {
+    const state = await api.workspaceState({ tableId });
     const loaded = await api.listViews(tableId);
     const preferred = currentView.current?.id ?? localStorage.getItem(`rowweave.view.${tableId}`);
     const selected = loaded.find(item => item.id === preferred) ?? loaded[0]!;
@@ -160,6 +177,8 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     const query = queryForView(selected, text);
     if (discard) await model.discardAndReload(query);
     else await model.refresh(query);
+    knownViewsRevision.current = state.table?.viewsRevision;
+    setExternalUpdate(undefined);
     localStorage.setItem(`rowweave.view.${tableId}`, selected.id);
   }, [api, model, tableId]);
 
@@ -184,6 +203,77 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     } catch (failure) { if (request === viewRequest.current) report(failure); }
     finally { if (request === viewRequest.current) { busyRef.current = false; setBusy(false); } }
   }, [model, report]);
+
+  checkExternal.current = async signal => {
+    const previousView = currentView.current;
+    if (!previousView) return;
+    const generation = model.queryVersion, activity = interaction.current;
+    const state = await api.workspaceState({ tableId, viewId: previousView.id }, signal);
+    if (signal.aborted || generation !== model.queryVersion || previousView !== currentView.current) return;
+    setRefreshFailure(undefined);
+    if (!state.table) { setExternalUpdate('missing'); return; }
+    const changed = state.table.schemaVersion !== model.table?.version || state.table.dataRevision !== model.dataRevision ||
+      state.table.viewsRevision !== knownViewsRevision.current || state.table.view?.version !== previousView.version ||
+      state.table.view?.dateContext !== model.dateContext;
+    if (!changed) { setExternalUpdate(undefined); return; }
+    setExternalUpdate('pending');
+    if (previousView.type !== 'grid' || previousView.groupBy || !canRefresh.current()) return;
+    const loaded = state.table.viewsRevision === knownViewsRevision.current ? views : await api.listViews(tableId, signal);
+    const selected = loaded.find(view => view.id === previousView.id) ?? loaded[0]!;
+    if (selected.type !== 'grid' || selected.groupBy) return;
+    const text = selected.id === previousView.id && appliedSearch.current !== (previousView.query.search ?? '')
+      ? appliedSearch.current : selected.query.search ?? '';
+    if (generation !== model.queryVersion || activity !== interaction.current || !canRefresh.current()) return;
+    const snapshot = await model.prepareRefresh(queryForView(selected, text), { start: visible.y, count: visible.height + 5, signal });
+    if (signal.aborted || generation !== model.queryVersion || activity !== interaction.current || previousView !== currentView.current || !canRefresh.current()) return;
+    const retained = refreshSelection(selection, model, snapshot);
+    const wasStale = model.stale;
+    if (!model.commitRefresh(snapshot)) return;
+    currentView.current = selected;
+    appliedSearch.current = text;
+    knownViewsRevision.current = state.table.viewsRevision;
+    setViews(loaded); setView(selected); setSearch(text); setSelection(retained.selection);
+    setExternalUpdate(undefined);
+    if (wasStale) setError(undefined);
+    if (retained.cleared) setNotice('Changes were loaded. The previous selection was cleared; select records again before editing.');
+    localStorage.setItem(`rowweave.view.${tableId}`, selected.id);
+  };
+
+  useEffect(() => {
+    if (!ready || offline) return;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      let delay = 2_000;
+      try { await checkExternal.current!(controller.signal); }
+      catch (failure) {
+        if (controller.signal.aborted || failure instanceof DOMException && failure.name === 'AbortError') return;
+        if (failure instanceof ApiFailure && ['DATA_CHANGED', 'SCHEMA_CONFLICT', 'VIEW_CONFLICT'].includes(failure.code)) setExternalUpdate('pending');
+        else { setRefreshFailure(failure instanceof Error ? failure.message : 'Could not check for updates.'); delay = 5_000; }
+      } finally { if (!controller.signal.aborted) timer = setTimeout(() => void poll(), delay); }
+    };
+    void poll();
+    return () => { controller.abort(); clearTimeout(timer); };
+  }, [api, model, tableId, ready, offline]);
+
+  useEffect(() => {
+    const workspace = rootHost.current!.closest('.rowweave-app')!;
+    const touch = () => { interaction.current++; };
+    const start = () => { touch(); pointerActive.current = true; };
+    const finish = () => { pointerActive.current = false; };
+    const events = ['keydown', 'input', 'paste', 'copy', 'compositionstart', 'compositionend'];
+    for (const event of events) workspace.addEventListener(event, touch, true);
+    workspace.addEventListener('pointerdown', start, true); workspace.addEventListener('dragstart', start, true);
+    const endings = ['pointerup', 'pointercancel', 'dragend', 'drop'];
+    for (const event of endings) window.addEventListener(event, finish, true);
+    window.addEventListener('blur', finish);
+    return () => {
+      for (const event of events) workspace.removeEventListener(event, touch, true);
+      workspace.removeEventListener('pointerdown', start, true); workspace.removeEventListener('dragstart', start, true);
+      for (const event of endings) window.removeEventListener(event, finish, true);
+      window.removeEventListener('blur', finish);
+    };
+  }, []);
 
   useEffect(() => {
     if (!ready || offline || model.saving || searchComposing || search === appliedSearch.current || !currentView.current) return;
@@ -408,7 +498,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     }
     const index = recordIndex(row);
     const field = fields[column];
-    return gridCell(index === undefined ? undefined : model.getRecord(index), field, locked || model.stale, index ?? row);
+    return gridCell(index === undefined ? undefined : model.getRecord(index), field, locked || model.stale, index ?? row, row);
   }, [model, fields, locked, revision, grouping.rows, grouping.enabled, view]);
 
   const getCellsForSelection = (rectangle: Rectangle, signal: AbortSignal) => async () => {
@@ -416,12 +506,14 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       setError('Copy up to 20,000 cells and 2,000 rows at a time.');
       return [];
     }
+    selectionReads.current++;
     try {
       await readIndices(recordIndices(rectangle.y, rectangle.height));
       if (signal.aborted) return [];
       return Array.from({ length: rectangle.height }, (_, index) => Array.from({ length: rectangle.width }, (_, x) =>
         getCellContent([rectangle.x + x, rectangle.y + index])));
     } catch (failure) { report(failure); return []; }
+    finally { selectionReads.current--; }
   };
 
   const copySelection = async () => {
@@ -433,6 +525,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       setError('Copy up to 20,000 cells and 2,000 rows at a time.');
       return;
     }
+    selectionReads.current++;
     try {
       const generation = model.queryVersion;
       const columns = selection.rows.length ? fields
@@ -445,6 +538,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       await navigator.clipboard.writeText(serializeClipboard(records.map(record =>
         columns.map(field => record.formulaErrors?.[field.id] ? `#ERROR: ${record.formulaErrors[field.id]}` : cellText(field, record.values[field.id] ?? null)))));
     } catch (failure) { report(failure); }
+    finally { selectionReads.current--; }
   };
 
   const status = offline ? 'Service unavailable' : !ready ? 'Loading table…' : model.saving ? 'Saving…' : busy ? 'Loading rows…'
@@ -460,7 +554,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       <div className="actions">
         <button onClick={() => model.undo()} disabled={locked || !model.canUndo}>Undo</button>
         <button onClick={() => model.redo()} disabled={locked || !model.canRedo}>Redo</button>
-        {(pending > 0 || model.stale) && <button onClick={() => void reload(false)} disabled={locked || editorDirty}
+        {(pending > 0 || model.stale || externalUpdate === 'pending') && <button onClick={() => void reload(false)} disabled={locked || editorDirty}
           title="Refresh saved data and view settings while keeping drafts. Undo history resets.">Refresh view</button>}
         <button onClick={() => void reload()} disabled={locked}>{pending || editorDirty ? 'Discard edits' : 'Reload'}</button>
         <button className="primary" onClick={() => void save()} disabled={locked || (!pending && !editorDirty)}>Save changes</button>
@@ -470,6 +564,11 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       {model.conflicted && <span> Your edits are still here. Copy them before discarding and reloading the current records.</span>}
     </div>}
     {notice && <div role="status" className="notice-banner"><span>{notice}</span><button onClick={() => setNotice(undefined)}>Dismiss</button></div>}
+    {externalUpdate && <div role="status" className="notice-banner">{externalUpdate === 'missing'
+      ? 'This table was deleted elsewhere. Visible edits are retained. Choose another table when ready.'
+      : view?.type !== 'grid' || view.groupBy ? 'Updates are available. Use Refresh view to load them.'
+        : 'Updates are available. Finish editing to load them automatically, or use Refresh view to keep cell drafts. Reload resets local undo history.'}</div>}
+    {!offline && refreshFailure && <div role="status" className="notice-banner">Could not check for updates: {refreshFailure}</div>}
     <ViewTabs views={views} selected={view?.id} disabled={!ready || locked} panelId={`table-view-${tableId}`}
       onSelect={selected => void applyView(selected)} onCreate={() => setViewAction('create')} />
     <section className="table-panel" id={`table-view-${tableId}`} role="tabpanel" aria-label={view?.name ?? 'Loading view'}>
@@ -551,7 +650,12 @@ export function TableApp({ tableId, model, api, host, onManage }: {
           }}
           getCellContent={getCellContent} getCellsForSelection={getCellsForSelection}
           drawCell={drawSelectCell}
-          provideEditor={cell => cell.kind === GridCellKind.Text ? CellEditor : undefined}
+          provideEditor={cell => {
+            if (cell.kind !== GridCellKind.Text) return undefined;
+            const editable = cell as EditableCell;
+            const bounds = grid.current?.getBounds(fields.findIndex(field => field.id === editable.field.id), editable.gridRow);
+            return { editor: CellEditor, ...(bounds ? { styleOverride: { left: bounds.x - 1, top: bounds.y - 1 } } : {}) };
+          }}
           isOutsideClick={event => {
             const editor = activeEditor.current;
             if (!editor || !(event.target instanceof Node) || editor.contains(event.target)) return false;

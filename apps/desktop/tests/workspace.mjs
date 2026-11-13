@@ -37,6 +37,7 @@ import { verifySelectColorsWorkflow } from './select-colors-workflow.mjs';
 import { verifyAttachmentWorkflow } from './attachment-workflow.mjs';
 import { verifyBackgroundCalculations } from './background-calculations.mjs';
 import { verifyCalculationControls } from './calculation-controls-workflow.mjs';
+import { verifyExternalRefresh } from './external-refresh-workflow.mjs';
 
 const dataDirectory = await mkdtemp(join(tmpdir(), 'rowweave-workspace-'));
 await mkdir('.artifacts', { recursive: true });
@@ -293,8 +294,11 @@ try {
   await verifyConnectedFormulaWorkflow(page);
   await verifyGroupedWorkflow(page, application);
   await verifyRelativeDateWorkflow(page, application);
+  await verifyExternalRefresh(page, application);
+  console.log('External refresh acceptance passed; restarting the workspace.');
   await application.close();
   application = undefined;
+  console.log('Workspace process exited; checking saved tables after restart.');
   application = await electron.launch({ executablePath, args: packaged ? [] : ['.'],
     cwd: packaged ? dataDirectory : process.cwd(),
     env: { ...process.env, ROWWEAVE_DATA_DIR: dataDirectory, ROWWEAVE_HEADLESS: '1' }, timeout: 40_000 });

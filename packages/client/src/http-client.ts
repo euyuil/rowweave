@@ -17,7 +17,7 @@ export interface Connection {
 }
 
 export interface TableApi {
-  getTable(): Promise<Table>;
+  getTable(signal?: AbortSignal): Promise<Table>;
   readPage(offset: number, limit: number, query?: TableQuery, signal?: AbortSignal): Promise<QueryPage>;
   save(updates: RecordUpdate[]): Promise<BatchResult>;
 }
@@ -69,7 +69,7 @@ export function createWorkspaceClient(connection: Connection, request: typeof fe
       new Uint8Array(await (await responseFor(`${root(id)}/attachments/${encodeURIComponent(attachmentId)}/content`, signal ? { signal } : {})).arrayBuffer()),
     deleteAttachment: (id: string, attachmentId: string) => call<{ deleted: string }>(`${root(id)}/attachments/${encodeURIComponent(attachmentId)}`, { method: 'DELETE' }),
     listTables: () => call<Table[]>('/tables'),
-    getTable: (id: string) => call<Table>(root(id)),
+    getTable: (id: string, signal?: AbortSignal) => call<Table>(root(id), signal ? { signal } : {}),
     createTable: (input: TableCreate) => write<Table>('/tables', 'POST', input),
     updateTable: (id: string, input: TableUpdate) => write<Table>(root(id), 'PATCH', input),
     deleteTable: (id: string, expectedVersion: number) => write<{ deleted: string }>(root(id), 'DELETE', { expectedVersion }),
@@ -100,7 +100,7 @@ export function createWorkspaceClient(connection: Connection, request: typeof fe
     createRecords: (id: string, input: RecordCreate[]) => write<BatchResult>(`${root(id)}/records`, 'POST', input),
     updateRecords: (id: string, input: RecordUpdate[]) => write<BatchResult>(`${root(id)}/records`, 'PATCH', input),
     deleteRecords: (id: string, input: RecordDelete[]) => write<DeleteResult>(`${root(id)}/records`, 'DELETE', input),
-    listViews: (id: string) => call<GridView[]>(`${root(id)}/views`),
+    listViews: (id: string, signal?: AbortSignal) => call<GridView[]>(`${root(id)}/views`, signal ? { signal } : {}),
     getView: (id: string, viewId: string) => call<GridView>(view(id, viewId)),
     createView: (id: string, input: ViewCreate) => write<GridView>(`${root(id)}/views`, 'POST', input),
     updateView: (id: string, viewId: string, input: ViewUpdate) => write<GridView>(view(id, viewId), 'PATCH', input),
@@ -108,7 +108,7 @@ export function createWorkspaceClient(connection: Connection, request: typeof fe
     queryView: (id: string, viewId: string, input: ViewPageRequest, signal?: AbortSignal) => write<ViewPage>(`${view(id, viewId)}/query`, 'POST', input, signal),
     table(id: string): TableApi {
       return {
-        getTable: () => api.getTable(id),
+        getTable: signal => api.getTable(id, signal),
         readPage: (offset, limit, query = {}, signal) => {
           if (!query.view) return api.queryRecords(id, { ...query, offset, limit }, signal);
           const { view, filter: _filter, sort: _sort, ...page } = query;
