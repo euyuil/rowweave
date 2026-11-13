@@ -19,6 +19,7 @@ import { verifyDisplayWorkflow } from './display-workflow.mjs';
 import { verifyBoardWorkflow } from './board-workflow.mjs';
 import { verifyFormulaWorkflow } from './formula-workflow.mjs';
 import { verifyConnectedFormulaWorkflow } from './connected-formula-workflow.mjs';
+import { verifyGroupedWorkflow } from './grouped-workflow.mjs';
 import { verifyNavigationWorkflow } from './navigation-workflow.mjs';
 import { verifyRecordPanelWorkflow } from './record-panel-workflow.mjs';
 import { verifyFieldPanelWorkflow } from './field-panel-workflow.mjs';
@@ -261,6 +262,7 @@ try {
   await verifyBoardWorkflow(page);
   await verifyFormulaWorkflow(page);
   await verifyConnectedFormulaWorkflow(page);
+  await verifyGroupedWorkflow(page, application);
   await application.close();
   application = undefined;
   application = await electron.launch({ executablePath, args: packaged ? [] : ['.'],

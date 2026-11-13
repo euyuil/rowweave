@@ -2,7 +2,7 @@ import { maxPageSize, maxTextLength, valueField, isLookupSummary, type Field, ty
 import { ServiceError } from './errors.js';
 import { validateValue } from './field-values.js';
 
-export type CheckedQuery = RecordQuery & { offset: number; limit: number };
+export type CheckedQuery = RecordQuery & { offset: number; limit: number; groupBy?: string };
 
 export function queryValueField(field: Field): Field {
   return valueField(field.type === 'lookup' && !isLookupSummary(field) ? { ...field.lookupResult!, id: field.id, name: field.name, required: false } : field);

@@ -6,7 +6,7 @@ import { QueryEditor } from './query-editor.js';
 import { filterDraft, filterValue } from './filter-draft.js';
 
 export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, onSaved, anchor }: {
-  kind: 'create' | 'edit' | 'delete' | 'filter' | 'sort' | 'display'; view: GridView; search: string; table: Table; api: WorkspaceApi;
+  kind: 'create' | 'edit' | 'delete' | 'filter' | 'sort' | 'display' | 'group'; view: GridView; search: string; table: Table; api: WorkspaceApi;
   anchor?: DialogAnchor | undefined;
   setDirty(value: boolean): void; onClose(): void; onSaved(view: GridView | undefined): void;
 }) {
@@ -16,7 +16,7 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
   const [rowHeight, setRowHeight] = useState<RowHeight>(view.rowHeight);
   const [frozenColumns, setFrozenColumns] = useState(view.frozenColumns);
   const [type, setType] = useState(view.type);
-  const [groupBy, setGroupBy] = useState(view.groupBy ?? table.fields.find(field => field.type === 'singleSelect')?.id ?? '');
+  const [groupBy, setGroupBy] = useState(view.groupBy ?? '');
   const [filter, setFilter] = useState(() => filterDraft(view.query.filter, table.fields));
   const [sort, setSort] = useState<SortRule[]>(view.query.sort ?? []);
   const [busy, setBusy] = useState(false);
@@ -24,6 +24,7 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
   const deleting = kind === 'delete';
   const queryOnly = kind === 'filter' || kind === 'sort';
   const displayOnly = kind === 'display';
+  const groupOnly = kind === 'group';
   const visibleCount = columns.filter(column => !column.hidden).length;
   const fields = new Map(table.fields.map(field => [field.id, field]));
   useEffect(() => () => setDirty(false), [setDirty]);
@@ -33,7 +34,7 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
     setColumns(next);
     setDirty(true);
   };
-  return <Dialog title={kind === 'create' ? 'Create view' : deleting ? 'Delete view' : kind === 'filter' ? 'Filters' : kind === 'sort' ? 'Sort' : displayOnly ? 'Display settings' : 'View settings'} onClose={onClose} busy={busy} wide={!deleting} anchor={queryOnly ? anchor : undefined}>
+  return <Dialog title={kind === 'create' ? 'Create view' : deleting ? 'Delete view' : kind === 'filter' ? 'Filters' : kind === 'sort' ? 'Sort' : groupOnly ? 'Groups' : displayOnly ? 'Display settings' : 'View settings'} onClose={onClose} busy={busy} wide={!deleting} anchor={queryOnly || groupOnly ? anchor : undefined}>
     <form onChange={() => setDirty(true)} onKeyDown={event => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's' && !event.nativeEvent.isComposing) {
         event.preventDefault();
@@ -48,18 +49,21 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
       void (async () => {
         let result: GridView | undefined;
         const display = { columns, rowHeight, frozenColumns: Math.min(frozenColumns, visibleCount) };
-        const config = { name, ...display, type, ...(type === 'board' ? { groupBy } : {}), query: { filter: filterValue(filter, table.fields), sort, search: savedSearch } };
+        const config = { name, ...display, type, groupBy: groupBy || null, query: { filter: filterValue(filter, table.fields), sort, search: savedSearch } };
         if (deleting) await api.deleteView(table.id, view.id, view.version);
         else if (kind === 'create') result = await api.createView(table.id, config);
         else result = await api.updateView(table.id, view.id, { ...(queryOnly ? { query: { ...view.query,
-          ...(kind === 'filter' ? { filter: config.query.filter } : { sort }) } } : displayOnly ? display : config), expectedVersion: view.version });
+          ...(kind === 'filter' ? { filter: config.query.filter } : { sort }) } } : groupOnly ? { groupBy: groupBy || null } : displayOnly ? display : config), expectedVersion: view.version });
         setDirty(false);
         onSaved(result);
       })().catch(error => { setError(error instanceof Error ? error.message : 'The view could not be saved.'); setBusy(false); });
     }}>
       {deleting ? <p>Delete <strong>{view.name}</strong>? Its records remain in the table.</p> : <fieldset disabled={busy}>
-        {!queryOnly && !displayOnly && <><label className="form-field">View name<input autoFocus required maxLength={200} value={name} onChange={event => setName(event.target.value)} /></label>
-          <div className="form-row"><label className="form-field">View type<select aria-label="View type" value={type} onChange={event => setType(event.target.value as GridView['type'])}>
+        {!queryOnly && !displayOnly && !groupOnly && <><label className="form-field">View name<input autoFocus required maxLength={200} value={name} onChange={event => setName(event.target.value)} /></label>
+          <div className="form-row"><label className="form-field">View type<select aria-label="View type" value={type} onChange={event => {
+            setType(event.target.value as GridView['type']);
+            setGroupBy(event.target.value === 'board' ? table.fields.find(field => field.type === 'singleSelect')?.id ?? '' : '');
+          }}>
             <option value="grid">Grid</option><option value="board">Board</option>
           </select></label>
           {type === 'board' && <label className="form-field">Group by<select aria-label="Board group field" required value={groupBy} onChange={event => setGroupBy(event.target.value)}>
@@ -67,10 +71,17 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
           </select></label>}</div>
           {type === 'board' && !groupBy && <p className="form-note">Add a single-select field to use a board view.</p>}
         </>}
-        {!displayOnly && <>{!queryOnly && <label className="form-field">Saved search<input value={savedSearch} onChange={event => setSavedSearch(event.target.value)} /></label>}
+        {type === 'grid' && (groupOnly || (!queryOnly && !displayOnly)) && <>
+          <label className="form-field">Group by<select aria-label="Grid group field" value={groupBy} onChange={event => setGroupBy(event.target.value)}>
+            <option value="">No grouping</option>{table.fields.filter(field => ['singleSelect', 'checkbox'].includes(field.type)).map(field =>
+              <option key={field.id} value={field.id}>{field.name}</option>)}
+          </select></label>
+          <p className="form-note">Single-select groups follow option order. Checkbox groups show unchecked, checked, then no value. Sorting applies within each group. Records move to their new group after saving.</p>
+        </>}
+        {!displayOnly && !groupOnly && <>{!queryOnly && <label className="form-field">Saved search<input value={savedSearch} onChange={event => setSavedSearch(event.target.value)} /></label>}
         <QueryEditor fields={table.fields} filter={filter} sort={sort} section={queryOnly ? kind : undefined}
           onFilter={value => { setFilter(value); setDirty(true); }} onSort={value => { setSort(value); setDirty(true); }} /></>}
-        {!queryOnly && <><h3>Display</h3>
+        {!queryOnly && !groupOnly && <><h3>Display</h3>
         {type === 'grid' && <><div className="form-row">
           <label className="form-field">Row density<select aria-label="Row density" value={rowHeight} onChange={event => setRowHeight(Number(event.target.value) as RowHeight)}>
             <option value={36}>Compact</option><option value={48}>Comfortable</option><option value={64}>Spacious</option>

@@ -46,7 +46,7 @@ test('boards validate grouping and lanes, preserve maximum-size filters, and blo
   const { service, table, status, board } = setup(t);
   const grid = service.listViews(table.id)[0]!;
   for (const input of [{ type: 'calendar' }, { type: 'board' }, { type: 'board', groupBy: table.primaryFieldId },
-    { type: 'board', groupBy: 'missing' }, { type: 'grid', groupBy: status }]) {
+    { type: 'board', groupBy: 'missing' }, { type: 'grid', groupBy: table.primaryFieldId }]) {
     assert.throws(() => service.createView(table.id, { name: 'Invalid', ...input }), ServiceError);
   }
   for (const lane of ['missing', '', 1, false]) assert.throws(() => service.queryView(table.id, board.id, { lane }), ServiceError);

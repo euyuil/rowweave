@@ -50,6 +50,6 @@ Record the candidate checksum, OS/display refresh rate/input method/spreadsheet 
 
 - Windows x64 portable desktop; one workspace per service. The bearer token grants full workspace access. This is not enterprise authorization or live collaborative editing.
 - Explicit saves, version conflicts and refreshes; no offline replication or automatic retry of writes.
-- Custom typed schema, bounded scalar formulas including linked-summary inputs, two-way links, one-hop lookups/numeric summaries, grid and single-select board views. Acyclic formula/summary chains are supported; recursive calculations and direct lookup-to-lookup targets are not. No arbitrary JavaScript formulas, attachments, dashboards, further view families or built-in AI runtime.
+- Custom typed schema, bounded scalar formulas including linked-summary inputs, two-way links, one-hop lookups/numeric summaries, grids with one single-select/checkbox grouping level, and single-select board views. Acyclic formula/summary chains are supported; recursive calculations and direct lookup-to-lookup targets are not. No arbitrary JavaScript formulas, attachments, dashboards, further view families or built-in AI runtime.
 - Saved scalar filter/sort indexes cover the documented performance workloads. Relation/lookup/array searches remain supported scan paths; arbitrary queries are not covered by those timing claims.
 - Spreadsheet formats and input methods vary. Use the CSV guide's empty-value, date/time and formula-like-text semantics, and include your normal applications in final manual acceptance.

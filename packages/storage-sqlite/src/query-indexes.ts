@@ -6,7 +6,11 @@ import { querySql } from './query-sql.js';
 const identifier = (name: string) => `"${name.replaceAll('"', '""')}"`;
 const prefix = (tableId: string) => `rowweave_view_${tableId}_`;
 
-function definition(table: Pick<Table, 'id' | 'fields'>, query: ViewQuery): string | undefined {
+type IndexedQuery = ViewQuery & { groupBy?: string };
+
+function definition(table: Pick<Table, 'id' | 'fields'>, query: IndexedQuery): string | undefined {
+  // Index the grouped order independently of filters, including temporary searches.
+  if (query.groupBy) query = { groupBy: query.groupBy, ...(query.sort ? { sort: query.sort } : {}) };
   const fields = new Map(table.fields.map(field => [field.id, field]));
   const conditions: FieldFilter[] = [];
   const visit = (group: FilterGroup) => {
@@ -16,7 +20,7 @@ function definition(table: Pick<Table, 'id' | 'fields'>, query: ViewQuery): stri
     }
   };
   if (query.filter) visit(query.filter);
-  if (!conditions.length && !query.sort?.length && !query.search) return;
+  if (!conditions.length && !query.sort?.length && !query.search && !query.groupBy) return;
   // SQLite expression/partial indexes cannot contain subqueries or read another table.
   if (conditions.some(condition => condition.operator === 'hasAny' || ['relation', 'lookup'].includes(fields.get(condition.fieldId)!.type))) return;
   if (query.sort?.some(sort => ['relation', 'lookup', 'multiSelect'].includes(fields.get(sort.fieldId)!.type))) return;
@@ -25,7 +29,7 @@ function definition(table: Pick<Table, 'id' | 'fields'>, query: ViewQuery): stri
   return `ON records(table_id, ${sql.order}) WHERE ${sql.where}`;
 }
 
-export function syncQueryIndexes(db: DatabaseSync, table: Pick<Table, 'id' | 'fields'>, queries: readonly ViewQuery[]): void {
+export function syncQueryIndexes(db: DatabaseSync, table: Pick<Table, 'id' | 'fields'>, queries: readonly IndexedQuery[]): void {
   const desired = new Map<string, string>();
   for (const query of queries) {
     const sql = definition(table, query);

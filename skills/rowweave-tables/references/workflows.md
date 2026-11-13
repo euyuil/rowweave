@@ -68,6 +68,10 @@ For `fields_apply_conversion`, use `preview.schemaVersion` and the preview's res
 
 CLI: `rowweave fields preview-conversion table-id field-id --input conversion.json`, followed by `apply-conversion` with the reviewed input. CLI JSON is the inner `{ expectedVersion, field }` object.
 
+## Grouped grid views
+
+For a grouped grid, create or update a view with `type: "grid"` and `groupBy` set to a single-select or checkbox field ID. Queries and CSV exports follow option order (or unchecked/checked/null), then the saved record sort. Returned pages contain only real records. Read group counts through the summary operation with the same view and data revision. Clear grouping with `groupBy: null` and the current view version. Collapsed UI groups do not exclude records from shared-interface queries. See `docs/grouped-records.md` for the current one-level scope.
+
 ## Links and lookups
 
 Read both source and target schemas. Search the target's primary display values and resolve ambiguous matches before linking. Create the source field with `fields_create` using:

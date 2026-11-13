@@ -203,7 +203,7 @@ export interface ViewCreate {
   rowHeight?: RowHeight;
   frozenColumns?: number;
   type?: 'grid' | 'board';
-  groupBy?: string;
+  groupBy?: string | null;
 }
 
 export interface ViewUpdate extends Partial<ViewCreate> {
