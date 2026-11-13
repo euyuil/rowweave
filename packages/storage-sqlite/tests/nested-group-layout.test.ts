@@ -28,6 +28,30 @@ function setup(t: Parameters<typeof fixture>[0]) {
   return { data, store, service, table, records, groupBy, measures, amount, status, category, number };
 }
 
+test('nested select ordering preserves literal option IDs at each grouping level', t => {
+  const service = new RecordService(fixture(t, null).open());
+  const ids = ['z ASC', "a' ASC", 'b\0 ASC', 'a'];
+  let table = service.createTable({ name: 'Literal option IDs' });
+  for (const name of ['First', 'Second']) table = service.createField(table.id, { expectedVersion: table.version, name, type: 'singleSelect',
+    options: ids.map((id, index) => ({ id, name: `Choice ${index}` })) });
+  const first = table.fields[1]!.id, second = table.fields[2]!.id, groupBy = [first, second];
+  const records = service.createRecords(table.id, [...ids].reverse().flatMap(root => [...ids].reverse().map(child => ({
+    values: { [first]: root, [second]: child },
+  })))).records;
+  const layout = service.queryGroups(table.id, { groupBy });
+  assert.equal(layout.totalRecords, 16); assert.equal(layout.totalGroups, 21); assert.equal(layout.totalRows, 37);
+  assert.deepEqual(layout.groups.filter(group => !group.leaf).map(group => [group.path, group.count]), [
+    ...ids.map(id => [[id], 4]), [[null], 0],
+  ]);
+  assert.deepEqual(layout.groups.filter(group => group.leaf).map(group => group.path), ids.flatMap(root => ids.map(child => [root, child])));
+  const page = service.queryRecords(table.id, { groupBy });
+  assert.deepEqual(page.records.map(record => record.id), records.toReversed().map(record => record.id));
+  for (const group of layout.groups.filter(group => group.leaf)) {
+    const row = page.records[group.recordOffset]!;
+    assert.deepEqual(group.path, [row.values[first], row.values[second]]);
+  }
+});
+
 test('three-level windows preserve parent measures, configured root order and source record identities', t => {
   const { service, table, records, groupBy, measures, amount } = setup(t);
   const layout = service.queryGroups(table.id, { groupBy, measures });
