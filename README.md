@@ -6,7 +6,7 @@ English | [简体中文](README.zh-CN.md)
 
 Build a project tracker, customer list, or inventory without writing a schema in code. RowWeave combines customizable tables, a responsive desktop grid, and open interfaces for the software you already use.
 
-- **Make the structure your own.** Create tables with text, numbers, dates, checkboxes, and choices. Calculate values with formulas, link related records, and bring their values or totals into your view with lookups.
+- **Make the structure your own.** Create tables with text, numbers, dates, checkboxes, and choices. Calculate values with formulas, keep related records connected from either table, and bring their values or totals into your view with lookups.
 - **Find the view that matters.** Switch between focused grids and status boards. Save filters and layouts, move cards between groups, and see counts, totals, and averages across your whole view.
 - **Move through work quickly.** Edit with the keyboard, paste a block of cells, undo drafts, and save changes together. Bring data in and out with CSV.
 - **Connect your tools.** Use the HTTP API, TypeScript SDK, CLI, MCP, or agent Skills. A DeepSeek Harness panel provides the same table workspace inside your host.

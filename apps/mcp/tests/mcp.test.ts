@@ -61,6 +61,29 @@ async function setup(t: Context) {
   return { service, server, token, environment };
 }
 
+test('MCP and CLI create paired fields and update the same relationship from either side', async t => {
+  const { environment, service } = await setup(t);
+  const { json, call } = await connect(t, environment);
+  const target = await json<Table>('tables_create', { name: 'Projects' });
+  let source = await json<Table>('tables_create', { name: 'Tasks' });
+  source = await json<Table>('fields_create', { tableId: source.id, input: { expectedVersion: source.version, name: 'Project', type: 'relation',
+    relation: { tableId: target.id, multiple: false }, reverseField: { name: 'Tasks', multiple: true, expectedVersion: target.version } } });
+  const link = source.fields[1]!, inverse = service.getTable(target.id).fields[1]!;
+  assert.equal(link.relation!.inverseFieldId, inverse.id);
+  const project = (await json<BatchResult>('records_create', { tableId: target.id, records: [{ values: {} }] })).records[0]!;
+  const task = (await json<BatchResult>('records_create', { tableId: source.id, records: [{ values: { [link.id]: [project.id] } }] })).records[0]!;
+  assert.deepEqual((await json<QueryPage>('records_query', { tableId: target.id, query: {} })).records[0]!.values[inverse.id], [task.id]);
+  const directory = await mkdtemp(join(tmpdir(), 'rowweave-reverse-cli-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const input = join(directory, 'updates.json');
+  await writeFile(input, JSON.stringify([{ id: project.id, expectedVersion: 2, values: { [inverse.id]: [] } }]));
+  await runFile(process.execPath, [resolve('apps/cli/dist/rowweave.js'), 'records', 'update', target.id, '--input', input], {
+    env: { ...process.env, ...environment },
+  });
+  assert.deepEqual((await json<QueryPage>('records_query', { tableId: source.id, query: {} })).records[0]!.values[link.id], []);
+  assert.equal((await call('records_update', { tableId: source.id, records: [{ id: task.id, expectedVersion: 1, values: { [link.id]: [project.id] } }] })).isError, true);
+});
+
 test('MCP creates formulas and returns recalculated values and explicit errors', async t => {
   const { environment } = await setup(t);
   const { json, call } = await connect(t, environment);

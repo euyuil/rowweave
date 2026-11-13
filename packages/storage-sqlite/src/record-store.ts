@@ -157,40 +157,55 @@ export class SqliteRecordStore implements RecordStore {
   }
 
   updateSchema(table: Table, expectedVersion: number, validateRecord?: (record: RowRecord) => void): Table {
+    return this.transaction(() => this.writeSchema(table, expectedVersion, validateRecord));
+  }
+
+  createReciprocalFields(table: Table, target: Table, validateRecord?: (record: RowRecord) => void): Table {
     return this.transaction(() => {
-      this.checkSchema(table.id, expectedVersion);
-      if (table.version !== expectedVersion) {
-        throw new ServiceError('SCHEMA_CONFLICT', 'The table schema changed. Reload it before trying again.', 409);
-      }
-      const before = this.getTable(table.id);
-      this.relations.validateSchema(table, before);
-      this.lookups.validateSchema(table, before);
-      const calculate = compileFormulas(table);
-      if (validateRecord) {
-        for (const row of this.db.prepare('SELECT id, version, values_json, formula_errors_json FROM records WHERE table_id = ?').iterate(table.id)) {
-          validateRecord(this.decode(row as unknown as StoredRecord));
-        }
-      }
-      for (const field of before.fields) {
-        if (table.fields.some(next => next.id === field.id)) continue;
-        this.db.prepare('DELETE FROM fields WHERE id = ? AND table_id = ?').run(field.id, table.id);
-        this.db.prepare(`UPDATE records SET values_json = json_remove(values_json, ?), version = version + 1
-          WHERE table_id = ? AND json_type(values_json, ?) IS NOT NULL`)
-          .run(`$."${field.id}"`, table.id, `$."${field.id}"`);
-      }
-      this.insertFields(table);
-      if (JSON.stringify(before.fields.filter(field => field.type === 'formula')) !== JSON.stringify(table.fields.filter(field => field.type === 'formula'))) {
-        this.recalculate(table, calculate);
-      }
-      this.relations.syncFields(table);
-      this.lookups.sync(table);
-      this.syncViews(table);
-      this.db.prepare('UPDATE tables SET name = ?, primary_field_id = ?, version = version + 1 WHERE id = ?')
-        .run(table.name, table.primaryFieldId, table.id);
-      this.relations.bumpRevision(table.id);
-      this.syncLookupViews(table, true);
+      this.checkSchema(table.id, table.version);
+      this.checkSchema(target.id, target.version);
+      this.writeSchema(table, table.version, validateRecord, false);
+      if (target.id !== table.id) this.writeSchema(target, target.version, undefined, false);
+      this.syncLookupViews(this.getTable(table.id), true);
+      if (target.id !== table.id) this.syncLookupViews(this.getTable(target.id), true);
       return this.getTable(table.id);
     });
+  }
+
+  private writeSchema(table: Table, expectedVersion: number, validateRecord?: (record: RowRecord) => void, syncDependents = true): Table {
+    this.checkSchema(table.id, expectedVersion);
+    if (table.version !== expectedVersion) {
+      throw new ServiceError('SCHEMA_CONFLICT', 'The table schema changed. Reload it before trying again.', 409);
+    }
+    const before = this.getTable(table.id);
+    this.relations.validateSchema(table, before);
+    this.lookups.validateSchema(table, before);
+    const calculate = compileFormulas(table);
+    if (validateRecord) {
+      for (const row of this.db.prepare('SELECT id, version, values_json, formula_errors_json FROM records WHERE table_id = ?').iterate(table.id)) {
+        validateRecord(this.decode(row as unknown as StoredRecord));
+      }
+    }
+    const detached = this.relations.detachFields(table, before);
+    for (const field of before.fields) {
+      if (table.fields.some(next => next.id === field.id)) continue;
+      this.db.prepare('DELETE FROM fields WHERE id = ? AND table_id = ?').run(field.id, table.id);
+      this.db.prepare(`UPDATE records SET values_json = json_remove(values_json, ?), version = version + 1
+        WHERE table_id = ? AND json_type(values_json, ?) IS NOT NULL`)
+        .run(`$."${field.id}"`, table.id, `$."${field.id}"`);
+    }
+    this.insertFields(table);
+    if (JSON.stringify(before.fields.filter(field => field.type === 'formula')) !== JSON.stringify(table.fields.filter(field => field.type === 'formula'))) {
+      this.recalculate(table, calculate);
+    }
+    this.relations.syncFields(table);
+    this.lookups.sync(table);
+    this.syncViews(table);
+    this.db.prepare('UPDATE tables SET name = ?, primary_field_id = ?, version = version + 1 WHERE id = ?')
+      .run(table.name, table.primaryFieldId, table.id);
+    this.relations.bumpRevisions([table.id, ...detached]);
+    if (syncDependents) this.syncLookupViews(table, true);
+    return this.getTable(table.id);
   }
 
   deleteTable(id: string, expectedVersion: number): void {
@@ -418,6 +433,8 @@ export class SqliteRecordStore implements RecordStore {
         .get(table.id)!['last'] as number) + 1;
       const calculate = compileFormulas(table);
       const insert = this.db.prepare('INSERT INTO records (id, table_id, position, values_json, formula_errors_json) VALUES (?, ?, ?, ?, ?)');
+      const links: Array<{ id: string; values: Record<string, CellValue> }> = [];
+      const relationFields = table.fields.filter(field => field.type === 'relation');
       for (const row of plan.rows) {
         result.total++;
         if (result.samples.length < 10) result.samples.push({ row: row.row, cells: row.cells.map(cell =>
@@ -429,7 +446,7 @@ export class SqliteRecordStore implements RecordStore {
             const id = randomUUID();
             const result = calculate(values);
             insert.run(id, table.id, position++, JSON.stringify(result.values), JSON.stringify(result.formulaErrors ?? {}));
-            this.relations.write(table, id, values);
+            if (relationFields.length) links.push({ id, values: Object.fromEntries(relationFields.map(field => [field.id, values[field.id]!])) });
           } else {
             for (const field of table.fields.filter(field => field.type === 'relation')) this.relations.validateTargets(field, values[field.id]!);
           }
@@ -440,7 +457,7 @@ export class SqliteRecordStore implements RecordStore {
           if (result.issues.length < 20) result.issues.push({ row: row.row, code: error.code, message: error.message });
         }
       }
-      if (apply && result.total) this.relations.bumpRevision(table.id);
+      if (apply && result.total) this.relations.bumpRevisions([table.id, ...this.relations.write(table, links).tables]);
       return result;
     }, apply ? 'IMMEDIATE' : 'DEFERRED');
   }
@@ -501,10 +518,11 @@ export class SqliteRecordStore implements RecordStore {
         const id = randomUUID();
         const result = calculate(values);
         insert.run(id, table.id, position++, JSON.stringify(result.values), JSON.stringify(result.formulaErrors ?? {}));
-        this.relations.write(table, id, values);
         return { id, version: 1, ...result };
       });
-      this.relations.bumpRevision(table.id);
+      const linked = this.relations.write(table, records);
+      for (const record of records) if (linked.values.has(record.id)) record.values = linked.values.get(record.id)!;
+      this.relations.bumpRevisions([table.id, ...linked.tables]);
       return { records: this.lookups.hydrate(table, this.relations.hydrate(table, records)) };
     });
   }
@@ -518,9 +536,9 @@ export class SqliteRecordStore implements RecordStore {
           throw new ServiceError('VERSION_CONFLICT', `Record ${item.id} changed. Reload before deleting again.`, 409);
         }
       }
-      this.relations.deleteRecords(records.map(record => record.id));
+      const affected = this.relations.deleteRecords(this.getTable(id), records.map(record => record.id));
       for (const item of records) remove.run(id, item.id);
-      this.relations.bumpRevision(id);
+      this.relations.bumpRevisions([id, ...affected]);
       return { deleted: records.map(record => record.id) };
     });
   }
@@ -545,10 +563,11 @@ export class SqliteRecordStore implements RecordStore {
         else delete record.formulaErrors;
         record.version++;
         write.run(JSON.stringify(record.values), JSON.stringify(record.formulaErrors ?? {}), record.id, id);
-        this.relations.write(table, record.id, update.values);
         return record;
       });
-      this.relations.bumpRevision(id);
+      const linked = this.relations.write(table, updates);
+      for (const record of records) if (linked.values.has(record.id)) record.values = linked.values.get(record.id)!;
+      this.relations.bumpRevisions([id, ...linked.tables]);
       return { records: this.lookups.hydrate(table, this.relations.hydrate(table, records)) };
     });
   }

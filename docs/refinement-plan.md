@@ -25,6 +25,19 @@ This bounded UI iteration improves the existing workflows' layout and interactio
 - [x] Record details in a side panel with clear field/value hierarchy and explicit save/discard behavior. Focused and full desktop workflows passed, covering many-field scrolling, formatted titles, grid and board entry points, close/Escape discard choices, cancellation without writes, Ctrl+S and retained conflict drafts. The 1024 × 768 detail screenshot and the board-panel screenshot were visually reviewed.
 - [x] Field configuration near its column, with bounded scrolling, conversion feedback and preserved schema safeguards. Focused column/field workflows and full desktop acceptance passed. Tests verify 12-option scrolling at 1024 × 768, cancellation without schema writes, invalid conversion blocking, explicit successful conversion, retained stale-schema drafts and keyboard focus restoration. Option and conversion screenshots were visually reviewed.
 
+## Connected workflow completion
+
+The next bounded iteration follows the owner's request to audit complete workflows, including service behavior. Prior UI completion does not imply functional parity or completion of the wider product direction.
+
+- [x] **Two-way linked records.** Create paired fields with checked versions for both schemas. Writes from either side update the opposite values and indexes atomically, preserve cardinality and required constraints, invalidate stale reads, and work through desktop, HTTP, SDK, CLI and MCP. Node regression tests cover batch conflicts, self-links, deletion, defaults, CSV, restart and backup restoration. Focused and full desktop acceptance cover creation, a stale target schema, reverse editing and field removal; both narrow-window screenshots were visually reviewed. Existing fields are not automatically paired, and deleting one field retains the other as one-way links.
+- [ ] **Calculations over linked summaries.** Allow scalar linked summaries as formula inputs, with consistent recalculation, queries, errors and dependency checks. Array-valued inputs remain explicitly unsupported.
+- [ ] **Grouped table records.** Save a grouping field, browse and collapse groups, and edit actual records within their groups. Preserve bounded loading, stable record identities, filtering, clipboard and version checks. Multiple grouping levels remain a separate extension.
+- [ ] **Relative date filters.** Save calendar-relative conditions such as today, this week and past/next days, with explicit time-zone semantics and shared behavior across query, view, summary and export interfaces.
+
+The audit also identified unfinished work outside these four changes: select-color rendering, field descriptions and additional field types (including attachments and automatic metadata), persistent change history/recovery, calendar/Gantt/gallery/form/pivot views, dashboards and automation. These remain gaps, not completed equivalents. Existing exclusions for an internal AI runtime, organization administration, billing and new operating systems remain in force.
+
+Each item receives focused regression coverage and its own PR; split backend and UI delivery only when the intermediate change is independently useful. Merge after required CI and relevant validation pass. Produce a new package and report its exact revision, checks and remaining limits before requesting owner acceptance.
+
 ## Verification evidence
 
 Business rules use Node, SQLite, HTTP and protocol/subprocess regression tests. UI changes add automated desktop or component acceptance cases; use screenshots to assess layout when available. Test data stays isolated. Avoid Computer Use for routine implementation validation.

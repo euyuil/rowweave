@@ -19,7 +19,7 @@ export interface Field {
   numberFormat?: 'decimal' | 'currency' | 'percent';
   precision?: number;
   currency?: string;
-  relation?: { tableId: string; multiple: boolean };
+  relation?: { tableId: string; multiple: boolean; inverseFieldId?: string };
   lookup?: { relationFieldId: string; fieldId: string; operation?: 'values' | 'count' | 'sum' | 'average' | 'min' | 'max' };
   formula?: { expression: string; resultType: 'number' | 'text' | 'checkbox' };
   // Resolved from the current target schema; not writable field configuration.
@@ -60,14 +60,15 @@ export interface FieldCreate extends SchemaWrite {
   precision?: number;
   currency?: string;
   relation?: Field['relation'];
+  reverseField?: { name: string; multiple: boolean; expectedVersion: number };
   lookup?: Field['lookup'];
   formula?: Field['formula'];
 }
 
-export type FieldUpdate = SchemaWrite & Partial<Omit<FieldCreate, 'expectedVersion' | 'precision'>> & { precision?: number | null };
+export type FieldUpdate = SchemaWrite & Partial<Omit<FieldCreate, 'expectedVersion' | 'precision' | 'reverseField'>> & { precision?: number | null };
 
 export interface FieldConversion extends SchemaWrite {
-  field: Omit<FieldCreate, 'expectedVersion'>;
+  field: Omit<FieldCreate, 'expectedVersion' | 'reverseField'>;
 }
 
 export interface ConversionPreview {

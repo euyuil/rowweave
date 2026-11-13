@@ -33,6 +33,9 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved, ancho
   const [targets, setTargets] = useState<Table[]>([]);
   const [targetId, setTargetId] = useState(field?.relation?.tableId ?? table.id);
   const [multiple, setMultiple] = useState(field?.relation?.multiple ?? true);
+  const [reverse, setReverse] = useState(false);
+  const [reverseName, setReverseName] = useState(table.name);
+  const [reverseMultiple, setReverseMultiple] = useState(true);
   const [lookupRelation, setLookupRelation] = useState(field?.lookup?.relationFieldId ?? table.fields.find(field => field.type === 'relation')?.id ?? '');
   const [lookupField, setLookupField] = useState(field?.lookup?.fieldId ?? '');
   const [lookupTarget, setLookupTarget] = useState<Table>();
@@ -95,6 +98,9 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved, ancho
         const { id: _id, ...definition } = target;
         const config: Omit<FieldCreate, 'expectedVersion'> = {
           ...definition, defaultValue: hasDefault ? fromFormValue(target, defaultValue) : null,
+        };
+        if (!field && type === 'relation' && reverse) config.reverseField = {
+          name: reverseName, multiple: reverseMultiple, expectedVersion: targets.find(target => target.id === targetId)!.version,
         };
         if (type === 'formula') config.formula = { resultType, expression: rewriteFormulaReferences(expression, name => {
           const matches = formulaFields.filter(candidate => referenceName(candidate) === name);
@@ -161,10 +167,16 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved, ancho
           {lookupOperation !== 'values' && <p className="form-note">Uses numeric values, including numeric formulas. Empty values are skipped; count returns 0 when none exist, while other summaries stay empty.</p>}
         </>}
         {type === 'relation' && <>
-          <label className="form-field">Link to table<select required aria-label="Link to table" value={targetId} onChange={event => { setTargetId(event.target.value); setDefaultValue(null); }}>
+          <label className="form-field">Link to table<select required disabled={!!field?.relation?.inverseFieldId} aria-label="Link to table" value={targetId} onChange={event => { setTargetId(event.target.value); setDefaultValue(null); }}>
             {targets.map(target => <option key={target.id} value={target.id}>{target.name}</option>)}
           </select></label>
           <label className="check-field"><input type="checkbox" checked={multiple} onChange={event => setMultiple(event.target.checked)} />Allow multiple records</label>
+          {!field && <><label className="check-field"><input type="checkbox" checked={reverse} onChange={event => setReverse(event.target.checked)} />Create a reverse field in the linked table</label>
+            {reverse && <><label className="form-field">Reverse field name<input required maxLength={200} value={reverseName} onChange={event => setReverseName(event.target.value)} /></label>
+              <label className="check-field"><input type="checkbox" checked={reverseMultiple} onChange={event => setReverseMultiple(event.target.checked)} />Allow multiple records in the reverse field</label>
+              <p className="form-note">Both fields are created together. Adding or removing a link from either table updates the other side when saved.</p></>}
+          </>}
+          {field?.relation?.inverseFieldId && <p className="form-note">Two-way link: changes update the opposite field when saved. Configure that field in the linked table to change its name or record limit.</p>}
         </>}
         {(type === 'number' || (type === 'formula' && resultType === 'number')) && <div className="form-row">
           <label className="form-field">Number format<select aria-label="Number format" value={format} onChange={event => setFormat(event.target.value as typeof format)}>
@@ -208,7 +220,7 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved, ancho
       </section>}
       {error && <p className="form-error" role="alert">{error}</p>}
       <div className="dialog-actions"><button type="button" disabled={busy} onClick={onClose}>Cancel</button>
-        <button className="primary" disabled={busy || (type === 'lookup' && !lookupFields.some(field => field.id === lookupField)) || (preview !== undefined && preview.invalid > 0)}>
+        <button className="primary" disabled={busy || (type === 'relation' && !targets.some(target => target.id === targetId)) || (type === 'lookup' && !lookupFields.some(field => field.id === lookupField)) || (preview !== undefined && preview.invalid > 0)}>
           {busy ? 'Working…' : converting ? preview ? 'Apply conversion' : 'Preview conversion' : 'Save field'}</button></div>
     </form>
   </Dialog>;

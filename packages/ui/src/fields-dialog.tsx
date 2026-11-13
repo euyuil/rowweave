@@ -39,6 +39,7 @@ export function FieldsDialog({ initial, api, setDirty, onClose, onSaved }: {
     setDirty={setDirty} onClose={() => setEditing(undefined)} onSaved={saved} />;
   if (removing) return <Dialog title="Delete field" onClose={() => setRemoving(undefined)} busy={busy}>
     <p>Delete <strong>{removing.name}</strong> and its values in every record? This cannot be undone. Saved views will remove this field and its filters.</p>
+    {removing.relation?.inverseFieldId && <p>The opposite field and its values remain as one-way links. Future changes will no longer synchronize.</p>}
     {error && <p className="form-error" role="alert">{error}</p>}
     <div className="dialog-actions"><button disabled={busy} onClick={() => setRemoving(undefined)}>Cancel</button>
       <button className="danger" disabled={busy} onClick={() => void write(() => api.deleteField(table.id, removing.id, table.version))}>Delete permanently</button></div>

@@ -75,6 +75,10 @@ export function parseField(input: Record<string, unknown>, previous?: Field): Fi
       throw new ServiceError('INVALID_SCHEMA', 'A linked-record field requires a target table ID and a multiple flag.');
     }
     field.relation = { tableId: relation['tableId'], multiple: relation['multiple'] };
+    if (relation['inverseFieldId'] !== undefined && relation['inverseFieldId'] !== previous?.relation?.inverseFieldId) {
+      throw new ServiceError('INVALID_SCHEMA', 'Reverse field identities are assigned by the service.');
+    }
+    if (previous?.relation?.inverseFieldId) field.relation.inverseFieldId = previous.relation.inverseFieldId;
   }
   if (field.type === 'lookup') {
     const lookup = schemaObject(config['lookup']);

@@ -21,7 +21,10 @@ const field = z.strictObject({
   formula: z.strictObject({ expression: z.string().min(1).max(4096), resultType: z.enum(['number', 'text', 'checkbox']) }).exactOptional(),
   lookup: z.strictObject({ relationFieldId: id, fieldId: id, operation: z.enum(['values', 'count', 'sum', 'average', 'min', 'max']).exactOptional() }).exactOptional(),
 });
-export const fieldCreate = field.extend(expectedVersion);
+export const fieldCreate = field.extend({ ...expectedVersion,
+  reverseField: z.strictObject({ name: z.string(), multiple: z.boolean(), expectedVersion: version })
+    .describe('For a new relation: atomically create its editable reverse field in the target table, using that table schema version.').exactOptional(),
+});
 export const fieldUpdate = z.strictObject({
   ...field.shape,
   ...expectedVersion,

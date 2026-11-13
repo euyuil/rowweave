@@ -10,6 +10,7 @@ import { verifyViewWorkflow } from './view-workflow.mjs';
 import { verifyQueryWorkflow } from './query-workflow.mjs';
 import { verifyGridWorkflow } from './grid-workflow.mjs';
 import { verifyRelationWorkflow } from './relation-workflow.mjs';
+import { verifyReciprocalWorkflow } from './reciprocal-workflow.mjs';
 import { verifyLookupWorkflow } from './lookup-workflow.mjs';
 import { verifyCsvWorkflow } from './csv-workflow.mjs';
 import { verifySummaryWorkflow } from './summary-workflow.mjs';
@@ -249,6 +250,7 @@ try {
   await verifyQueryWorkflow(page, application);
   await verifyGridWorkflow(page);
   await verifyRelationWorkflow(page);
+  await verifyReciprocalWorkflow(page, application);
   await verifyLookupWorkflow(page);
   await verifyCsvWorkflow(page, application, dataDirectory);
   await verifySummaryWorkflow(page);

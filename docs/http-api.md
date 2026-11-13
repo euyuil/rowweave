@@ -44,6 +44,8 @@ Tables support up to 200 fields. Field definitions use `{ name, type, required?,
 
 Optional writable fields allow null. New-record defaults apply only to omitted fields; explicit null does not use a default. Existing records do not receive a newly added default. Add a required field to a non-empty table as optional, fill it, then enable its constraint. Tightening constraints validates existing values atomically. A field's ID and option IDs survive rename and reorder. Returned lookup fields include the current resolved `lookupResult` metadata; that property is not writable configuration.
 
+A new relation may additionally specify `reverseField: { name, multiple, expectedVersion }`. The nested version belongs to the target table. Both fields are created atomically and return service-assigned `relation.inverseFieldId` metadata. Edits from either side synchronize values and versions; final cardinality and required constraints apply to both sides. Deleting a record clears its reciprocal links unless other dependencies prevent deletion. Deleting one field preserves the opposite field as ordinary one-way links. See [two-way relationship semantics](development.md#linked-records) for batch, CSV and schema boundaries.
+
 Changing a field's type requires explicit conversion. Preview returns `tableId`, `fieldId`, proposed `field`, `schemaVersion`, `total`, `changed`, `invalid`, up to ten samples, and up to twenty issues. Apply validates current data again in one transaction. Invalid data, stale schema versions, or incompatible saved-view/lookup dependencies prevent all changes. Relation/lookup/formula fields cannot be converted to or from another type. Use the returned resolved field definition when applying conversions that create select options.
 
 ## Records
