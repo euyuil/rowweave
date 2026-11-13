@@ -157,11 +157,14 @@ export async function verifyCsvWorkflow(page, application, directory) {
   await page.getByRole('button', { name: 'Close and reload', exact: true }).click();
   assert.equal((await records()).length, 5);
   await page.getByText('5 records · 4 fields', { exact: true }).waitFor();
+  await page.waitForFunction(() => document.querySelector('.grid-host')?.getAttribute('aria-busy') === 'false');
   const bounds = await page.locator('canvas').first().boundingBox();
   await page.mouse.click(bounds.x + 100, bounds.y + 58);
   await page.keyboard.press('Enter');
   await page.getByRole('textbox', { name: 'Cell value', exact: true }).fill('Unsaved');
-  await page.keyboard.press('Enter');
+  await page.getByText('Editing cell…', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('textbox', { name: 'Cell value', exact: true }).inputValue(), 'Unsaved');
+  await page.getByRole('textbox', { name: 'Cell value', exact: true }).press('Enter');
   await page.getByText('1 unsaved cell', { exact: true }).waitFor();
   assert.equal(await page.getByRole('button', { name: 'Import CSV', exact: true }).isDisabled(), true);
   assert.equal(await page.getByRole('button', { name: 'Export CSV', exact: true }).isDisabled(), true);

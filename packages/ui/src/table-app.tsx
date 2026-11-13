@@ -70,7 +70,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   const [formDirty, setFormDirty] = useState(false);
   const [recordAction, setRecordAction] = useState<RecordAction>();
   const [managingFields, setManagingFields] = useState(false);
-  const [editingField, setEditingField] = useState<Field>();
+  const [editingField, setEditingField] = useState<{ field: Field; bounds: DialogAnchor }>();
   const [columnAction, setColumnAction] = useState<{ field: Field; bounds: Rectangle }>();
   const [csvAction, setCsvAction] = useState<'import' | 'export'>();
   const [summarizing, setSummarizing] = useState(false);
@@ -270,7 +270,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   const changeColumn = async (action: ColumnAction) => {
     if (recordActionsLocked || busyRef.current) throw new Error('The table is not ready for column changes.');
     const field = columnAction!.field;
-    if (action === 'configure') { setColumnAction(undefined); setEditingField(field); return; }
+    if (action === 'configure') { setEditingField(columnAction); setColumnAction(undefined); return; }
     const update: ViewUpdate = { expectedVersion: view!.version };
     if (action === 'asc' || action === 'desc' || action === 'clearSort') {
       const others = (view!.query.sort ?? []).filter(rule => rule.fieldId !== field.id);
@@ -532,8 +532,9 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       onClose={() => setManagingFields(false)} onSaved={() => refreshAfterWrite('Schema')} />}
     {columnAction && view && <ColumnActions field={columnAction.field} view={view} bounds={columnAction.bounds}
       disabled={recordActionsLocked} onAction={changeColumn} onClose={() => { setColumnAction(undefined); grid.current?.focus(); }} />}
-    {editingField && table && <FieldForm table={table} field={editingField} api={api} setDirty={setFormDirty}
-      onClose={() => setEditingField(undefined)} onSaved={async () => { setEditingField(undefined); await refreshAfterWrite('Schema'); }} />}
+    {editingField && table && <FieldForm table={table} field={editingField.field} anchor={editingField.bounds} api={api} setDirty={setFormDirty}
+      onClose={() => { setEditingField(undefined); requestAnimationFrame(() => grid.current?.focus()); }}
+      onSaved={async () => { setEditingField(undefined); await refreshAfterWrite('Schema'); grid.current?.focus(); }} />}
     {viewAction && view && table && <ViewDialog kind={viewAction} view={view} search={search} table={table} api={api} setDirty={setFormDirty} anchor={queryAnchor}
       onClose={() => setViewAction(undefined)} onSaved={saved => {
         setViewAction(undefined);

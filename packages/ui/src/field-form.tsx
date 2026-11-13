@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { ConversionPreview, Field, FieldCreate, FieldType, SelectOption, Table } from '../../contracts/src/index.js';
 import type { WorkspaceApi } from '../../client/src/http-client.js';
 import { cellText } from '../../client/src/cell-values.js';
-import { Dialog } from './dialog.js';
+import { Dialog, type DialogAnchor } from './dialog.js';
 import { FieldInput } from './field-input.js';
 import { fromFormValue, toFormValue, type FormValue } from './field-input-values.js';
 import { rewriteFormulaReferences } from '../../core/src/formulas.js';
@@ -13,8 +13,9 @@ export const fieldTypeNames: Record<FieldType, string> = {
   datetime: 'Date and time', singleSelect: 'Single select', multiSelect: 'Multiple select', relation: 'Linked records', lookup: 'Lookup', formula: 'Formula',
 };
 
-export function FieldForm({ table, field, api, setDirty, onClose, onSaved }: {
+export function FieldForm({ table, field, api, setDirty, onClose, onSaved, anchor }: {
   table: Table; field: Field | undefined; api: WorkspaceApi; setDirty(value: boolean): void;
+  anchor?: DialogAnchor | undefined;
   onClose(): void; onSaved(table: Table): Promise<void>;
 }) {
   const [name, setName] = useState(field?.name ?? '');
@@ -74,7 +75,7 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved }: {
       ...(format === 'currency' ? { currency } : {}) } : {}) };
   const changed = () => { setDirty(true); setPreview(undefined); };
   useEffect(() => () => setDirty(false), [setDirty]);
-  return <Dialog title={field ? 'Configure field' : 'Add field'} onClose={onClose} busy={busy} wide>
+  return <Dialog title={field ? 'Configure field' : 'Add field'} onClose={onClose} busy={busy} wide={!anchor} anchor={anchor}>
     {field && <details className="form-note"><summary>Field identity</summary>
       <p>Field ID: <code>{field.id}</code></p>
       <p>This UUID identifies the column, not a record. Renaming or reordering keeps this ID.</p>
