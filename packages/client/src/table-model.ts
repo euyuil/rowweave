@@ -56,6 +56,8 @@ export class TableModel {
   private visibleFields: Field[] = [];
   private readonly listeners = new Set<() => void>();
   private readonly pages = new Map<number, QueryPage>();
+  private visibleRows = new Map<number, RowRecord>();
+  private viewportRequest = 0;
   private readonly requests = new Map<number, { promise: Promise<QueryPage>; controller: AbortController }>();
   private readonly batchReads = new Map<AbortController, Promise<QueryPage>>();
   private refreshRequest: AbortController | undefined;
@@ -102,7 +104,8 @@ export class TableModel {
 
   get cacheStats() {
     return { pages: this.pages.size, rows: [...this.pages.values()].reduce((n, page) => n + page.records.length, 0),
-      inFlight: this.requests.size + this.batchReads.size + (this.refreshRequest ? 1 : 0), historyCells: this.undoStack.reduce((n, entry) => n + entry.cells, 0) };
+      visibleRows: this.visibleRows.size, inFlight: this.requests.size + this.batchReads.size + (this.refreshRequest ? 1 : 0),
+      historyCells: this.undoStack.reduce((n, entry) => n + entry.cells, 0) };
   }
 
   async initialize(): Promise<void> {
@@ -131,7 +134,7 @@ export class TableModel {
 
   getRecord(row: number): RowRecord | undefined {
     const page = this.pages.get(Math.floor(row / this.pageSize));
-    const record = page?.records[row % this.pageSize];
+    const record = page?.records[row % this.pageSize] ?? this.visibleRows.get(row);
     if (record) return this.overlay(record);
     const id = this.edits.rows.get(row);
     const draft = id ? this.edits.drafts.get(id) : undefined;
@@ -200,6 +203,24 @@ export class TableModel {
     });
     this.requests.set(index, { promise: task, controller });
     return task;
+  }
+
+  async readViewport(indices: readonly number[]): Promise<void> {
+    if (!this.table || indices.length > maxBatchRecords || indices.some(index => !Number.isSafeInteger(index) || index < 0)) {
+      throw new Error('The visible record window is invalid or too large.');
+    }
+    const generation = this.generation, request = ++this.viewportRequest;
+    const visible = new Map<number, RowRecord>();
+    for (const index of indices) {
+      if (index >= this.rowCount) continue;
+      const page = await this.loadPage(Math.floor(index / this.pageSize));
+      if (generation !== this.generation || request !== this.viewportRequest) return;
+      const record = page.records[index % this.pageSize];
+      if (!record) throw new Error('The service returned an incomplete page.');
+      visible.set(index, record);
+    }
+    this.visibleRows = visible;
+    this.emit();
   }
 
   async readRange(start: number, count: number): Promise<RowRecord[]> {
@@ -384,6 +405,7 @@ export class TableModel {
     this.batchReads.clear();
     this.requests.clear();
     this.pages.clear();
+    this.visibleRows.clear();
     this.queryRevision = undefined;
     this.queryDateContext = undefined;
     this.edits = { ...this.edits, rows: new Map() };
@@ -503,6 +525,7 @@ export class TableModel {
     for (const controller of this.batchReads.keys()) controller.abort();
     this.batchReads.clear();
     this.requests.clear();
+    this.visibleRows.clear();
     this.listeners.clear();
   }
 }

@@ -307,7 +307,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     if (!ready || offline || view?.type === 'board' || (grouping.enabled && !grouping.rows)) return;
     let active = true;
     const timer = setTimeout(() => {
-      void readIndices(recordIndices(visible.y, Math.min(visible.height + 5, maxBatchRecords)))
+      void model.readViewport(recordIndices(visible.y, Math.min(visible.height + 5, maxBatchRecords)))
         .catch(failure => { if (active) report(failure); });
     }, 30);
     return () => { active = false; clearTimeout(timer); };
