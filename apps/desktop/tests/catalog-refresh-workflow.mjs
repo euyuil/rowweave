@@ -30,10 +30,14 @@ export async function verifyCatalogRefresh(page, application) {
   await item('Catalog current').click(); await ready();
   await call('/tables/' + current.id + '/records', 'POST', [{ values: { [current.primaryFieldId]: 'Saved record' } }]);
   await page.getByText('1 record · 1 field', { exact: true }).waitFor();
+  await ready();
+  await page.waitForFunction(() => document.querySelector('canvas [aria-rowindex="2"] [role="gridcell"][aria-colindex="1"]')?.textContent === 'Saved record');
   const bounds = await page.locator('canvas').first().boundingBox();
   await page.mouse.click(bounds.x + 100, bounds.y + 58);
   const editor = page.getByRole('textbox', { name: 'Cell value', exact: true });
   if (await editor.count()) await page.keyboard.press('Escape');
+  await page.waitForFunction(() => document.querySelector('canvas')?.contains(document.activeElement));
+  await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === 'Open record' && !button.disabled));
   await page.keyboard.press('Enter'); await editor.fill('Keep catalog draft 中文');
   await editor.dispatchEvent('compositionstart');
   current = await call('/tables/' + current.id, 'PATCH', { expectedVersion: current.version, name: 'Catalog renamed' });
