@@ -611,7 +611,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     {columnAction && view && <ColumnActions field={columnAction.field} view={view} bounds={columnAction.bounds}
       disabled={recordActionsLocked} onAction={changeColumn} onClose={() => { setColumnAction(undefined); grid.current?.focus(); }} />}
     {editingField && table && <FieldForm table={table} field={editingField.field} anchor={editingField.bounds} api={api} setDirty={setFormDirty}
-      onClose={() => { setEditingField(undefined); requestAnimationFrame(() => grid.current?.focus()); }}
+      restoreFocus={() => grid.current?.focus()} onClose={() => setEditingField(undefined)}
       onSaved={async () => { setEditingField(undefined); await refreshAfterWrite('Schema'); grid.current?.focus(); }} />}
     {viewAction && view && table && <ViewDialog kind={viewAction} view={view} search={search} table={table} api={api} setDirty={setFormDirty} anchor={queryAnchor}
       onClose={() => setViewAction(undefined)} onSaved={saved => {

@@ -2,9 +2,10 @@ import React, { useEffect, useId, useRef, type ReactNode } from 'react';
 
 export interface DialogAnchor { x: number; y: number; width: number; height: number }
 
-export function Dialog({ title, onClose, busy = false, wide = false, anchor, drawer = false, subtitle, children }: {
+export function Dialog({ title, onClose, busy = false, wide = false, anchor, drawer = false, subtitle, restoreFocus, children }: {
   title: string; onClose(): void; busy?: boolean; wide?: boolean; anchor?: DialogAnchor | undefined;
   drawer?: boolean; subtitle?: string | undefined; children: ReactNode;
+  restoreFocus?: (() => void) | undefined;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -14,7 +15,8 @@ export function Dialog({ title, onClose, busy = false, wide = false, anchor, dra
     element.showModal();
     return () => {
       element.close();
-      if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus({ preventScroll: true });
+      if (restoreFocus) restoreFocus();
+      else if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus({ preventScroll: true });
     };
   }, []);
   useEffect(() => {

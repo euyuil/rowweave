@@ -39,7 +39,7 @@ export async function verifyFieldPanelWorkflow(page, application) {
   const cancel = async () => {
     await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
     await dialog.waitFor({ state: 'detached' });
-    await page.waitForFunction(() => document.activeElement?.tagName === 'CANVAS');
+    await page.waitForFunction(() => document.querySelector('canvas')?.contains(document.activeElement));
   };
   await page.getByRole('button', { name: 'Reload', exact: true }).click();
   await configure();
@@ -101,6 +101,9 @@ export async function verifyFieldPanelWorkflow(page, application) {
   assert.equal(await page.getByLabel('Field name', { exact: true }).inputValue(), 'Keep schema draft');
   assert.equal((await readTable()).fields[0].name, 'Name');
   await cancel();
+  await page.keyboard.press('Enter');
+  await page.getByRole('textbox', { name: 'Cell value', exact: true }).waitFor();
+  await page.keyboard.press('Escape');
   await call(`/tables/${table.id}/records`, 'PATCH', [{ id: records[1].id, expectedVersion: records[1].version, values: { [table.primaryFieldId]: '20' } }]);
   await page.getByRole('button', { name: 'Reload', exact: true }).click();
   await configure();

@@ -40,7 +40,8 @@ export async function verifyCalculationControls(page, application) {
   assert.equal(await button.evaluate(element => element === document.activeElement), true);
 
   let mocked = { ...status, running: true }, statusFailure = false, refreshCalls = 0;
-  const statusRoute = async route => route.fulfill({ status: statusFailure ? 503 : 200, contentType: 'application/json',
+  const statusRoute = async route => mocked === undefined ? route.continue() : route.fulfill({
+    status: statusFailure ? 503 : 200, contentType: 'application/json',
     body: JSON.stringify(statusFailure ? { error: { code: 'STATUS_UNAVAILABLE', message: 'Synthetic status outage' } } : mocked) });
   const refreshRoute = async route => {
     refreshCalls++;
@@ -80,7 +81,7 @@ export async function verifyCalculationControls(page, application) {
     await dialog.getByRole('button', { name: 'Check status', exact: true }).click();
     await dialog.getByText('Automatically every minute', { exact: true }).waitFor();
     await page.unroute('**/calculations/refresh', refreshRoute);
-    await page.unroute('**/calculations/status', statusRoute);
+    mocked = undefined;
     let releaseResponse, responseReady, responseFinished;
     const held = new Promise(resolve => { releaseResponse = resolve; });
     const ready = new Promise(resolve => { responseReady = resolve; });
@@ -104,23 +105,20 @@ export async function verifyCalculationControls(page, application) {
     if (!await editor.count()) await page.keyboard.press('Enter');
     assert.equal(await editor.inputValue(), '保留中文草稿');
     await page.keyboard.press('Escape');
+    await application.evaluate(({ dialog }) => { dialog.showMessageBox = async () => ({ response: 1, checkboxChecked: false }); });
+    await page.getByRole('button', { name: 'Discard edits', exact: true }).click();
+    await page.getByText('All changes saved', { exact: true }).waitFor();
+    await page.getByRole('button', { name: '+ New record', exact: true }).click();
+    const formName = dialog.getByLabel('Name', { exact: true });
+    await formName.fill('Unsaved form 中文');
+    mocked = { ...status, running: true };
+    await page.waitForFunction(() => document.querySelector('.calculation-button')?.textContent.includes('Updating'), undefined, { polling: 100 });
+    assert.equal(await formName.inputValue(), 'Unsaved form 中文');
+    assert.equal(await formName.evaluate(element => element === document.activeElement), true);
   } finally {
     await page.unroute('**/calculations/status', statusRoute);
     await page.unroute('**/calculations/refresh', refreshRoute);
   }
-  await application.evaluate(({ dialog }) => { dialog.showMessageBox = async () => ({ response: 1, checkboxChecked: false }); });
-  await page.getByRole('button', { name: 'Discard edits', exact: true }).click();
-  await page.getByText('All changes saved', { exact: true }).waitFor();
-  await page.getByRole('button', { name: '+ New record', exact: true }).click();
-  const formName = dialog.getByLabel('Name', { exact: true });
-  await formName.fill('Unsaved form 中文');
-  mocked = { ...status, running: true };
-  await page.route('**/calculations/status', statusRoute);
-  try {
-    await page.waitForFunction(() => document.querySelector('.calculation-button')?.textContent.includes('Updating'));
-    assert.equal(await formName.inputValue(), 'Unsaved form 中文');
-    assert.equal(await formName.evaluate(element => element === document.activeElement), true);
-  } finally { await page.unroute('**/calculations/status', statusRoute); }
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.getByRole('button', { name: 'Delete table', exact: true }).click();
   await dialog.getByRole('button', { name: 'Delete table', exact: true }).click(); await dialog.waitFor({ state: 'detached' });

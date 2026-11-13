@@ -15,9 +15,10 @@ export const fieldTypeNames: Record<FieldType, string> = {
   datetime: 'Date and time', singleSelect: 'Single select', multiSelect: 'Multiple select', relation: 'Linked records', lookup: 'Lookup', formula: 'Formula',
 };
 
-export function FieldForm({ table, field, api, setDirty, onClose, onSaved, anchor }: {
+export function FieldForm({ table, field, api, setDirty, onClose, onSaved, anchor, restoreFocus }: {
   table: Table; field: Field | undefined; api: WorkspaceApi; setDirty(value: boolean): void;
   anchor?: DialogAnchor | undefined;
+  restoreFocus?: (() => void) | undefined;
   onClose(): void; onSaved(table: Table): Promise<void>;
 }) {
   const [name, setName] = useState(field?.name ?? '');
@@ -94,7 +95,7 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved, ancho
     return matches[0]!.id;
   }) });
   useEffect(() => () => setDirty(false), [setDirty]);
-  return <Dialog title={field ? 'Configure field' : 'Add field'} onClose={onClose} busy={busy} wide={!anchor} anchor={anchor}>
+  return <Dialog title={field ? 'Configure field' : 'Add field'} onClose={onClose} busy={busy} wide={!anchor} anchor={anchor} restoreFocus={restoreFocus}>
     {field && <details className="form-note"><summary>Field identity</summary>
       <p>Field ID: <code>{field.id}</code></p>
       <p>This UUID identifies the column, not a record. Renaming or reordering keeps this ID.</p>
