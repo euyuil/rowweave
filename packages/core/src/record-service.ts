@@ -19,6 +19,7 @@ export interface RecordStore {
   getTable(id?: string): Table;
   createTable(table: Table): Table;
   updateSchema(table: Table, expectedVersion: number, validateRecord?: (record: RowRecord) => void): Table;
+  createReciprocalFields(table: Table, target: Table, validateRecord?: (record: RowRecord) => void): Table;
   deleteTable(id: string, expectedVersion: number): void;
   readPage(offset: number, limit: number, id?: string): RecordPage;
   updateBatch(updates: RecordUpdate[], id: string, schemaVersion: number): BatchResult;
@@ -89,13 +90,29 @@ export class RecordService {
     if (table.fields.length >= maxFields) throw new ServiceError('INVALID_SCHEMA', `A table supports up to ${maxFields} fields.`);
     const field = parseField(item);
     table.fields.push(field);
-    return this.store.updateSchema(table, version, field.required ? () => {
+    const validateRecord = field.required ? () => {
       throw new ServiceError('INVALID_SCHEMA', 'Add this field as optional, fill existing records, then make it required.');
-    } : undefined);
+    } : undefined;
+    if (item['reverseField'] !== undefined) {
+      if (field.type !== 'relation') throw new ServiceError('INVALID_SCHEMA', 'Only linked-record fields can create a reverse field.');
+      const reverse = schemaObject(item['reverseField']);
+      const target = field.relation!.tableId === id ? table : this.store.getTable(field.relation!.tableId);
+      if (table.version !== version || target.version !== schemaVersion(reverse['expectedVersion'])) {
+        throw new ServiceError('SCHEMA_CONFLICT', 'A table schema changed. Reload both tables before creating linked fields.', 409);
+      }
+      if (target.fields.length >= maxFields) throw new ServiceError('INVALID_SCHEMA', `A table supports up to ${maxFields} fields.`);
+      const inverse = parseField({ name: reverse['name'], type: 'relation', relation: { tableId: id, multiple: reverse['multiple'] } });
+      field.relation!.inverseFieldId = inverse.id;
+      inverse.relation!.inverseFieldId = field.id;
+      target.fields.push(inverse);
+      return this.store.createReciprocalFields(table, target, validateRecord);
+    }
+    return this.store.updateSchema(table, version, validateRecord);
   }
 
   updateField(id: string, fieldId: string, input: unknown): Table {
     const item = schemaObject(input);
+    if (item['reverseField'] !== undefined) throw new ServiceError('INVALID_SCHEMA', 'Create a new linked field to add a reverse field.');
     const version = schemaVersion(item['expectedVersion']);
     const table = this.store.getTable(id);
     const previous = table.fields.find(field => field.id === fieldId);

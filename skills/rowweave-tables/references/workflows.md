@@ -86,7 +86,9 @@ Read both source and target schemas. Search the target's primary display values 
 
 Set the link's record value to `["project-record-id"]`, not the project name or a bare string. To display a project field in Tasks, create a `lookup` with `lookup: { "relationFieldId": "project-link-field-id", "fieldId": "target-field-id" }`. The lookup's target must be an ordinary field; chained lookups and linked targets are not supported. Omit lookup values when creating or duplicating records.
 
-Renaming a target changes displayed link labels without changing IDs. Deleting referenced targets is rejected; altering relationships to permit deletion is a separate data change that must be within the user's scope.
+For a new two-way relation, also provide `reverseField: { name, multiple, expectedVersion }` in the field input, using the target table's schema version. Both fields are created together and expose `relation.inverseFieldId`. Updating either side changes opposite record values and versions; read those records again before editing them. Ordinary incoming references still block deletion; reciprocal links are removed atomically when deleting a record, unless required constraints or other dependencies block it. Deleting one field keeps the opposite side as one-way links. Do not invent inverse IDs or retry a failed/uncertain write automatically.
+
+Renaming a target changes displayed link labels without changing IDs. Altering ordinary relationships to permit deletion is a separate data change that must be within the user's scope.
 
 ## Saved views
 
