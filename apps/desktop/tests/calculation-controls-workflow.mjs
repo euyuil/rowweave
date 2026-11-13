@@ -50,8 +50,14 @@ export async function verifyCalculationControls(page, application) {
   await page.route('**/calculations/status', statusRoute);
   try {
     const bounds = await page.locator('canvas').first().boundingBox();
-    await page.mouse.click(bounds.x + 100, bounds.y + 58); await page.keyboard.press('Enter');
     const editor = page.getByRole('textbox', { name: 'Cell value', exact: true });
+    const openName = async () => {
+      await page.mouse.click(bounds.x + 100, bounds.y + 58);
+      await page.waitForFunction(() => document.querySelector('canvas')?.contains(document.activeElement) || !!document.querySelector('.rowweave-cell-editor'));
+      if (!await editor.count()) await page.keyboard.press('Enter');
+      await editor.waitFor();
+    };
+    await openName();
     await editor.fill('保留中文草稿');
     await editor.evaluate(element => element.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true, data: '保留中文草稿' })));
     await button.filter({ hasText: 'Updating' }).waitFor();
@@ -101,8 +107,7 @@ export async function verifyCalculationControls(page, application) {
     await dialog.getByRole('button', { name: 'Close', exact: true }).click();
     await page.getByText('1 unsaved cell', { exact: true }).waitFor();
     assert.equal((await call(root + '/records/' + record.id)).values[table.primaryFieldId], 'Saved name');
-    await page.mouse.click(bounds.x + 100, bounds.y + 58);
-    if (!await editor.count()) await page.keyboard.press('Enter');
+    await openName();
     assert.equal(await editor.inputValue(), '保留中文草稿');
     await page.keyboard.press('Escape');
     await application.evaluate(({ dialog }) => { dialog.showMessageBox = async () => ({ response: 1, checkboxChecked: false }); });
