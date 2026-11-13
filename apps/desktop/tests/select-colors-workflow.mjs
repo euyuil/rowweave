@@ -59,6 +59,9 @@ export async function verifySelectColorsWorkflow(page) {
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   await page.getByText('All changes saved', { exact: true }).waitFor();
+  await ready();
+  assert.equal(await page.getByRole('button', { name: 'Open record', exact: true }).isEnabled(), false);
+  await page.locator('.dvn-scroller').click({ position: { x: 100, y: 58 } });
   await page.getByRole('button', { name: 'Open record', exact: true }).click();
   assert.deepEqual(await colors(dialog.getByLabel('Status', { exact: true })), { background: 'rgb(255, 238, 0)', text: 'rgb(0, 0, 0)' });
   assert.deepEqual(await colors(dialog.locator('.select-value').filter({ hasText: '<Review>' })), { background: 'rgb(0, 119, 68)', text: 'rgb(255, 255, 255)' });
