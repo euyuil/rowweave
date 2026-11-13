@@ -16,12 +16,14 @@ await mkdir('.artifacts', { recursive: true });
 let application;
 let page;
 const errors = [];
+const diagnostics = [];
 let lastCellClick = 0;
 async function launch() {
   application = await electron.launch({
     executablePath: packaged ?? electronPath, args: packaged ? [] : ['.'], cwd: packaged ? dataDirectory : process.cwd(),
     env: { ...process.env, ROWWEAVE_DATA_DIR: dataDirectory }, timeout: 40_000,
   });
+  application.process().stderr.on('data', data => diagnostics.push(data.toString()));
   page = await application.firstWindow();
   page.setDefaultTimeout(15_000);
   page.on('pageerror', error => errors.push(error.message));
@@ -238,6 +240,7 @@ try {
   console.log('Desktop smoke passed: editing, cancellation, keyboard selection, native clipboard, 1000×10 paste, composition guard, conflict feedback, restart persistence and service failure.');
 } catch (error) {
   console.error('Renderer errors:', errors);
+  console.error('Desktop process diagnostics:', diagnostics.join(''));
   if (page && !page.isClosed()) await page.screenshot({ path: '.artifacts/desktop-failure.png' }).catch(() => {});
   throw error;
 } finally {
