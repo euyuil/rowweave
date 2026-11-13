@@ -44,6 +44,7 @@ const tables: Promise<Table[]> = api.listTables();
 const preview: Promise<CsvPreview> = api.previewCsv('table', { expectedVersion: 1, hasHeader: true, csv: 'Name\\nA' });
 void api.queryRecords('table', query, new AbortController().signal);
 const groups: Promise<GroupLayout> = api.queryGroups('table', { groupBy: 'amount', limit: 20,
+  measures: [{ fieldId: 'amount', operation: 'sum' }],
   window: 'expandedRecords', collapse: { defaultCollapsed: true, exceptions: [0, null] } }, new AbortController().signal);
 void api.exportCsv('table', { viewId: 'view', expectedViewVersion: 1 });
 // @ts-expect-error Record writes require numeric versions.
@@ -78,8 +79,10 @@ assert.equal((await api.previewCsv(table.id, input)).invalid, 0);
 assert.equal((await api.importCsv(table.id, input)).imported, 1);
 const rows = (await api.queryRecords(table.id, {})).records;
 assert.equal(rows.length, 2);
-const groups = await api.queryGroups(table.id, { groupBy: cost, collapse: { defaultCollapsed: true, exceptions: [5] } });
+const groups = await api.queryGroups(table.id, { groupBy: cost, collapse: { defaultCollapsed: true, exceptions: [5] },
+  measures: [{ fieldId: cost, operation: 'sum' }, { fieldId: cost, operation: 'average' }] });
 assert.deepEqual(groups.groups.map(group => [group.key, group.count, group.rowStart]), [[5, 2, 0], [null, 0, 3]]);
+assert.deepEqual(groups.groups.map(group => group.values), [[10, 5], [null, null]]);
 assert.deepEqual((await api.queryGroups(table.id, { groupBy: cost, window: 'expandedRecords' })).groups.map(group =>
   [group.key, group.count, group.expandedOffset]), [[5, 2, 0]]);
 assert.equal((await api.queryRecords(table.id, { groupBy: cost, offset: groups.groups[0].recordOffset,

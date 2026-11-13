@@ -14,7 +14,7 @@ export function parseSummary(table: Table, input: Record<string, unknown>): Chec
       !supportsScalarGrouping(fields.get(groupBy)!))) {
     throw new ServiceError('INVALID_SUMMARY', 'Group by a text, number, checkbox, date, timestamp or single-select field.');
   }
-  const measures = input['measures'] ?? [];
+  const measures = input['measures'] === undefined ? [] : input['measures'];
   if (!Array.isArray(measures) || measures.length > 12) {
     throw new ServiceError('INVALID_SUMMARY', 'Use at most 12 numeric summary measures.');
   }

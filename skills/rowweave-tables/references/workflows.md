@@ -70,7 +70,7 @@ CLI: `rowweave fields preview-conversion table-id field-id --input conversion.js
 
 ## Grouped grid views
 
-For a grouped grid, create or update a view with `type: "grid"` and `groupBy` set to a single-select or checkbox field ID. Queries and CSV exports follow option order (or unchecked/checked/null), then the saved record sort. Returned pages contain only real records. Read group counts through the summary operation with the same view and data revision. Clear grouping with `groupBy: null` and the current view version. Collapsed UI groups do not exclude records from shared-interface queries. See `docs/grouped-records.md` for the current one-level scope.
+For a grouped grid, create or update a view with `type: "grid"` and `groupBy` set to a supported scalar field ID. Queries and CSV exports follow configured option order or ascending raw scalar values, then the saved record sort. Returned record pages contain only real records. Use `records_groups` for bounded heading/expanded-record windows and counts under the same view/data/date guards. Optional `measures` return sum/average/min/max values over each complete matching group, independent of window size or collapse. Clear grouping with `groupBy: null` and the current view version. Collapsed UI groups do not exclude records from shared-interface record queries. See `docs/grouped-records.md` for the current one-level scope and pending saved desktop measures.
 
 ## Links and lookups
 

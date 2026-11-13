@@ -68,7 +68,7 @@ Tools have discoverable strict JSON schemas. Read descriptions and use stable ID
 | `records_restore_deleted` | `{ tableId, records: [{ id, deletionId, values? }] }`; atomically restores UUIDs with newer versions, optional writable values repair current-schema conflicts |
 | `records_query` | `{ tableId, query: RecordQuery }` (use `{}` for the default page) |
 | `records_summarize` | `{ tableId, input: SummaryRequest }` for full-set counts, numeric measures and bounded group pages |
-| `records_groups` | `{ tableId, input: GroupQuery }` for bounded display-row windows with typed group keys, counts, record offsets and collapse settings; see [layout semantics](http-api.md#group-layout-windows) |
+| `records_groups` | `{ tableId, input: GroupQuery }` for bounded display/expanded-record windows with typed keys, counts, offsets, collapse settings and optional numeric measures over complete groups; see [layout semantics](http-api.md#group-layout-windows) |
 | `records_create`, `records_update`, `records_delete` | `{ tableId, records: [...] }` with the corresponding create/update/delete objects |
 | `views_list` | `{ tableId }` |
 | `views_get` | `{ tableId, viewId }` |

@@ -119,7 +119,7 @@ test('summaries validate aggregate types, bounds and finite numeric results at t
   const { service, table, name, amount, measures } = setup(t);
   for (const input of [{ groupBy: 'missing' }, { measures: [{ fieldId: name, operation: 'sum' }] },
     { measures: [{ fieldId: amount, operation: 'execute' }] }, { measures: Array(13).fill(measures[0]) },
-    { viewId: 12 }, { measures: 'sum' }]) {
+    { viewId: 12 }, { measures: 'sum' }, { measures: null }]) {
     assert.throws(() => service.summarizeRecords(table.id, input), code('INVALID_SUMMARY'));
   }
   for (const input of [{ limit: 501 }, { offset: -1 }, { expectedRevision: 0 }]) {

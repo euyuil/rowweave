@@ -108,7 +108,7 @@ test('saved group layouts retain option order, empty headings, filters and recor
     options: [{ id: 'a', name: 'Renamed' }, { id: 'z', name: 'Next' }, { id: 'empty', name: 'Empty' }] });
   assert.deepEqual(service.queryGroups(table.id, { viewId: view.id }).groups.slice(0, 2).map(group => [group.key, group.label]), [['a', 'Renamed'], ['z', 'Next']]);
   assert.throws(() => service.queryGroups(table.id, { viewId: view.id, expectedRevision: layout.revision }), code('DATA_CHANGED'));
-  assert.throws(() => store.queryGroups(table, { groupBy: status, offset: 0, limit: 20, window: 'displayRows' }, { defaultCollapsed: false, exceptions: [] }), code('SCHEMA_CONFLICT'));
+  assert.throws(() => store.queryGroups(table, { groupBy: status, offset: 0, limit: 20, window: 'displayRows', measures: [] }, { defaultCollapsed: false, exceptions: [] }), code('SCHEMA_CONFLICT'));
   assert.equal(service.getTable(table.id).version, current.version);
   service.updateView(table.id, view.id, { expectedVersion: view.version, name: 'Updated' });
   assert.throws(() => service.queryGroups(table.id, { viewId: view.id, expectedViewVersion: view.version }), code('VIEW_CONFLICT'));
