@@ -3,6 +3,7 @@ import { isReadOnlyField, maxPageSize, maxBatchRecords, maxBatchCells, maxFields
   type BatchResult, type CellValue, type ConversionPreview, type DeleteResult, type Field, type GridView, type QueryPage, type RecordDelete, type RecordPage, type RecordUpdate, type RowRecord, type Table, type ViewPage } from '../../contracts/src/index.js';
 import { schemaName, schemaObject, schemaVersion } from './schema-validation.js';
 import { parseField } from './field-schema.js';
+import type { FormulaPreview } from '../../contracts/src/index.js';
 import type { Attachment, AttachmentPage } from '../../contracts/src/index.js';
 import { parseAttachmentUpload, parseAttachmentQuery, type CheckedAttachmentUpload, type AttachmentFile } from './attachments.js';
 import { validateValue } from './field-values.js';
@@ -19,6 +20,7 @@ import type { CsvImportResult, CsvPreview } from '../../contracts/src/index.js';
 export { ServiceError } from './errors.js';
 
 export interface RecordStore {
+  previewFormula(table: Table, expectedVersion: number, field: Field, recordId?: string): FormulaPreview;
   uploadAttachment(tableId: string, input: CheckedAttachmentUpload): Attachment;
   listAttachments(tableId: string, query: ReturnType<typeof parseAttachmentQuery>): AttachmentPage;
   getAttachment(tableId: string, id: string): Attachment;
@@ -104,6 +106,25 @@ export class RecordService {
 
   deleteTable(id: string, input: unknown): void {
     this.store.deleteTable(id, schemaVersion(schemaObject(input)['expectedVersion']));
+  }
+
+  previewFormula(id: string, input: unknown): FormulaPreview {
+    const item = schemaObject(input);
+    const version = schemaVersion(item['expectedVersion']);
+    for (const key of ['fieldId', 'recordId']) {
+      const value = item[key];
+      if (value !== undefined && (typeof value !== 'string' || !value || value.length > 200)) {
+        throw new ServiceError('INVALID_SCHEMA', key + ' must be a non-empty ID of up to 200 characters.');
+      }
+    }
+    const table = this.store.getTable(id);
+    const previous = table.fields.find(field => field.id === item['fieldId']);
+    if (item['fieldId'] !== undefined && !previous) throw new ServiceError('FIELD_NOT_FOUND', 'This field does not exist.', 404);
+    if (previous && previous.type !== 'formula') throw new ServiceError('INVALID_SCHEMA', 'Only an existing formula field can be previewed by fieldId.');
+    if (!previous && table.fields.length >= maxFields) throw new ServiceError('INVALID_SCHEMA', `A table supports up to ${maxFields} fields.`);
+    const field = parseField({ name: previous?.name ?? 'Formula preview', type: 'formula', formula: item['formula'] }, previous);
+    table.fields = previous ? table.fields.map(current => current.id === field.id ? field : current) : [...table.fields, field];
+    return this.store.previewFormula(table, version, field, item['recordId'] as string | undefined);
   }
 
   createField(id: string, input: unknown): Table {

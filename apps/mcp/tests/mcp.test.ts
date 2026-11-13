@@ -15,6 +15,8 @@ import { RecordService } from '../../../packages/core/src/record-service.js';
 import { parseCsv } from '../../../packages/core/src/csv.js';
 import { startServer } from '../../server/src/http-server.js';
 import type { Attachment } from '../../../packages/contracts/src/index.js';
+import type { FormulaPreview } from '../../../packages/contracts/src/index.js';
+import { createWorkspaceClient } from '../../../packages/client/src/index.js';
 
 const runFile = promisify(execFile);
 const entry = resolve('apps/mcp/dist/rowweave-mcp.js');
@@ -61,6 +63,29 @@ async function setup(t: Context) {
   const environment = { ROWWEAVE_URL: server.url, ROWWEAVE_TOKEN: token };
   return { service, server, token, environment };
 }
+
+test('SDK, MCP and CLI preview formulas without writes and surface validation or calculation errors', async t => {
+  const { service, server, token, environment } = await setup(t), { json, call } = await connect(t, environment);
+  const api = createWorkspaceClient({ url: server.url, token });
+  let table = await api.createTable({ name: 'Draft calculations' });
+  table = await api.createField(table.id, { expectedVersion: table.version, name: 'Amount', type: 'number' });
+  const amount = table.fields[1]!.id;
+  const rows = (await api.createRecords(table.id, [2, 4].map(value => ({ values: { [amount]: value } })))).records;
+  const input = { expectedVersion: table.version, recordId: rows[1]!.id, formula: { expression: '[' + amount + '] * 3', resultType: 'number' as const } };
+  const preview = await api.previewFormula(table.id, input);
+  assert.equal(preview.sample!.value, 12);
+  assert.deepEqual(await json<FormulaPreview>('formulas_preview', { tableId: table.id, input }), preview);
+  const cli = await runFile(process.execPath, [resolve('apps/cli/dist/rowweave.js'), 'formulas', 'preview', table.id, '--json', JSON.stringify(input)],
+    { env: { ...process.env, ...environment } });
+  assert.deepEqual(JSON.parse(cli.stdout), preview);
+  assert.deepEqual(await api.getTable(table.id), service.getTable(table.id));
+  assert.equal((await api.getTable(table.id)).fields.length, 2);
+  assert.deepEqual((await api.queryRecords(table.id, {})).records, rows);
+  const invalid = await call('formulas_preview', { tableId: table.id, input: { ...input, formula: { ...input.formula, expression: '1 +' } } });
+  assert.equal(invalid.isError, true); assert.equal(JSON.parse(text(invalid)).error.code, 'INVALID_FORMULA');
+  assert.match((await json<FormulaPreview>('formulas_preview', { tableId: table.id, input: { ...input, formula: { ...input.formula, expression: '1 / 0' } } })).sample!.error!, /zero/);
+  assert.equal(JSON.parse(text(await call('formulas_preview', { tableId: table.id, input: { ...input, expectedVersion: 999 } }))).error.code, 'SCHEMA_CONFLICT');
+});
 
 test('MCP and CLI share array formulas over stable selection IDs without direct calculated writes', async t => {
   const { environment } = await setup(t), { json } = await connect(t, environment);
@@ -379,7 +404,8 @@ test('MCP discovers all operations and runs versioned schema, records, views and
   const { service, environment } = await setup(t);
   const { client, call, json, used, stderr } = await connect(t, environment);
   const tools = (await client.listTools()).tools;
-  assert.equal(tools.length, 38);
+  assert.equal(tools.length, 39);
+  assert.equal(tools.find(tool => tool.name === 'formulas_preview')!.annotations!.readOnlyHint, true);
   assert.ok(tools.every(tool => tool.inputSchema.type === 'object' && tool.inputSchema.additionalProperties === false));
   assert.equal(tools.find(tool => tool.name === 'records_query')!.annotations!.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === 'records_update')!.annotations!.destructiveHint, true);
@@ -390,6 +416,8 @@ test('MCP discovers all operations and runs versioned schema, records, views and
   assert.match((usage.contents[0] as { text: string }).text, /Writes are never retried/);
   assert.deepEqual(await json('tables_list'), []);
   let table = await json<Table>('tables_create', { name: 'MCP projects' });
+  assert.equal((await json<FormulaPreview>('formulas_preview', { tableId: table.id, input: { expectedVersion: table.version,
+    formula: { expression: '1', resultType: 'number' } } })).sample, null);
   const fileData = Buffer.from([0, 255, 13, 10, 128]).toString('base64');
   const file = await json<Attachment>('attachments_upload', { tableId: table.id, input: { filename: '设计.bin', mediaType: 'application/octet-stream', data: fileData } });
   const fileArgs = { tableId: table.id, attachmentId: file.id };

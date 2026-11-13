@@ -12,6 +12,8 @@ export const viewId = { ...tableId, viewId: id };
 export const expectedVersion = { expectedVersion: version };
 export const tableCreate = z.strictObject({ name: z.string() });
 export const tableUpdate = z.strictObject({ ...expectedVersion, name: z.string().exactOptional(), primaryFieldId: id.exactOptional(), fieldOrder: z.array(id).exactOptional() });
+const formula = z.strictObject({ expression: z.string().min(1).max(4096), resultType: z.enum(['number', 'text', 'checkbox', 'date', 'datetime']) });
+export const formulaPreview = z.strictObject({ ...expectedVersion, formula, fieldId: id.exactOptional(), recordId: id.exactOptional() });
 const field = z.strictObject({
   name: z.string(),
   description: z.string().max(2000).describe('Plain-text field guidance. Send empty text to clear it.').exactOptional(),
@@ -20,7 +22,7 @@ const field = z.strictObject({
   options: z.array(z.strictObject({ id: id.exactOptional(), name: z.string(), color: z.string().exactOptional() })).exactOptional(),
   numberFormat: z.enum(['decimal', 'currency', 'percent']).exactOptional(), precision: z.number().int().exactOptional(), currency: z.string().exactOptional(),
   relation: z.strictObject({ tableId: id, multiple: z.boolean() }).exactOptional(),
-  formula: z.strictObject({ expression: z.string().min(1).max(4096), resultType: z.enum(['number', 'text', 'checkbox', 'date', 'datetime']) }).exactOptional(),
+  formula: formula.exactOptional(),
   lookup: z.strictObject({ relationFieldId: id, fieldId: id, operation: z.enum(['values', 'count', 'sum', 'average', 'min', 'max']).exactOptional() }).exactOptional(),
 });
 export const fieldCreate = field.extend({ ...expectedVersion,

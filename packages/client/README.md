@@ -63,6 +63,10 @@ try {
 
 Always use IDs returned by the service, including select-option IDs and linked-record IDs. Names are display values and can change. Schema changes, record updates/deletions, and view updates/deletions use the corresponding `expectedVersion`.
 
+## Preview formulas
+
+Use `api.previewFormula(tableId, { expectedVersion, formula: { expression, resultType }, fieldId?, recordId? })` to validate a draft and calculate it against one saved record without changing the workspace. Expressions reference field IDs. Include `fieldId` when editing an existing formula; omit `recordId` for the first saved record. An empty table returns `sample: null`; otherwise inspect `sample.value` and `sample.error`. Preview is informational and does not reserve the schema or records. See [formula preview semantics](../../docs/formulas.md#preview-before-saving).
+
 ## Query and exchange data
 
 ```ts

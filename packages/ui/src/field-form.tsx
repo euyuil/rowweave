@@ -4,6 +4,7 @@ import type { WorkspaceApi } from '../../client/src/http-client.js';
 import { cellText } from '../../client/src/cell-values.js';
 import { Dialog, type DialogAnchor } from './dialog.js';
 import { FieldInput } from './field-input.js';
+import { FormulaPreviewPanel } from './formula-preview.js';
 import { fromFormValue, toFormValue, type FormValue } from './field-input-values.js';
 import { rewriteFormulaReferences } from '../../core/src/formulas.js';
 import { isReadOnlyField, valueField } from '../../contracts/src/index.js';
@@ -87,6 +88,11 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved, ancho
     ...((type === 'number' || (type === 'formula' && resultType === 'number')) ? { numberFormat: format, ...(precision ? { precision: Number(precision) } : {}),
       ...(format === 'currency' ? { currency } : {}) } : {}) };
   const changed = () => { setDirty(true); setPreview(undefined); };
+  const currentFormula = () => ({ resultType, expression: rewriteFormulaReferences(expression, name => {
+    const matches = formulaFields.filter(candidate => referenceName(candidate) === name);
+    if (matches.length !== 1) throw new Error(`Choose a current field from Insert field: ${name}.`);
+    return matches[0]!.id;
+  }) });
   useEffect(() => () => setDirty(false), [setDirty]);
   return <Dialog title={field ? 'Configure field' : 'Add field'} onClose={onClose} busy={busy} wide={!anchor} anchor={anchor}>
     {field && <details className="form-note"><summary>Field identity</summary>
@@ -112,11 +118,7 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved, ancho
         if (!field && type === 'relation' && reverse) config.reverseField = {
           name: reverseName, multiple: reverseMultiple, expectedVersion: targets.find(target => target.id === targetId)!.version,
         };
-        if (type === 'formula') config.formula = { resultType, expression: rewriteFormulaReferences(expression, name => {
-          const matches = formulaFields.filter(candidate => referenceName(candidate) === name);
-          if (matches.length !== 1) throw new Error(`Choose a current field from Insert field: ${name}.`);
-          return matches[0]!.id;
-        }) };
+        if (type === 'formula') config.formula = currentFormula();
         if (converting && !preview) {
           setPreview(await api.previewConversion(table.id, field.id, { expectedVersion: table.version, field: config }));
         } else {
@@ -158,6 +160,7 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved, ancho
           }}><option value="" disabled>Choose a field…</option>{formulaFields.map(candidate =>
             <option key={candidate.id} value={candidate.id}>{referenceName(candidate)}</option>)}</select></label>
           <p className="form-note">Calculated after saving, including changes to linked summary inputs. Field references survive renaming. Empty inputs stay empty unless you use COALESCE.</p>
+          <FormulaPreviewPanel table={table} fieldId={field?.id} draft={target} api={api} getFormula={currentFormula} busy={busy} setBusy={setBusy} />
           <details className="form-note"><summary>Formula help</summary>
             <p>Use + − * / %, comparisons == != &gt; &gt;= &lt; &lt;=, parentheses, numbers, double-quoted text, TRUE, FALSE and NULL.</p>
             <p>Functions: IF, COALESCE, CONCAT, LOWER, UPPER, TRIM, LEN, ROUND, ABS, AND, OR and NOT.</p>

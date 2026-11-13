@@ -88,6 +88,19 @@ export interface FieldConversion extends SchemaWrite {
   field: Omit<FieldCreate, 'expectedVersion' | 'reverseField'>;
 }
 
+export interface FormulaPreviewRequest extends SchemaWrite {
+  fieldId?: string;
+  recordId?: string;
+  formula: NonNullable<Field['formula']>;
+}
+
+export interface FormulaPreview {
+  tableId: string;
+  schemaVersion: number;
+  formula: NonNullable<Field['formula']>;
+  sample: { id: string; version: number; label: string; value: ScalarValue; error?: string } | null;
+}
+
 export interface ConversionPreview {
   tableId: string;
   fieldId: string;

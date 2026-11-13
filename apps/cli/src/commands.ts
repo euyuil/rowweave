@@ -1,6 +1,6 @@
 import type { WorkspaceApi, TableCreate, TableUpdate, FieldCreate, FieldUpdate, FieldConversion, RecordCreate,
   RecordUpdate, RecordDelete, RecordQuery, ViewCreate, ViewUpdate, ViewPageRequest, SummaryRequest,
-  RecordHistoryQuery, RecordRestore, DeletedRecordRestore, AttachmentQuery } from '../../../packages/client/src/index.js';
+  RecordHistoryQuery, RecordRestore, DeletedRecordRestore, AttachmentQuery, FormulaPreviewRequest } from '../../../packages/client/src/index.js';
 
 export class UsageError extends Error {}
 
@@ -16,6 +16,7 @@ interface Command {
 }
 
 export const commands: Record<string, Command> = {
+  'formulas preview': { ids: 1, input: 'required', run: (api, [id], input) => api.previewFormula(id!, input as FormulaPreviewRequest) },
   'attachments list': { ids: 1, input: 'optional', run: (api, [id], input) => api.listAttachments(id!, input as AttachmentQuery) },
   'attachments get': { ids: 2, input: 'none', run: (api, [id, attachment]) => api.getAttachment(id!, attachment!) },
   'attachments delete': { ids: 2, input: 'none', run: (api, [id, attachment]) => api.deleteAttachment(id!, attachment!) },
@@ -57,6 +58,7 @@ Usage: rowweave <resource> <action> [table-id] [field/record/view-id] [options]
 
   tables   list | get | create | update | delete
   fields   create | update | delete | preview-conversion | apply-conversion
+  formulas preview
   records  get | query | summarize | create | update | delete | history | change | restore | trash | restore-deleted | batches | batch-changes | undo-batch
   views    list | get | create | update | delete | query
   csv      preview | import | export
