@@ -7,6 +7,7 @@ import {
 } from '../../contracts/src/index.js';
 import type { RecordSummary, SummaryRequest, RecordHistoryQuery, RecordHistoryPage, RecordChangeDetail, RecordRestore, RecordTrashPage, DeletedRecordRestore } from '../../contracts/src/index.js';
 import type { RecordBatchPage, RecordBatchChanges, RecordBatchUndoResult } from '../../contracts/src/index.js';
+import type { Attachment, AttachmentUpload, AttachmentPage, AttachmentQuery } from '../../contracts/src/index.js';
 
 export interface Connection {
   url: string;
@@ -58,6 +59,12 @@ export function createWorkspaceClient(connection: Connection, request: typeof fe
   const write = <T>(path: string, method: string, body: unknown, signal?: AbortSignal) =>
     call<T>(path, { method, body: JSON.stringify(body), ...(signal ? { signal } : {}) });
   const api = {
+    uploadAttachment: (id: string, input: AttachmentUpload) => write<Attachment>(`${root(id)}/attachments`, 'POST', input),
+    listAttachments: (id: string, input: AttachmentQuery = {}, signal?: AbortSignal) => write<AttachmentPage>(`${root(id)}/attachments/query`, 'POST', input, signal),
+    getAttachment: (id: string, attachmentId: string) => call<Attachment>(`${root(id)}/attachments/${encodeURIComponent(attachmentId)}`),
+    downloadAttachment: async (id: string, attachmentId: string, signal?: AbortSignal): Promise<Uint8Array> =>
+      new Uint8Array(await (await responseFor(`${root(id)}/attachments/${encodeURIComponent(attachmentId)}/content`, signal ? { signal } : {})).arrayBuffer()),
+    deleteAttachment: (id: string, attachmentId: string) => call<{ deleted: string }>(`${root(id)}/attachments/${encodeURIComponent(attachmentId)}`, { method: 'DELETE' }),
     listTables: () => call<Table[]>('/tables'),
     getTable: (id: string) => call<Table>(root(id)),
     createTable: (input: TableCreate) => write<Table>('/tables', 'POST', input),

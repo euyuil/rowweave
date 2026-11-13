@@ -27,6 +27,9 @@ import { relativeDateRanges } from './relative-date-ranges.js';
 import { AutomaticNumbers } from './automatic-numbers.js';
 import { RecordTimes } from './record-times.js';
 import { isReadOnlyField } from '../../contracts/src/index.js';
+import { Attachments } from './attachments.js';
+import type { CheckedAttachmentUpload } from '../../core/src/attachments.js';
+import type { AttachmentQuery } from '../../contracts/src/index.js';
 
 export interface SeedOptions {
   rows: number;
@@ -63,6 +66,7 @@ export class SqliteRecordStore implements RecordStore {
   private readonly history: RecordHistory;
   private readonly automaticNumbers: AutomaticNumbers;
   private readonly recordTimes: RecordTimes;
+  private readonly attachments: Attachments;
 
   constructor(path: string, seed: SeedOptions | null = null, private readonly clock: () => Date = () => new Date()) {
     if (seed && (!Number.isSafeInteger(seed.rows) || seed.rows < 1 || seed.rows > 100_000 ||
@@ -79,6 +83,7 @@ export class SqliteRecordStore implements RecordStore {
       this.automaticNumbers = new AutomaticNumbers(this.db);
       this.history = new RecordHistory(this.db);
       this.recordTimes = new RecordTimes(this.db);
+      this.attachments = new Attachments(this.db);
       if (fresh && seed) this.seed(seed);
     } catch (error) {
       this.db.close();
@@ -99,6 +104,22 @@ export class SqliteRecordStore implements RecordStore {
       throw error;
     }
   }
+
+  uploadAttachment(tableId: string, input: CheckedAttachmentUpload) {
+    return this.transaction(() => { this.getTable(tableId); return this.attachments.upload(tableId, input, this.clock().toISOString()); });
+  }
+
+  listAttachments(tableId: string, query: AttachmentQuery & { limit: number }) {
+    return this.transaction(() => { this.getTable(tableId); return this.attachments.list(tableId, query); }, 'DEFERRED');
+  }
+
+  getAttachment(tableId: string, id: string) { return this.attachments.get(tableId, id); }
+
+  downloadAttachment(tableId: string, id: string) {
+    return this.transaction(() => this.attachments.download(tableId, id), 'DEFERRED');
+  }
+
+  deleteAttachment(tableId: string, id: string): void { this.transaction(() => this.attachments.delete(tableId, id)); }
 
   private insertFields(table: Table): void {
     const write = this.db.prepare(`INSERT INTO fields VALUES (?, ?, ?, ?)

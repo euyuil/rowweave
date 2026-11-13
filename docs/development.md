@@ -109,6 +109,10 @@ Creating or duplicating records, including CSV imports, assigns fresh times. Res
 
 The grid and forms display UTC values read-only. Date comparisons, relative-date filters, sorting, lookups and formulas consume their timestamp strings. CSV export includes these values; import skips matching automatic headers, rejects explicit read-only mappings and assigns service times to new records. SDK/CLI/MCP use the same schema and write rules. Format 22 gates these field semantics while retaining the existing database structure.
 
+### Attachment storage
+
+The service and SDK/CLI/MCP provide authenticated, bounded file uploads/downloads with immutable metadata. Bytes are stored inside SQLite and included in workspace backups. See [attachment storage](attachments.md) for limits, lifecycle and commands. This is independent of the attachment-field UI, which remains in the active delivery scope.
+
 ### Linked records
 
 Create a **Linked records** field, choose its target table, and choose whether it allows multiple records. Defaults and required values work with linked IDs. Record forms, grid editors, and filters use a searchable picker with 50-record pages; selected records stay available outside the current search/page. Click a selected name to view the target's full record details. The primary display field must be a non-linked field, preventing circular labels.

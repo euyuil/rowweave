@@ -11,6 +11,7 @@ import { fixture } from '../../../packages/storage-sqlite/tests/helpers.js';
 import { RecordService } from '../../../packages/core/src/record-service.js';
 import { parseCsv } from '../../../packages/core/src/csv.js';
 import { startServer } from '../../server/src/http-server.js';
+import type { Attachment, AttachmentPage } from '../../../packages/contracts/src/index.js';
 
 const runFile = promisify(execFile);
 async function setup(t: Parameters<typeof fixture>[0]) {
@@ -40,6 +41,29 @@ async function setup(t: Parameters<typeof fixture>[0]) {
   }
   return { service, server, token, directory, environment, execute, json };
 }
+
+test('CLI uploads and downloads exact binary files with table-scoped metadata and explicit paths', async t => {
+  const { directory, execute, json } = await setup(t);
+  const table = await json<Table>(['tables', 'create'], { name: 'Files' });
+  const source = join(directory, '设计 🌱.bin'), destination = join(directory, 'download.bin');
+  const bytes = Buffer.from([0, 255, 13, 10, 128, 32]); await writeFile(source, bytes);
+  const file = await json<Attachment>(['attachments', 'upload', table.id, '--file', source]);
+  assert.equal(file.filename, '设计 🌱.bin'); assert.equal(file.mediaType, 'application/octet-stream'); assert.equal(file.size, bytes.length);
+  assert.deepEqual(await json(['attachments', 'get', table.id, file.id]), file);
+  assert.deepEqual(await json<AttachmentPage>(['attachments', 'list', table.id], { limit: 1 }), { attachments: [file] });
+  assert.deepEqual(await json(['attachments', 'download', table.id, file.id, '--output', destination]), { path: destination, bytes: bytes.length });
+  assert.deepEqual(await readFile(destination), bytes);
+  const fromStdin = await execute(['attachments', 'upload', table.id, '--file', '-', '--json', JSON.stringify({ filename: 'stdin.txt', mediaType: 'text/plain' })], '中文');
+  assert.equal(fromStdin.code, 0, fromStdin.stderr); assert.equal(JSON.parse(fromStdin.stdout).size, 6);
+  for (const args of [
+    ['attachments', 'upload', table.id], ['attachments', 'upload', table.id, '--file', '-'],
+    ['attachments', 'upload', table.id, '--file', '-', '--input', '-'], ['attachments', 'download', table.id, file.id],
+  ]) { const result = await execute(args); assert.equal(result.code, 2, result.stderr); }
+  await json(['attachments', 'delete', table.id, file.id]);
+  const missing = await execute(['attachments', 'download', table.id, file.id, '--output', destination]);
+  assert.equal(missing.code, 1); assert.equal(JSON.parse(missing.stderr).error.code, 'ATTACHMENT_NOT_FOUND');
+  assert.deepEqual(await readFile(destination), bytes);
+});
 
 test('CLI subprocesses manage schema, atomic records, views and CSV using machine-readable results', async t => {
   const { service, directory, execute, json } = await setup(t);

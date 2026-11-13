@@ -150,12 +150,12 @@ test('trash survives restart, workspace backup and migration from format 16', as
   const expected = service.recordTrash(table.id, {});
   store.close();
   const db = new DatabaseSync(data.path);
-  db.exec('DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP INDEX changes_deleted; PRAGMA user_version = 16;'); db.close();
+  db.exec('DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP INDEX changes_deleted; PRAGMA user_version = 16;'); db.close();
   const migrated = new RecordService(data.open());
   assert.deepEqual(migrated.recordTrash(table.id, {}), expected);
   const backup = join(dirname(data.path), 'backup.sqlite'), restoredPath = join(dirname(data.path), 'restored.sqlite');
   await backupWorkspace(data.path, backup);
-  assert.equal((await restoreWorkspace(backup, restoredPath)).version, 22);
+  assert.equal((await restoreWorkspace(backup, restoredPath)).version, 23);
   const restoredStore = new SqliteRecordStore(restoredPath);
   try {
     const restored = new RecordService(restoredStore);

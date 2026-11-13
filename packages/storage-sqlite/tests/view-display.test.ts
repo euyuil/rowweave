@@ -51,7 +51,7 @@ test('version-seven migration preserves views and records while adding their ori
   const records = store.readPage(0, 12);
   store.close();
   const db = new DatabaseSync(data.path);
-  db.exec("DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; UPDATE views SET config_json = json_remove(config_json, '$.rowHeight', '$.frozenColumns'); ALTER TABLE records DROP COLUMN formula_errors_json; PRAGMA user_version = 7;");
+  db.exec("DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; UPDATE views SET config_json = json_remove(config_json, '$.rowHeight', '$.frozenColumns'); ALTER TABLE records DROP COLUMN formula_errors_json; PRAGMA user_version = 7;");
   db.close();
   const upgraded = data.open();
   assert.deepEqual(upgraded.listViews(table.id), views);

@@ -43,7 +43,7 @@ test('URL schema upgrades preserve existing data and survive restart and backups
   const original = service.createTable({ name: 'Existing table' });
   const row = service.createRecords(original.id, [{ values: { [original.primaryFieldId]: 'Keep me' } }]).records[0]!;
   store.close();
-  const db = new DatabaseSync(data.path); db.exec('DROP TABLE field_sequences; PRAGMA user_version = 19'); db.close();
+  const db = new DatabaseSync(data.path); db.exec('DROP TABLE attachments; DROP TABLE field_sequences; PRAGMA user_version = 19'); db.close();
   const upgraded = new RecordService(data.open());
   assert.deepEqual(upgraded.getRecord(original.id, row.id), row);
   const table = upgraded.createField(original.id, { expectedVersion: original.version, name: 'Website', type: 'url' });
@@ -51,7 +51,7 @@ test('URL schema upgrades preserve existing data and survive restart and backups
   const current = upgraded.getRecord(table.id, row.id);
   assert.deepEqual(new RecordService(data.open()).getRecord(table.id, row.id), current);
   const backup = join(dirname(data.path), 'backup.sqlite'), restored = join(dirname(data.path), 'restored.sqlite');
-  await backupWorkspace(data.path, backup); assert.equal((await restoreWorkspace(backup, restored)).version, 22);
+  await backupWorkspace(data.path, backup); assert.equal((await restoreWorkspace(backup, restored)).version, 23);
   const restoredStore = new SqliteRecordStore(restored);
   try { assert.deepEqual(restoredStore.getTable(table.id).fields, table.fields); assert.deepEqual(new RecordService(restoredStore).getRecord(table.id, row.id), current); }
   finally { restoredStore.close(); }

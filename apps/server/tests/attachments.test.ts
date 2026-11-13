@@ -1,0 +1,35 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { randomBytes } from 'node:crypto';
+import { fixture } from '../../../packages/storage-sqlite/tests/helpers.js';
+import { RecordService } from '../../../packages/core/src/record-service.js';
+import { createWorkspaceClient } from '../../../packages/client/src/http-client.js';
+import { startServer } from '../src/http-server.js';
+import { maxAttachmentBytes } from '../../../packages/contracts/src/index.js';
+
+test('SDK file operations share authenticated binary downloads with safe headers and no active-content execution', async t => {
+  const service = new RecordService(fixture(t, null).open()), token = randomBytes(32).toString('hex');
+  const server = await startServer({ service, token }); t.after(() => server.close());
+  const api = createWorkspaceClient({ url: server.url, token }), table = await api.createTable({ name: 'File API' });
+  const bytes = Buffer.from('<script>throw new Error("Do not execute")</script>\0\xff', 'latin1');
+  const file = await api.uploadAttachment(table.id, { filename: '设计 (1).html', mediaType: 'text/html', data: bytes.toString('base64') });
+  assert.deepEqual(await api.getAttachment(table.id, file.id), file);
+  assert.deepEqual(await api.listAttachments(table.id, { limit: 1 }), { attachments: [file] });
+  assert.deepEqual(Buffer.from(await api.downloadAttachment(table.id, file.id)), bytes);
+  const path = `${server.url}/tables/${table.id}/attachments/${file.id}/content`, headers = { Authorization: `Bearer ${token}` };
+  assert.equal((await fetch(path)).status, 401);
+  assert.equal((await fetch(path, { headers: { ...headers, Origin: 'https://untrusted.example' } })).status, 403);
+  const response = await fetch(path, { headers });
+  assert.equal(response.headers.get('content-type'), 'application/octet-stream');
+  assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+  assert.match(response.headers.get('content-disposition')!, /^attachment; filename="download"; filename\*=UTF-8''%E8%AE%BE%E8%AE%A1%20%281%29.html$/);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  assert.deepEqual(Buffer.from(await response.arrayBuffer()), bytes);
+  await assert.rejects(api.uploadAttachment(table.id, { filename: 'bad', mediaType: 'text/plain', data: 'not base64' }), { code: 'INVALID_ATTACHMENT' });
+  const maximum = Buffer.alloc(maxAttachmentBytes, 255);
+  const large = await api.uploadAttachment(table.id, { filename: 'large.bin', mediaType: 'application/octet-stream', data: maximum.toString('base64') });
+  assert.deepEqual(Buffer.from(await api.downloadAttachment(table.id, large.id)), maximum);
+  await assert.rejects(api.uploadAttachment(table.id, { filename: 'oversized.bin', mediaType: 'application/octet-stream', data: Buffer.alloc(maxAttachmentBytes + 1).toString('base64') }), { code: 'PAYLOAD_TOO_LARGE', status: 413 });
+  await api.deleteAttachment(table.id, file.id);
+  await assert.rejects(api.downloadAttachment(table.id, file.id), { code: 'ATTACHMENT_NOT_FOUND' });
+});

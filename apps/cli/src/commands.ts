@@ -1,6 +1,6 @@
 import type { WorkspaceApi, TableCreate, TableUpdate, FieldCreate, FieldUpdate, FieldConversion, RecordCreate,
   RecordUpdate, RecordDelete, RecordQuery, ViewCreate, ViewUpdate, ViewPageRequest, SummaryRequest,
-  RecordHistoryQuery, RecordRestore, DeletedRecordRestore } from '../../../packages/client/src/index.js';
+  RecordHistoryQuery, RecordRestore, DeletedRecordRestore, AttachmentQuery } from '../../../packages/client/src/index.js';
 
 export class UsageError extends Error {}
 
@@ -16,6 +16,9 @@ interface Command {
 }
 
 export const commands: Record<string, Command> = {
+  'attachments list': { ids: 1, input: 'optional', run: (api, [id], input) => api.listAttachments(id!, input as AttachmentQuery) },
+  'attachments get': { ids: 2, input: 'none', run: (api, [id, attachment]) => api.getAttachment(id!, attachment!) },
+  'attachments delete': { ids: 2, input: 'none', run: (api, [id, attachment]) => api.deleteAttachment(id!, attachment!) },
   'tables list': { ids: 0, input: 'none', run: api => api.listTables() },
   'tables get': { ids: 1, input: 'none', run: (api, [id]) => api.getTable(id!) },
   'tables create': { ids: 0, input: 'required', run: (api, _, input) => api.createTable(input as TableCreate) },
@@ -57,12 +60,13 @@ Usage: rowweave <resource> <action> [table-id] [field/record/view-id] [options]
   records  get | query | summarize | create | update | delete | history | change | restore | trash | restore-deleted | batches | batch-changes | undo-batch
   views    list | get | create | update | delete | query
   csv      preview | import | export
+  attachments upload | list | get | download | delete
 
 Options:
   --input <file|->   JSON request body from a UTF-8 file or stdin
   --json <text>      JSON request body directly (exclusive with --input)
-  --file <file|->    CSV source for preview/import; JSON supplies import options
-  --output <file>    CSV export destination; omit to write CSV to stdout
+  --file <file|->    Source for CSV preview/import or attachment upload
+  --output <file>    CSV export or attachment download destination
   --url <url>        Service URL (or ROWWEAVE_URL; default http://127.0.0.1:4317)
   --help, -h        Show this help without connecting
 
@@ -70,7 +74,9 @@ Set ROWWEAVE_TOKEN in the environment. Never put tokens in command arguments.
 Writes require JSON; queries/export default to {}. Metadata deletion JSON is
 { "expectedVersion": 1 }. Record writes/deletions use arrays of record objects.
 CSV options require expectedVersion and hasHeader; mapping is optional.
-Do not use stdin for both JSON and CSV in the same command.
+Attachment upload accepts optional filename/mediaType JSON; stdin requires a filename.
+Files are limited to 8 MiB. Attachment download requires --output and never executes the file.
+Do not use stdin for both JSON and file content in the same command.
 
 Success: JSON on stdout (except CSV export without --output).
 Failure: JSON on stderr; exit 2 for usage/input errors, exit 1 otherwise.

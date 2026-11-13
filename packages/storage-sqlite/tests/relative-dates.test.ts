@@ -72,7 +72,7 @@ test('date-only periods use the selected zone, calendar weeks and inclusive day 
   assert.deepEqual(service.queryView(table.id, view.id, {}).records.map(record => record.values[due]), ['2026-01-04', null]);
   const db = new DatabaseSync(data.path);
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM sqlite_schema WHERE type = 'index' AND name LIKE 'rowweave_view_%'").get()!['n'], 0);
-  db.exec('DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; PRAGMA user_version = 14;'); db.close();
+  db.exec('DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; PRAGMA user_version = 14;'); db.close();
   const versions = service.getTable(table.id);
   store.close();
   now = new Date('2026-01-05T00:00:00Z');

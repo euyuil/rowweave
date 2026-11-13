@@ -5,8 +5,8 @@ import { syncQueryIndexes } from './query-indexes.js';
 
 export function migrate(db: DatabaseSync): boolean {
   const version = db.prepare('PRAGMA user_version').get()!['user_version'] as number;
-  if (version === 22) return false;
-  if (version < 0 || version > 22) throw new Error(`Unsupported database version: ${version}.`);
+  if (version === 23) return false;
+  if (version < 0 || version > 23) throw new Error(`Unsupported database version: ${version}.`);
   db.exec('BEGIN IMMEDIATE');
   try {
     if (version < 2) {
@@ -107,8 +107,13 @@ export function migrate(db: DatabaseSync): boolean {
     if (version < 21) db.exec(`CREATE TABLE field_sequences (
       field_id TEXT PRIMARY KEY REFERENCES fields(id) ON DELETE CASCADE, last_value INTEGER NOT NULL
     );`);
-    // Automatic timestamp fields use existing JSON values and durable history.
-    db.exec('PRAGMA user_version = 22; COMMIT;');
+    if (version < 23) db.exec(`CREATE TABLE attachments (
+      sequence INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE,
+      table_id TEXT NOT NULL REFERENCES tables(id) ON DELETE CASCADE,
+      filename TEXT NOT NULL, media_type TEXT NOT NULL, size INTEGER NOT NULL,
+      sha256 TEXT NOT NULL, created_at TEXT NOT NULL, content BLOB NOT NULL
+    ); CREATE INDEX attachments_by_table ON attachments(table_id, sequence DESC);`);
+    db.exec('PRAGMA user_version = 23; COMMIT;');
     return version === 0;
   } catch (error) {
     db.exec('ROLLBACK');

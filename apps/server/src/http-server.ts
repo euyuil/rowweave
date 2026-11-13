@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { timingSafeEqual } from 'node:crypto';
 import { RecordService, ServiceError } from '../../../packages/core/src/record-service.js';
 import { networkPolicy, type NetworkOptions } from './network.js';
+import { maxAttachmentBytes } from '../../../packages/contracts/src/index.js';
 
 export interface ServerOptions extends NetworkOptions {
   service: RecordService;
@@ -61,6 +62,25 @@ export async function startServer({ service, token, ...options }: ServerOptions)
       throw new ServiceError('UNAUTHORIZED', 'A valid access token is required.', 401);
     }
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+    const attachment = url.pathname.match(/^\/tables\/([^/]+)\/attachments(?:\/([^/]+)(?:\/(content))?)?$/);
+    if (attachment) {
+      const [, tableId, id, content] = attachment;
+      if (!id && request.method === 'POST') {
+        send(response, 201, service.uploadAttachment(tableId!, await readJson(request, Math.ceil(maxAttachmentBytes / 3) * 4 + 4096)));
+      } else if (id === 'query' && request.method === 'POST' && !content) {
+        send(response, 200, service.listAttachments(tableId!, await readJson(request)));
+      } else if (id && request.method === 'GET' && content) {
+        const file = service.downloadAttachment(tableId!, id);
+        const filename = encodeURIComponent(file.metadata.filename).replace(/[!'()*]/g, character => '%' + character.charCodeAt(0).toString(16).toUpperCase());
+        response.writeHead(200, { 'Content-Type': 'application/octet-stream', 'X-Content-Type-Options': 'nosniff',
+          'Content-Length': file.bytes.byteLength, 'Cache-Control': 'no-store',
+          'Content-Disposition': `attachment; filename="download"; filename*=UTF-8''${filename}` });
+        response.end(file.bytes);
+      } else if (id && request.method === 'GET' && !content) send(response, 200, service.getAttachment(tableId!, id));
+      else if (id && request.method === 'DELETE' && !content) { service.deleteAttachment(tableId!, id); send(response, 200, { deleted: id }); }
+      else throw new ServiceError('NOT_FOUND', 'This endpoint does not exist.', 404);
+      return;
+    }
     const undo = url.pathname.match(/^\/tables\/([^/]+)\/batches\/([^/]+)\/undo$/);
     if (undo && request.method === 'POST') {
       await readJson(request);
