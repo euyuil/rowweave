@@ -243,7 +243,7 @@ try {
   await recordLifecycle();
   await verifyViewWorkflow(page);
   await verifyNavigationWorkflow(page, application);
-  await verifyQueryWorkflow(page);
+  await verifyQueryWorkflow(page, application);
   await verifyGridWorkflow(page);
   await verifyRelationWorkflow(page);
   await verifyLookupWorkflow(page);
