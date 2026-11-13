@@ -10,6 +10,7 @@ import { isLookupSummary, isReadOnlyField, valueField } from '../../contracts/sr
 
 export const fieldTypeNames: Record<FieldType, string> = {
   text: 'Text', multiline: 'Multiline text', url: 'URL', number: 'Number', autoNumber: 'Automatic number', checkbox: 'Checkbox', date: 'Date',
+  createdTime: 'Created time', updatedTime: 'Last edited time',
   datetime: 'Date and time', singleSelect: 'Single select', multiSelect: 'Multiple select', relation: 'Linked records', lookup: 'Lookup', formula: 'Formula',
 };
 
@@ -138,7 +139,7 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved, ancho
         <label className="form-field">Field type<select aria-label="Field type" value={type} onChange={event => {
           setType(event.target.value as FieldType); setHasDefault(false); setDefaultValue(null);
         }}>{Object.entries(fieldTypeNames).map(([value, label]) => <option key={value} value={value}
-          disabled={field ? ['relation', 'lookup', 'formula', 'autoNumber'].includes(field.type) ? value !== field.type : ['relation', 'lookup', 'formula', 'autoNumber'].includes(value)
+          disabled={field ? field.type === 'relation' || isReadOnlyField(field) ? value !== field.type : value === 'relation' || isReadOnlyField({ type: value as FieldType })
             : value === 'lookup' && !table.fields.some(field => field.type === 'relation')}>{label}</option>)}</select></label>
         {type === 'formula' && <>
           <label className="form-field">Result type<select aria-label="Result type" value={resultType} onChange={event => setResultType(event.target.value as typeof resultType)}>
@@ -215,6 +216,8 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved, ancho
           }}>Add option</button>
         </div>}
         {type === 'autoNumber' && <p className="form-note">Assigns a new number from 1 when each record is created. Existing records receive numbers in their current order. Numbers cannot be edited or reused; restoring a deleted record keeps its number.</p>}
+        {type === 'createdTime' && <p className="form-note">Records the original creation time in UTC. Restoring a record preserves its creation time. Older records without a known creation time remain empty.</p>}
+        {type === 'updatedTime' && <p className="form-note">Records the latest record save or linked-record edit in UTC. Schema changes and calculation refreshes leave it unchanged. Existing records use their latest known saved change.</p>}
         {!isReadOnlyField({ type }) && <><label className="check-field"><input type="checkbox" checked={required} onChange={event => setRequired(event.target.checked)} />Require a value</label>
         <label className="check-field"><input type="checkbox" checked={hasDefault} onChange={event => setHasDefault(event.target.checked)} />Use a default for new records</label></>}
         {hasDefault && <FieldInput field={{ ...target, name: 'Default value', required: false }} value={defaultValue}

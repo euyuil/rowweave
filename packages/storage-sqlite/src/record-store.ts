@@ -25,6 +25,7 @@ import { compileFormulas } from '../../core/src/formulas.js';
 import { ConnectedCalculations, type ChangedRecords } from './connected-calculations.js';
 import { relativeDateRanges } from './relative-date-ranges.js';
 import { AutomaticNumbers } from './automatic-numbers.js';
+import { RecordTimes } from './record-times.js';
 import { isReadOnlyField } from '../../contracts/src/index.js';
 
 export interface SeedOptions {
@@ -61,6 +62,7 @@ export class SqliteRecordStore implements RecordStore {
   private readonly lookups: Lookups;
   private readonly history: RecordHistory;
   private readonly automaticNumbers: AutomaticNumbers;
+  private readonly recordTimes: RecordTimes;
 
   constructor(path: string, seed: SeedOptions | null = null, private readonly clock: () => Date = () => new Date()) {
     if (seed && (!Number.isSafeInteger(seed.rows) || seed.rows < 1 || seed.rows > 100_000 ||
@@ -76,6 +78,7 @@ export class SqliteRecordStore implements RecordStore {
       const fresh = migrate(this.db);
       this.automaticNumbers = new AutomaticNumbers(this.db);
       this.history = new RecordHistory(this.db);
+      this.recordTimes = new RecordTimes(this.db);
       if (fresh && seed) this.seed(seed);
     } catch (error) {
       this.db.close();
@@ -206,6 +209,7 @@ export class SqliteRecordStore implements RecordStore {
     }
     this.insertFields(table);
     for (const id of this.automaticNumbers.addFields(table, before)) versioned.add(id);
+    for (const id of this.recordTimes.addFields(table, before)) versioned.add(id);
     if (JSON.stringify(before.fields.filter(field => field.type === 'formula')) !== JSON.stringify(table.fields.filter(field => field.type === 'formula'))) {
       for (const id of this.recalculate(table, calculate)) versioned.add(id);
     }
@@ -452,9 +456,11 @@ export class SqliteRecordStore implements RecordStore {
 
   private finishRecordWrites(seeds: ChangedRecords): Set<string> {
     const versioned = new Set([...seeds.values()].flatMap(ids => [...ids]));
+    const edited = new Set<string>();
+    for (const [id, records] of seeds) for (const recordId of this.recordTimes.editRelated(this.getTable(id), records)) edited.add(recordId);
     const result = new ConnectedCalculations(this.db).run(seeds, versioned, this.lookups, id => this.getTable(id));
     this.relations.bumpRevisions([...seeds.keys(), ...result.tables]);
-    return result.changed;
+    return new Set([...edited, ...result.changed]);
   }
 
   getRecord(id: string, recordId: string): RowRecord {
@@ -486,6 +492,7 @@ export class SqliteRecordStore implements RecordStore {
           if (apply) {
             const id = randomUUID();
             this.automaticNumbers.assign(table.fields, values);
+            this.recordTimes.create(table, id, 1, values);
             const result = calculate(values);
             insert.run(id, table.id, position++, JSON.stringify(result.values), JSON.stringify(result.formulaErrors ?? {}));
             created.push(id);
@@ -563,6 +570,7 @@ export class SqliteRecordStore implements RecordStore {
     const insert = this.db.prepare('INSERT INTO records (id, table_id, position, version, values_json, formula_errors_json) VALUES (?, ?, ?, ?, ?, ?)');
     const records = input.map(({ id, version, values }) => {
       this.automaticNumbers.assign(table.fields, values);
+      this.recordTimes.create(table, id, version, values);
       const result = calculate(values);
       insert.run(id, table.id, position++, version, JSON.stringify(result.values), JSON.stringify(result.formulaErrors ?? {}));
       return { id, version, ...result };
@@ -663,8 +671,10 @@ export class SqliteRecordStore implements RecordStore {
         const before = this.history.beforeValues(change.id, fields.get(table.id)!.map(field => field.id));
         const values = restoredBatchValues(table, before, existing?.values);
         this.automaticNumbers.assign(table.fields, values);
-        const calculated = calculations.get(table.id)!({ ...existing?.values, ...values }, existing?.formulaErrors);
         const version = (existing?.version ?? change.beforeVersion!) + 1;
+        if (existing) this.recordTimes.edit(table.fields, values);
+        else this.recordTimes.create(table, change.recordId, version, values);
+        const calculated = calculations.get(table.id)!({ ...existing?.values, ...values }, existing?.formulaErrors);
         if (existing) update.run(version, JSON.stringify(calculated.values), JSON.stringify(calculated.formulaErrors ?? {}), change.recordId);
         else {
           const position = positions.get(table.id) ?? (this.db.prepare('SELECT COALESCE(MAX(position), -1) AS last FROM records WHERE table_id = ?').get(table.id)!['last'] as number) + 1;
@@ -702,7 +712,9 @@ export class SqliteRecordStore implements RecordStore {
         throw new ServiceError('VERSION_CONFLICT', `Record ${update.id} changed. Reload before saving again.`, 409);
       }
       const record = this.decode(stored);
-      const result = calculate({ ...record.values, ...update.values }, record.formulaErrors);
+      const values = { ...record.values, ...update.values };
+      this.recordTimes.edit(table.fields, values);
+      const result = calculate(values, record.formulaErrors);
       record.values = result.values;
       if (result.formulaErrors) record.formulaErrors = result.formulaErrors;
       else delete record.formulaErrors;

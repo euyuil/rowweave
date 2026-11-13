@@ -7,7 +7,7 @@ export interface SelectOption {
   color?: string;
 }
 
-export type FieldType = 'text' | 'multiline' | 'url' | 'number' | 'autoNumber' | 'checkbox' | 'date' | 'datetime' | 'singleSelect' | 'multiSelect' | 'relation' | 'lookup' | 'formula';
+export type FieldType = 'text' | 'multiline' | 'url' | 'number' | 'autoNumber' | 'createdTime' | 'updatedTime' | 'checkbox' | 'date' | 'datetime' | 'singleSelect' | 'multiSelect' | 'relation' | 'lookup' | 'formula';
 
 export interface Field {
   id: string;
@@ -145,13 +145,14 @@ export interface RecordBatchUndoResult { batchId: string; undoneBatchId: string 
 
 export function valueField(field: Field): Field {
   if (field.type === 'autoNumber') return { ...field, type: 'number' };
+  if (field.type === 'createdTime' || field.type === 'updatedTime') return { ...field, type: 'datetime' };
   if (isLookupSummary(field)) return field.lookup!.operation === 'count' ? { id: field.id, name: field.name, type: 'number' }
     : { ...valueField(field.lookupResult!), id: field.id, name: field.name, required: false };
   return field.type === 'formula' ? { ...field, type: field.formula!.resultType } : field;
 }
 
 export function isReadOnlyField(field: Pick<Field, 'type'>): boolean {
-  return field.type === 'lookup' || field.type === 'formula' || field.type === 'autoNumber';
+  return field.type === 'lookup' || field.type === 'formula' || field.type === 'autoNumber' || field.type === 'createdTime' || field.type === 'updatedTime';
 }
 
 export function isLookupSummary(field: Field): boolean {

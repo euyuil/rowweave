@@ -4,7 +4,7 @@ import { ServiceError } from './errors.js';
 import { schemaName, schemaObject } from './schema-validation.js';
 import { validateValue } from './field-values.js';
 
-const fieldTypes: FieldType[] = ['text', 'multiline', 'url', 'number', 'autoNumber', 'checkbox', 'date', 'datetime', 'singleSelect', 'multiSelect', 'relation', 'lookup', 'formula'];
+const fieldTypes: FieldType[] = ['text', 'multiline', 'url', 'number', 'autoNumber', 'createdTime', 'updatedTime', 'checkbox', 'date', 'datetime', 'singleSelect', 'multiSelect', 'relation', 'lookup', 'formula'];
 
 export function parseField(input: Record<string, unknown>, previous?: Field): Field {
   const config = { ...previous, ...input };
@@ -21,8 +21,8 @@ export function parseField(input: Record<string, unknown>, previous?: Field): Fi
     if (typeof config['required'] !== 'boolean') throw new ServiceError('INVALID_SCHEMA', 'required must be a boolean.');
     field.required = config['required'];
   }
-  if (field.type === 'autoNumber' && (field.required || (config['defaultValue'] !== undefined && config['defaultValue'] !== null))) {
-    throw new ServiceError('INVALID_SCHEMA', 'Automatic numbers are assigned by the service and cannot require a value or set a default.');
+  if (['autoNumber', 'createdTime', 'updatedTime'].includes(field.type) && (field.required || (config['defaultValue'] !== undefined && config['defaultValue'] !== null))) {
+    throw new ServiceError('INVALID_SCHEMA', 'Automatic fields are assigned by the service and cannot require a value or set a default.');
   }
   if (field.type === 'singleSelect' || field.type === 'multiSelect') {
     const options = config['options'];

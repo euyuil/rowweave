@@ -5,8 +5,8 @@ import { syncQueryIndexes } from './query-indexes.js';
 
 export function migrate(db: DatabaseSync): boolean {
   const version = db.prepare('PRAGMA user_version').get()!['user_version'] as number;
-  if (version === 21) return false;
-  if (version < 0 || version > 21) throw new Error(`Unsupported database version: ${version}.`);
+  if (version === 22) return false;
+  if (version < 0 || version > 22) throw new Error(`Unsupported database version: ${version}.`);
   db.exec('BEGIN IMMEDIATE');
   try {
     if (version < 2) {
@@ -107,7 +107,8 @@ export function migrate(db: DatabaseSync): boolean {
     if (version < 21) db.exec(`CREATE TABLE field_sequences (
       field_id TEXT PRIMARY KEY REFERENCES fields(id) ON DELETE CASCADE, last_value INTEGER NOT NULL
     );`);
-    db.exec('PRAGMA user_version = 21; COMMIT;');
+    // Automatic timestamp fields use existing JSON values and durable history.
+    db.exec('PRAGMA user_version = 22; COMMIT;');
     return version === 0;
   } catch (error) {
     db.exec('ROLLBACK');

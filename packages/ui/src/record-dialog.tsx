@@ -19,7 +19,7 @@ export function RecordDialog({ action, table, api, setDirty, onClose, onSaved }:
 }) {
   const original = action.records[0];
   const [initialValues] = useState<Record<string, FormValue>>(() => Object.fromEntries(table.fields.map(field =>
-    [field.id, toFormValue(field, field.type === 'autoNumber' && action.kind === 'duplicate' ? null : original ? original.values[field.id]
+    [field.id, toFormValue(field, ['autoNumber', 'createdTime', 'updatedTime'].includes(field.type) && action.kind === 'duplicate' ? null : original ? original.values[field.id]
       : action.initialValues && Object.hasOwn(action.initialValues, field.id) ? action.initialValues[field.id] : field.defaultValue)])));
   const [values, setValues] = useState(initialValues);
   const [confirmClose, setConfirmClose] = useState(false);
