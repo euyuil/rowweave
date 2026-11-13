@@ -25,3 +25,27 @@ After:  180.1023, 181.8375, 165.3831, 169.7252, 173.0099, 178.8119, 178.9382, 17
 ```
 
 Regression tests verify unequal group sizes with null values, empty results, pages beyond the final group, overflow, stable select identities, linked summaries, HTTP/SDK behavior and one predicate evaluation per input record. This closes the measured grouped-summary bottleneck only. Linked-summary filter/sort performance and the other workflow acceptance items remain open.
+
+## Linked-summary queries
+
+Record queries now reuse each referenced scalar linked summary for filtering, sorting and counting within one SQLite read snapshot. The materialized input is restricted to the requested table and record IDs; when filtering does not need computed values, that filter also runs before projection. The requested page and complete count share the matching set. Queries without scalar linked-summary references keep the original indexed path. Returned records still hydrate current relation labels, values and errors through the shared service.
+
+The follow-up used clean source `0b82eb506375d055f891b11073dad5ea1d5c65c2` on 2026-11-13, with the same machine, OS and runtime versions listed above. Strict type checking, production build and all 188 locally selected Node tests passed. Added cases count actual linked-expression evaluations, verify multiple computed sort/filter fields, empty and past-end pages, narrow stored-field filters and explicit record IDs. Existing index, relative-date, aggregate error, revision, HTTP and SDK cases also pass. No renderer or native-input claim is made.
+
+Reproduce with `npm run build`, then `node scripts/benchmark-linked.mjs`. The isolated dataset contains 10,000 source records, 1,000 target records and 100,000 links. The filter matches 4,800 source records; sorting returns 100. After two warm-ups, every one of 20 page samples verifies the complete matching count, record order and linked values against independently calculated fixture expectations, outside the timed interval. Summary samples and the read after a target change are also checked. Dataset creation took 13.4 s, outside timed reads.
+
+| Workload | Before | After |
+| --- | ---: | ---: |
+| Linked-summary filter/sort, p95 of 20 | 732.4 ms | 347.4 ms |
+| Linked-summary filter/sort, observed range | 669.8–735.3 ms | 312.2–357.9 ms |
+| Full-table linked sum, maximum of 5 | 292.9 ms | 291.2 ms |
+| Query after a target update, one sample | 725.5 ms | 336.3 ms |
+
+Raw reports remain in `.artifacts/linked-performance-v5Usxx/results.json` and `.artifacts/linked-performance-yl8xmC/results.json`. The filter/sort samples below retain observation order, rounded to 0.0001 ms:
+
+```text
+Before: 700.9880, 696.0123, 681.3910, 669.8228, 685.8450, 705.1210, 694.8221, 696.2628, 732.4061, 700.4516, 675.9685, 684.9694, 735.2576, 704.6088, 730.5089, 700.9167, 727.3294, 717.6279, 673.7082, 717.6071
+After:  316.8034, 344.8682, 339.9002, 329.7556, 340.1529, 326.1827, 333.6898, 333.7707, 334.1166, 326.2971, 322.5522, 335.5433, 328.0400, 357.8884, 337.0912, 338.9804, 347.3883, 324.0630, 312.2066, 325.1380
+```
+
+Both specified query workloads now measure below the 500 ms p95 criterion. This does not close the remaining functional inventory or establish UI input/scrolling performance; those remain explicit acceptance items.
