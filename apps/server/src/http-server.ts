@@ -70,6 +70,10 @@ export async function startServer({ service, token, calculations: suppliedCalcul
       throw new ServiceError('UNAUTHORIZED', 'A valid access token is required.', 401);
     }
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+    if (url.pathname === '/workspace/state' && request.method === 'POST') {
+      send(response, 200, service.workspaceState(await readJson(request)));
+      return;
+    }
     if (url.pathname === '/calculations/refresh' && request.method === 'POST') {
       await readJson(request);
       send(response, 200, await calculations.refresh());

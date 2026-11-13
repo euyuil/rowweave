@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { dirname, join } from 'node:path';
-import { fixture } from './helpers.js';
+import { fixture, removeWorkspaceState } from './helpers.js';
 import { RecordService } from '../../core/src/record-service.js';
 import { SqliteRecordStore } from '../src/record-store.js';
 import { backupWorkspace, restoreWorkspace } from '../src/backup.js';
@@ -219,7 +219,7 @@ test('connected calculations survive backup restoration and older workspace migr
   const schema = original.getTable(table.id);
   previous.close();
   const db = new DatabaseSync(old.path);
-  db.exec('DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; PRAGMA user_version = 12;');
+  removeWorkspaceState(db); db.exec('DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; PRAGMA user_version = 12;');
   db.close();
   const migrated = new RecordService(old.open());
   assert.deepEqual(migrated.getTable(table.id), schema);

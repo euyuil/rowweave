@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { randomBytes } from 'node:crypto';
-import { fixture } from './helpers.js';
+import { fixture, removeWorkspaceState } from './helpers.js';
 import { RecordService } from '../../core/src/record-service.js';
 import { startServer } from '../../../apps/server/src/http-server.js';
 import { createWorkspaceClient } from '../../client/src/http-client.js';
@@ -140,7 +140,7 @@ test('version-ten migration preserves stored formulas, existing lookups and view
   const tables = service.listTables(), views = service.listViews(source.id);
   store.close();
   const db = new DatabaseSync(data.path);
-  db.exec('DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; PRAGMA user_version = 10');
+  removeWorkspaceState(db); db.exec('DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; PRAGMA user_version = 10');
   db.close();
   const reopened = new RecordService(data.open());
   assert.deepEqual(reopened.listTables(), tables);

@@ -43,6 +43,7 @@ Tools have discoverable strict JSON schemas. Read descriptions and use stable ID
 
 | Tools | Arguments |
 | --- | --- |
+| `workspace_state` | `{ tableId?, viewId? }`; read-only bounded [change state](workspace-state.md) |
 | `calculations_refresh`, `calculations_status` | `{}`; refresh joins an active calculation, status is read-only |
 | `attachments_upload` | `{ tableId, input: { filename, mediaType, data: base64 } }` |
 | `attachments_list` | `{ tableId, query: { before?, limit? } }` |

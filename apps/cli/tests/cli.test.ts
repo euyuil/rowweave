@@ -216,3 +216,17 @@ test('the packed CLI installs offline and its command runs outside the repositor
   assert.deepEqual(JSON.parse(result.stdout), []);
   assert.equal(result.stderr, '');
 });
+
+test('CLI reads workspace and selected view state without loading or mutating records', async t => {
+  const { service, json, execute } = await setup(t);
+  const before = service.workspaceState({});
+  assert.deepEqual(await json(['workspace', 'state']), before);
+  const table = service.createTable({ name: 'CLI state' }), view = service.listViews(table.id)[0]!;
+  const request = { tableId: table.id, viewId: view.id };
+  assert.deepEqual(await json(['workspace', 'state'], request), service.workspaceState(request));
+  service.updateView(table.id, view.id, { expectedVersion: view.version, name: 'New view name' });
+  assert.deepEqual(await json(['workspace', 'state'], request), service.workspaceState(request));
+  const invalid = await execute(['workspace', 'state', '--input', '-'], JSON.stringify({ viewId: view.id }));
+  assert.notEqual(invalid.code, 0); assert.match(invalid.stderr, /tableId/);
+  assert.equal(service.getTable(table.id).total, 0);
+});

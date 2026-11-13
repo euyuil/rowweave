@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { fixture } from './helpers.js';
+import { fixture, removeWorkspaceState } from './helpers.js';
 import { RecordService } from '../../core/src/record-service.js';
 import { SqliteRecordStore } from '../src/record-store.js';
 import { backupWorkspace, restoreWorkspace } from '../src/backup.js';
@@ -101,7 +101,7 @@ test('format 23 uploaded files remain attachable after migration and field delet
   const data = fixture(t, null), store = data.open(), service = new RecordService(store);
   let table = service.createTable({ name: 'Existing uploads' });
   const file = service.uploadAttachment(table.id, { filename: 'existing.txt', mediaType: 'text/plain', data: 'aGk=' }); store.close();
-  const db = new DatabaseSync(data.path); db.exec('ALTER TABLE attachments DROP COLUMN retained; PRAGMA user_version = 23;'); db.close();
+  const db = new DatabaseSync(data.path); removeWorkspaceState(db); db.exec('ALTER TABLE attachments DROP COLUMN retained; PRAGMA user_version = 23;'); db.close();
   const reopened = new RecordService(data.open());
   assert.deepEqual(reopened.getAttachment(table.id, file.id), file);
   table = reopened.createField(table.id, { expectedVersion: table.version, name: 'Files', type: 'attachment', required: true });

@@ -431,7 +431,9 @@ test('MCP discovers all operations and runs versioned schema, records, views and
   const { service, environment } = await setup(t);
   const { client, call, json, used, stderr } = await connect(t, environment);
   const tools = (await client.listTools()).tools;
-  assert.equal(tools.length, 41);
+  assert.equal(tools.length, 42);
+  assert.equal(tools.find(tool => tool.name === 'workspace_state')!.annotations!.readOnlyHint, true);
+  assert.deepEqual(await json('workspace_state'), service.workspaceState({}));
   assert.equal(tools.find(tool => tool.name === 'formulas_preview')!.annotations!.readOnlyHint, true);
   assert.ok(tools.every(tool => tool.inputSchema.type === 'object' && tool.inputSchema.additionalProperties === false));
   assert.equal(tools.find(tool => tool.name === 'records_query')!.annotations!.readOnlyHint, true);
@@ -446,6 +448,9 @@ test('MCP discovers all operations and runs versioned schema, records, views and
   assert.equal((await json<CalculationStatus>('calculations_status')).running, false);
   assert.equal(tools.find(tool => tool.name === 'calculations_status')!.annotations!.readOnlyHint, true);
   let table = await json<Table>('tables_create', { name: 'MCP projects' });
+  const stateRequest = { tableId: table.id, viewId: service.listViews(table.id)[0]!.id };
+  assert.deepEqual(await json('workspace_state', stateRequest), service.workspaceState(stateRequest));
+  assert.equal(JSON.parse(text(await call('workspace_state', { viewId: stateRequest.viewId }))).error.code, 'INVALID_QUERY');
   assert.equal((await json<FormulaPreview>('formulas_preview', { tableId: table.id, input: { expectedVersion: table.version,
     formula: { expression: '1', resultType: 'number' } } })).sample, null);
   const fileData = Buffer.from([0, 255, 13, 10, 128]).toString('base64');

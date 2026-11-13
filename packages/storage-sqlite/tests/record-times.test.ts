@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { dirname, join } from 'node:path';
-import { fixture } from './helpers.js';
+import { fixture, removeWorkspaceState } from './helpers.js';
 import { RecordService } from '../../core/src/record-service.js';
 import { SqliteRecordStore } from '../src/record-store.js';
 import { backupWorkspace, restoreWorkspace } from '../src/backup.js';
@@ -103,7 +103,7 @@ test('CSV assigns service times and legacy records without durable history retai
   const row = service.createRecords(table.id, [{ values: { [table.primaryFieldId]: 'Old' } }]).records[0]!;
   store.close();
   const db = new DatabaseSync(data.path);
-  db.exec('DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; PRAGMA user_version = 15;'); db.close();
+  removeWorkspaceState(db); db.exec('DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; PRAGMA user_version = 15;'); db.close();
   const upgraded = new RecordService(data.open());
   table = upgraded.createField(table.id, { expectedVersion: table.version, name: 'Created', type: 'createdTime' });
   table = upgraded.createField(table.id, { expectedVersion: table.version, name: 'Edited', type: 'updatedTime' });

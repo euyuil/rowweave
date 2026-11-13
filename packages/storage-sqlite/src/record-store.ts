@@ -25,7 +25,8 @@ import { compileFormula, compileFormulas } from '../../core/src/formulas.js';
 import { fieldText } from '../../core/src/field-display.js';
 import type { FormulaPreview } from '../../contracts/src/index.js';
 import { ConnectedCalculations, type ChangedRecords } from './connected-calculations.js';
-import { relativeDateRanges } from './relative-date-ranges.js';
+import { hasRelativeDateFilter, relativeDateRanges } from './relative-date-ranges.js';
+import type { WorkspaceState, WorkspaceStateRequest } from '../../contracts/src/index.js';
 import { AutomaticNumbers } from './automatic-numbers.js';
 import { RecordTimes } from './record-times.js';
 import { isReadOnlyField } from '../../contracts/src/index.js';
@@ -116,6 +117,28 @@ export class SqliteRecordStore implements RecordStore {
       return { evaluatedAt: new Date(Math.floor(this.transactionTime!.getTime() / 60_000) * 60_000).toISOString(),
         changedRecords: result.changedRecords, changedTableIds: [...result.tables] };
     }, 'IMMEDIATE', null);
+  }
+
+  workspaceState(input: WorkspaceStateRequest): WorkspaceState {
+    return this.transaction(() => {
+      const state: WorkspaceState = { catalogRevision: this.db.prepare('SELECT catalog_revision FROM workspace_state WHERE id = 1').get()!['catalog_revision'] as number };
+      if (input.tableId === undefined) return state;
+      const table = this.db.prepare(`SELECT id, version AS schemaVersion, revision AS dataRevision, views_revision AS viewsRevision
+        FROM tables WHERE id = ?`).get(input.tableId) as NonNullable<WorkspaceState['table']> | undefined;
+      state.table = table ? { ...table } : null;
+      if (!state.table || input.viewId === undefined) return state;
+      const stored = this.db.prepare('SELECT * FROM views WHERE table_id = ? AND id = ?').get(input.tableId, input.viewId) as unknown as StoredView | undefined;
+      if (!stored) { state.table.view = null; return state; }
+      const view = this.decodeView(stored);
+      state.table.view = { id: view.id, version: view.version };
+      if (hasRelativeDateFilter(view.query.filter)) {
+        const fields = this.db.prepare('SELECT definition_json FROM fields WHERE table_id = ? ORDER BY position').all(input.tableId)
+          .map(row => JSON.parse(row['definition_json'] as string) as Field);
+        const dates = relativeDateRanges(this.lookups.resolve({ fields }), view.query.filter, this.transactionTime!);
+        if (dates.dateContext) state.table.view.dateContext = dates.dateContext;
+      }
+      return state;
+    }, 'DEFERRED');
   }
 
   uploadAttachment(tableId: string, input: CheckedAttachmentUpload) {

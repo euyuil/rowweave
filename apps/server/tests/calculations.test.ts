@@ -132,6 +132,8 @@ test('HTTP reads a committed WAL snapshot while a calculation owns the writer an
   try {
     const refresh = api.refreshCalculations(); await held;
     assert.equal((await api.calculationStatus()).running, true);
+    assert.deepEqual(await api.workspaceState({ tableId: table.id }), service.workspaceState({ tableId: table.id }));
+    assert.equal(writes.mock.callCount(), 0, 'Reading workspace state must not queue behind the calculation writer.');
     assert.deepEqual(await api.getRecord(table.id, record.id), record);
     assert.equal((await api.queryRecords(table.id, {})).records[0]!.version, record.version);
     const write = assert.rejects(api.updateRecords(table.id, [{ id: record.id, expectedVersion: record.version, values: { [table.primaryFieldId]: 'Stale edit' } }]), { status: 409 });
@@ -150,6 +152,7 @@ test('workspace startup automatically refreshes stale clock values and closes it
   let table = service.createTable({ name: 'Startup refresh' });
   table = service.createField(table.id, { expectedVersion: table.version, name: 'Now', type: 'formula', formula: { expression: 'NOW()', resultType: 'datetime' } });
   const record = service.createRecords(table.id, [{ values: {} }]).records[0]!, field = table.fields[1]!.id;
+  const before = service.workspaceState({ tableId: table.id });
   const token = randomBytes(32).toString('hex'), server = await startWorkspaceServer(data.path, { token });
   const api = createWorkspaceClient({ url: server.url, token });
   try {
@@ -158,6 +161,10 @@ test('workspace startup automatically refreshes stale clock values and closes it
     assert.equal(status.automatic, true); assert.equal(status.running, false); assert.equal(status.lastError, undefined);
     assert.equal(status.lastResult!.changedRecords, 1);
     assert.equal((await api.getRecord(table.id, record.id)).values[field], status.lastResult!.evaluatedAt);
+    const after = await api.workspaceState({ tableId: table.id });
+    assert.ok(after.table!.dataRevision > before.table!.dataRevision);
+    assert.equal(after.table!.schemaVersion, before.table!.schemaVersion);
+    assert.equal(after.catalogRevision, before.catalogRevision);
   } finally { await server.close(); }
   assert.equal(service.getRecord(table.id, record.id).version, 2);
   service.createRecords(table.id, [{ values: {} }]);

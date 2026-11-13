@@ -56,6 +56,18 @@ export interface TableCreate {
   name: string;
 }
 
+export interface WorkspaceStateRequest { tableId?: string; viewId?: string }
+export interface WorkspaceState {
+  catalogRevision: number;
+  table?: null | {
+    id: string;
+    schemaVersion: number;
+    dataRevision: number;
+    viewsRevision: number;
+    view?: null | { id: string; version: number; dateContext?: string };
+  };
+}
+
 export interface SchemaWrite {
   expectedVersion: number;
 }

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { randomBytes } from 'node:crypto';
 import { dirname, join } from 'node:path';
-import { fixture } from './helpers.js';
+import { fixture, removeWorkspaceState } from './helpers.js';
 import { RecordService } from '../../core/src/record-service.js';
 import { SqliteRecordStore } from '../src/record-store.js';
 import { backupWorkspace, restoreWorkspace } from '../src/backup.js';
@@ -150,12 +150,12 @@ test('trash survives restart, workspace backup and migration from format 16', as
   const expected = service.recordTrash(table.id, {});
   store.close();
   const db = new DatabaseSync(data.path);
-  db.exec('DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP INDEX changes_deleted; PRAGMA user_version = 16;'); db.close();
+  removeWorkspaceState(db); db.exec('DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP INDEX changes_deleted; PRAGMA user_version = 16;'); db.close();
   const migrated = new RecordService(data.open());
   assert.deepEqual(migrated.recordTrash(table.id, {}), expected);
   const backup = join(dirname(data.path), 'backup.sqlite'), restoredPath = join(dirname(data.path), 'restored.sqlite');
   await backupWorkspace(data.path, backup);
-  assert.equal((await restoreWorkspace(backup, restoredPath)).version, 27);
+  assert.equal((await restoreWorkspace(backup, restoredPath)).version, 28);
   const restoredStore = new SqliteRecordStore(restoredPath);
   try {
     const restored = new RecordService(restoredStore);

@@ -17,9 +17,11 @@ import type { RecordSummary, RecordHistoryQuery, RecordHistoryPage, RecordChange
 import { historyId, parseHistoryQuery, parseRecordRestore } from './record-history.js';
 import type { RecordBatchPage, RecordBatchChanges, RecordBatchUndoResult } from '../../contracts/src/index.js';
 import type { CsvImportResult, CsvPreview } from '../../contracts/src/index.js';
+import type { WorkspaceState, WorkspaceStateRequest } from '../../contracts/src/index.js';
 export { ServiceError } from './errors.js';
 
 export interface RecordStore {
+  workspaceState(input: WorkspaceStateRequest): WorkspaceState;
   refreshCalculations(): CalculationRefresh;
   previewFormula(table: Table, expectedVersion: number, field: Field, recordId?: string): FormulaPreview;
   uploadAttachment(tableId: string, input: CheckedAttachmentUpload): Attachment;
@@ -62,6 +64,23 @@ export class RecordService {
   constructor(private readonly store: RecordStore) {}
 
   refreshCalculations(): CalculationRefresh { return this.store.refreshCalculations(); }
+
+  workspaceState(input: unknown): WorkspaceState {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+      throw new ServiceError('INVALID_QUERY', 'Expected a workspace state query object.');
+    }
+    const item = input as Record<string, unknown>;
+    for (const key of ['tableId', 'viewId']) {
+      const value = item[key];
+      if (value !== undefined && (typeof value !== 'string' || !value || value.length > 200)) {
+        throw new ServiceError('INVALID_QUERY', key + ' must be a non-empty ID of up to 200 characters.');
+      }
+    }
+    if (item['viewId'] !== undefined && item['tableId'] === undefined) {
+      throw new ServiceError('INVALID_QUERY', 'Provide tableId when requesting view state.');
+    }
+    return this.store.workspaceState(item as WorkspaceStateRequest);
+  }
 
   uploadAttachment(tableId: string, input: unknown): Attachment { return this.store.uploadAttachment(tableId, parseAttachmentUpload(input)); }
   listAttachments(tableId: string, input: unknown): AttachmentPage { return this.store.listAttachments(tableId, parseAttachmentQuery(input)); }

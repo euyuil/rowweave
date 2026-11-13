@@ -73,6 +73,8 @@ Use `api.previewFormula(tableId, { expectedVersion, formula: { expression, resul
 
 ## Query and exchange data
 
+Use `api.workspaceState({ tableId, viewId }, signal)` to detect catalog, schema, data and saved-view changes without downloading records. Omit the request for catalog-only state. Relative filters include their date context. See [workspace change state](../../docs/workspace-state.md) for missing-object semantics, snapshot guarantees and draft-safe polling.
+
 ```ts
 const page = await api.queryRecords(table.id, {
   limit: 100,

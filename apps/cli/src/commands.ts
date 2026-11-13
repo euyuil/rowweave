@@ -1,6 +1,6 @@
 import type { WorkspaceApi, TableCreate, TableUpdate, FieldCreate, FieldUpdate, FieldConversion, RecordCreate,
   RecordUpdate, RecordDelete, RecordQuery, ViewCreate, ViewUpdate, ViewPageRequest, SummaryRequest,
-  RecordHistoryQuery, RecordRestore, DeletedRecordRestore, AttachmentQuery, FormulaPreviewRequest } from '../../../packages/client/src/index.js';
+  RecordHistoryQuery, RecordRestore, DeletedRecordRestore, AttachmentQuery, FormulaPreviewRequest, WorkspaceStateRequest } from '../../../packages/client/src/index.js';
 
 export class UsageError extends Error {}
 
@@ -16,6 +16,7 @@ interface Command {
 }
 
 export const commands: Record<string, Command> = {
+  'workspace state': { ids: 0, input: 'optional', run: (api, _ids, input) => api.workspaceState(input as WorkspaceStateRequest) },
   'calculations refresh': { ids: 0, input: 'none', run: api => api.refreshCalculations() },
   'calculations status': { ids: 0, input: 'none', run: api => api.calculationStatus() },
   'formulas preview': { ids: 1, input: 'required', run: (api, [id], input) => api.previewFormula(id!, input as FormulaPreviewRequest) },
@@ -59,6 +60,7 @@ export const help = `RowWeave CLI
 Usage: rowweave <resource> <action> [table-id] [field/record/view-id] [options]
 
   tables   list | get | create | update | delete
+  workspace state
   fields   create | update | delete | preview-conversion | apply-conversion
   formulas preview
   calculations refresh

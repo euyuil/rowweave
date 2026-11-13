@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { randomBytes } from 'node:crypto';
-import { fixture } from './helpers.js';
+import { fixture, removeWorkspaceState } from './helpers.js';
 import { RecordService, ServiceError } from '../../core/src/record-service.js';
 import { parseCsv } from '../../core/src/csv.js';
 import { querySql } from '../src/query-sql.js';
@@ -100,7 +100,7 @@ test('format thirteen migration retains existing view, schema and record version
   const schema = service.getTable(table.id);
   store.close();
   const db = new DatabaseSync(data.path);
-  db.exec('DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; PRAGMA user_version = 13;');
+  removeWorkspaceState(db); db.exec('DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; PRAGMA user_version = 13;');
   db.close();
   const reopened = new RecordService(data.open());
   assert.deepEqual(reopened.getRecord(table.id, row.id), row);

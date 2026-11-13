@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { randomBytes } from 'node:crypto';
-import { fixture } from './helpers.js';
+import { fixture, removeWorkspaceState } from './helpers.js';
 import { RecordService, ServiceError } from '../../core/src/record-service.js';
 import { startServer } from '../../../apps/server/src/http-server.js';
 import { createWorkspaceClient } from '../../client/src/http-client.js';
@@ -123,7 +123,7 @@ test('version-four migration preserves schemas, records and saved views', t => {
   const views = store.listViews(table.id);
   store.close();
   const db = new DatabaseSync(data.path);
-  db.exec('DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; DROP TABLE field_lookups; DROP TABLE relation_edges; DROP TABLE field_relations; ALTER TABLE records DROP COLUMN formula_errors_json; PRAGMA user_version = 4;');
+  removeWorkspaceState(db); db.exec('DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; DROP TABLE field_lookups; DROP TABLE relation_edges; DROP TABLE field_relations; ALTER TABLE records DROP COLUMN formula_errors_json; PRAGMA user_version = 4;');
   db.close();
   const migrated = data.open();
   assert.deepEqual(migrated.getTable(), table);
