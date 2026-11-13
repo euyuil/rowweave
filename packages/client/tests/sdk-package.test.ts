@@ -37,19 +37,21 @@ test('the packed SDK installs offline outside the repository, exposes usable typ
     exactOptionalPropertyTypes: true, types: [], lib: ['ES2023', 'DOM'],
   }, files: ['consumer.ts'] }));
   await writeFile(join(consumer, 'consumer.ts'), `
-import { createWorkspaceClient, ApiFailure, type RecordQuery, type CsvPreview, type Table } from '@rowweave/sdk';
+import { createWorkspaceClient, ApiFailure, type RecordQuery, type CsvPreview, type Table, type GroupLayout } from '@rowweave/sdk';
 const api = createWorkspaceClient({ url: 'http://127.0.0.1:4317', token: 'provided-at-runtime' });
 const query: RecordQuery = { filter: { conjunction: 'and', conditions: [{ fieldId: 'amount', operator: 'gte', value: 1 }] } };
 const tables: Promise<Table[]> = api.listTables();
 const preview: Promise<CsvPreview> = api.previewCsv('table', { expectedVersion: 1, hasHeader: true, csv: 'Name\\nA' });
 void api.queryRecords('table', query, new AbortController().signal);
+const groups: Promise<GroupLayout> = api.queryGroups('table', { groupBy: 'amount', limit: 20,
+  collapse: { defaultCollapsed: true, exceptions: [0, null] } }, new AbortController().signal);
 void api.exportCsv('table', { viewId: 'view', expectedViewVersion: 1 });
 // @ts-expect-error Record writes require numeric versions.
 void api.updateRecords('table', [{ id: 'record', expectedVersion: 'stale', values: {} }]);
 // @ts-expect-error Field types are a closed set.
 void api.createField('table', { expectedVersion: 1, name: 'Unknown', type: 'unsupported' });
 const code: string = new ApiFailure('VERSION_CONFLICT', 'Conflict', 409).code;
-void [tables, preview, code];
+void [tables, preview, groups, code];
 `);
   await run(process.execPath, [resolve('node_modules/typescript/bin/tsc'), '-p', join(consumer, 'tsconfig.json')]);
   const service = new RecordService(fixture(t, null).open());
@@ -76,6 +78,10 @@ assert.equal((await api.previewCsv(table.id, input)).invalid, 0);
 assert.equal((await api.importCsv(table.id, input)).imported, 1);
 const rows = (await api.queryRecords(table.id, {})).records;
 assert.equal(rows.length, 2);
+const groups = await api.queryGroups(table.id, { groupBy: cost, collapse: { defaultCollapsed: true, exceptions: [5] } });
+assert.deepEqual(groups.groups.map(group => [group.key, group.count, group.rowStart]), [[5, 2, 0], [null, 0, 3]]);
+assert.equal((await api.queryRecords(table.id, { groupBy: cost, offset: groups.groups[0].recordOffset,
+  expectedRevision: groups.revision })).total, 2);
 assert.equal((await api.getRecord(table.id, created.id)).version, changed.version);
 await api.deleteRecords(table.id, rows.map(row => ({ id: row.id, expectedVersion: row.version })));
 await api.deleteTable(table.id, table.version);

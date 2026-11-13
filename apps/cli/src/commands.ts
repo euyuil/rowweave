@@ -1,5 +1,5 @@
 import type { WorkspaceApi, TableCreate, TableUpdate, FieldCreate, FieldUpdate, FieldConversion, RecordCreate,
-  RecordUpdate, RecordDelete, RecordQuery, ViewCreate, ViewUpdate, ViewPageRequest, SummaryRequest,
+  RecordUpdate, RecordDelete, RecordQuery, ViewCreate, ViewUpdate, ViewPageRequest, SummaryRequest, GroupQuery,
   RecordHistoryQuery, RecordRestore, DeletedRecordRestore, AttachmentQuery, FormulaPreviewRequest, WorkspaceStateRequest } from '../../../packages/client/src/index.js';
 
 export class UsageError extends Error {}
@@ -44,6 +44,7 @@ export const commands: Record<string, Command> = {
   'records restore-deleted': { ids: 1, input: 'required', run: (api, [id], input) => api.restoreDeletedRecords(id!, input as DeletedRecordRestore[]) },
   'records query': { ids: 1, input: 'optional', run: (api, [id], input) => api.queryRecords(id!, input as RecordQuery) },
   'records summarize': { ids: 1, input: 'optional', run: (api, [id], input) => api.summarizeRecords(id!, input as SummaryRequest) },
+  'records groups': { ids: 1, input: 'required', run: (api, [id], input) => api.queryGroups(id!, input as GroupQuery) },
   'records create': { ids: 1, input: 'required', run: (api, [id], input) => api.createRecords(id!, input as RecordCreate[]) },
   'records update': { ids: 1, input: 'required', run: (api, [id], input) => api.updateRecords(id!, input as RecordUpdate[]) },
   'records delete': { ids: 1, input: 'required', run: (api, [id], input) => api.deleteRecords(id!, input as RecordDelete[]) },
@@ -65,7 +66,7 @@ Usage: rowweave <resource> <action> [table-id] [field/record/view-id] [options]
   formulas preview
   calculations refresh
   calculations status
-  records  get | query | summarize | create | update | delete | history | change | restore | trash | restore-deleted | batches | batch-changes | undo-batch
+  records  get | query | groups | summarize | create | update | delete | history | change | restore | trash | restore-deleted | batches | batch-changes | undo-batch
   views    list | get | create | update | delete | query
   csv      preview | import | export
   attachments upload | list | get | download | delete

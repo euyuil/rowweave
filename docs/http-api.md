@@ -98,6 +98,7 @@ Records have `{ id, version, values }`, with values keyed by field ID. Relation 
 | `DELETE /tables/:table/records` | `[{ id, expectedVersion }]` | `{ deleted: recordIds }` / `deleteRecords(id, inputs)` |
 | `POST /tables/:table/query` | RecordQuery below | QueryPage / `queryRecords(id, query, signal?)` |
 | `POST /tables/:table/summary` | SummaryRequest below | RecordSummary / `summarizeRecords(id, input, signal?)` |
+| `POST /tables/:table/groups/query` | GroupQuery below | GroupLayout / `queryGroups(id, input, signal?)` |
 
 Batch operations are atomic and require unique record IDs. Partial updates change only supplied fields. Creation omits computed lookup fields; explicitly supplying a lookup, including null, is rejected. Ordinary batches support up to 2,000 records and 20,000 changed/created cells. A conflict or invalid value on any record prevents every write in that batch.
 
@@ -132,6 +133,20 @@ The response contains `totals: { count, values }`, `groups: [{ key, label, count
 
 Pass `filter`/`search` to summarize a query, or `viewId` with `expectedViewVersion` to retain the saved view's filter. An explicit filter cannot accompany a saved view; `search` can override the saved search. Group pages use `offset` and `limit` (default 100, maximum 500); totals and `groupCount` cover all matching records on every page. Carry `revision` as `expectedRevision` for continuation; changed data rejects the page with `DATA_CHANGED`. A changed saved view returns `VIEW_CONFLICT`. All totals, counts and returned groups are read in one SQLite transaction.
 
+### Group layout windows
+
+`POST /tables/:table/groups/query` returns the groups intersecting a display-row window, including a group whose heading precedes the requested offset. Each heading occupies one display row; expanded records occupy one row each. `offset` defaults to zero and `limit` to 100 (maximum 500 display rows). This differs from summary pagination, which counts groups.
+
+Provide a scalar `groupBy` and optional `filter`/`search`, or a saved grouped-grid `viewId` with `expectedViewVersion`. A saved view uses its own grouping and filter; an explicit different group or filter is rejected. Temporary search may override the saved search. Boards retain their lane API.
+
+The result contains `groups: [{ key, label, count, recordOffset, rowStart, collapsed }]`, `totalRecords`, `totalGroups`, `totalRows`, `offset`, `revision`, `schemaVersion`, and optional `dateContext` and saved `viewId`/`viewVersion`. Counts cover the complete matching dataset. Only intersecting segments are returned, at most `limit`. Past-end windows return no segments but retain complete totals.
+
+Use a segment's `recordOffset` with a record query using the same `groupBy`, filter and search, or the same saved view. Carry `expectedRevision`, `expectedDateContext` and `expectedViewVersion` between these reads. Collapse changes display positions only. For a visible record row `r` inside an expanded segment, its record offset is `recordOffset + r - rowStart - 1`; headings never have record UUIDs.
+
+Optional `collapse: { defaultCollapsed: boolean, exceptions: ScalarValue[] }` flips the default for each exception key. Omission expands every group. Keys use the field's checked scalar type, are normalized like cell values, and must be unique after normalization; at most 100,000 keys are accepted within the ordinary request-body limit. All-collapsed windows need no list of all groups. These request settings do not persist.
+
+Text (including URLs), numbers, booleans, dates, timestamps, scalar formulas, automatic fields and numeric lookup summaries are supported. Arrays, raw links and attachments are not scalar grouping keys. Groups use raw ascending scalar order, with null last; text ordering is case-sensitive. Single-select groups use configured option order. Null always has a heading; checkbox values and configured options retain empty headings. Empty text and null are distinct. This read-only API adds no database format or saved-view field types. See [grouped records](grouped-records.md) for the current desktop scope.
+
 ### Record pages
 
 ```json
@@ -155,6 +170,8 @@ Pass `filter`/`search` to summarize a query, or `viewId` with `expectedViewVersi
 ```
 
 QueryPage is `{ offset, records, total, revision, schemaVersion }`. Offset defaults to 0, limit to 100; limits range from 1 to 500. Optional `recordIds` restricts the result to up to 2,000 unique IDs. `fields` projects returned values without changing which fields participate in search/filtering. Omitted fields returns all values; an empty field array returns identities/versions only.
+
+Optional scalar `groupBy` uses the same group order as layout windows, then applies the requested sorts within each group (excluding the grouping field), and finally insertion position. It returns real records only. This temporary query does not change a saved view.
 
 Filters combine `and`/`or` groups with at most 100 conditions and four nested levels below the root. An empty AND matches all records; an empty OR matches none. Predicates use:
 

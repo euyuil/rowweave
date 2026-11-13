@@ -2,6 +2,31 @@
 
 These measurements track the performance acceptance item in [gap-closure-plan.md](gap-closure-plan.md). They cover compiled service calls, not renderer latency or frame rate.
 
+## Bounded group layouts
+
+The 2026-11-14 local run used the grouped-layout working tree based on `dde1afe64e49a8ad91985016aa3db6666b4cef2f`, Node 24.22.1, SQLite 3.53.4, Windows 10.0.22631 x64, Intel Core i7-8700K at 3.70 GHz (12 logical processors), and 34,302,324,736 bytes RAM. Display settings do not apply. No local GUI or Node test suite ran concurrently with the measurements. These are production-compiled service calls, excluding HTTP and renderer work.
+
+Reproduce with `npm run build`, then `node scripts/benchmark-group-layout.mjs`. The script creates 100,000 records in reverse group-key order, with 100,000 distinct text groups and an additional empty null heading. Each read warms twice, then takes 20 samples; p95 uses nearest rank. It independently checks complete counts, record offsets, display positions, contiguous coverage and matching record order outside each timed interval. The response contains only groups intersecting 50 display rows, even when 50,000 typed keys invert the default collapse state. Seeding took 49.5 s, outside timed reads.
+
+| Workload | p95 | Observed range |
+| --- | ---: | ---: |
+| Expanded first window | 402.5 ms | 366.8–459.6 ms |
+| Expanded deep window | 374.4 ms | 365.4–375.8 ms |
+| All-collapsed deep window | 424.9 ms | 364.2–440.2 ms |
+| Deep window with 50,000 collapse exceptions | 462.4 ms | 420.9–472.2 ms |
+| Matching grouped record page, 50 records | 315.7 ms | 292.5–319.0 ms |
+
+The initial implementation materialized two unnecessary intermediate row sets and reached 524.6 ms p95 for the 50,000-exception case. Removing those intermediates retained all grouping semantics and reduced that case below the 500 ms service target. Both runs evaluated every input group inside SQLite; bounded responses do not imply constant-time database work.
+
+Raw reports are retained in `.artifacts/group-layout-performance-6E65zS/results.json` (initial) and `.artifacts/group-layout-performance-qZM2iU/results.json` (optimized). The optimized large-exception samples, in observation order and milliseconds, are:
+
+```text
+440.3352, 445.9701, 443.0129, 420.8670, 458.7978, 432.8246, 462.3575, 437.3202, 472.1961, 447.1628,
+447.7427, 428.3659, 450.6181, 443.1593, 455.6295, 424.9940, 441.2839, 449.2877, 447.1575, 426.2094
+```
+
+This verifies the read API's large-group boundary. Broader editable grouping, nested groups, persisted collapse and final renderer/native acceptance remain required.
+
 ## Grouped summaries
 
 Grouped summaries previously scanned and filtered records separately for totals, group counts and the requested group page. The query now materializes only the needed scalar values once, aggregates groups once, and reuses them for counts and bounded group pages. Overall averages still use all non-null record values; they are not averages of group averages. Ungrouped summaries retain their direct aggregate query.

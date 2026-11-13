@@ -78,6 +78,7 @@ History queries accept `{ limit?, before? }`; use returned `nextBefore` for cont
 | `records restore-deleted` | Table ID | Array of `{ id, deletionId, values? }`; latest deletion IDs required, optional writable values repair current-schema conflicts |
 | `records query` | Table ID | RecordQuery; defaults to `{}` |
 | `records summarize` | Table ID | SummaryRequest; defaults to `{}` for the whole-table count |
+| `records groups` | Table ID | GroupQuery; scalar `groupBy` or saved grouped-grid `viewId`, bounded display-row window and optional collapse settings |
 | `records create` | Table ID | `[{ values }]` |
 | `records update` | Table ID | `[{ id, expectedVersion, values }]` |
 | `records delete` | Table ID | `[{ id, expectedVersion }]` |

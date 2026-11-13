@@ -157,6 +157,11 @@ export async function startServer({ service, token, calculations: suppliedCalcul
       send(response, 200, service.summarizeRecords(summary[1]!, await readJson(request)));
       return;
     }
+    const groups = url.pathname.match(/^\/tables\/([^/]+)\/groups\/query$/);
+    if (groups && request.method === 'POST') {
+      send(response, 200, service.queryGroups(groups[1]!, await readJson(request)));
+      return;
+    }
     const csvImport = url.pathname.match(/^\/tables\/([^/]+)\/import(?:\/(preview))?$/);
     if (csvImport && request.method === 'POST') {
       const body = await readJson(request, 64 * 1024 * 1024);
