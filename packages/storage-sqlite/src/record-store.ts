@@ -11,6 +11,7 @@ import type { CheckedQuery } from '../../core/src/record-query.js';
 import { defaultView, groupedViewQuery, reconcileView } from '../../core/src/grid-views.js';
 import { migrate } from './migrations.js';
 import { querySql } from './query-sql.js';
+import { queryPage, type StoredRecord } from './query-page.js';
 import { syncQueryIndexes } from './query-indexes.js';
 import { Relations } from './relations.js';
 import { Lookups } from './lookups.js';
@@ -23,13 +24,6 @@ import { relativeDateRanges } from './relative-date-ranges.js';
 export interface SeedOptions {
   rows: number;
   columns: number;
-}
-
-interface StoredRecord {
-  id: string;
-  version: number;
-  values_json: string;
-  formula_errors_json: string;
 }
 
 interface StoredTable {
@@ -294,7 +288,7 @@ export class SqliteRecordStore implements RecordStore {
     }, 'DEFERRED');
   }
 
-  private prepareQuery(table: Table, query: CheckedQuery, view?: GridView) {
+  private prepareQuery(table: Table, query: CheckedQuery, view?: GridView, materializeLookups = false) {
     this.checkSchema(table.id, table.version);
     if (view && this.getView(table.id, view.id).version !== view.version) {
       throw new ServiceError('VIEW_CONFLICT', 'This view changed. Refresh before continuing.', 409);
@@ -312,17 +306,14 @@ export class SqliteRecordStore implements RecordStore {
       throw new ServiceError('DATA_CHANGED', 'The relative date range changed. Refresh to use the current calendar period; your drafts are retained.', 409);
     }
     return { current, ...(dates.dateContext ? { dateContext: dates.dateContext } : {}),
-      sql: querySql(current, { ...query, ...(view?.type === 'grid' && view.groupBy ? { groupBy: view.groupBy } : {}) }, targets, false, dates.ranges) };
+      sql: querySql(current, { ...query, ...(view?.type === 'grid' && view.groupBy ? { groupBy: view.groupBy } : {}) }, targets,
+        { dateRanges: dates.ranges, materializeLookups }) };
   }
 
   queryRecords(table: Table, query: CheckedQuery, view?: GridView): QueryPage {
     return this.transaction(() => {
-      const { current, sql, dateContext } = this.prepareQuery(table, query, view);
-      const total = this.db.prepare(`SELECT COUNT(*) AS total FROM records r WHERE ${sql.where}`)
-        .get(sql.countParameters)!['total'] as number;
-      const rows = this.db.prepare(`SELECT r.id, r.version, r.values_json, r.formula_errors_json FROM records r WHERE ${sql.where}
-        ORDER BY ${sql.order} LIMIT :limit OFFSET :offset`)
-        .all({ ...sql.parameters, ':limit': query.limit, ':offset': query.offset }) as unknown as StoredRecord[];
+      const { current, sql, dateContext } = this.prepareQuery(table, query, view, true);
+      const { total, rows } = queryPage(this.db, sql, query);
       const output = query.fields ? { ...current, fields: current.fields.filter(field => query.fields!.includes(field.id)) } : current;
       const hydrated = this.lookups.hydrate(current, this.relations.hydrate(output, rows.map(row => this.decode(row))), query.fields);
       const records = hydrated.map(record => {
