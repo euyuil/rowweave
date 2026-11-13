@@ -1,4 +1,5 @@
 import { isIP } from 'node:net';
+import { isHttpPort } from './http-listener.js';
 
 export interface NetworkOptions {
   host?: string;
@@ -10,6 +11,7 @@ export interface NetworkOptions {
 export function networkPolicy({ host = '127.0.0.1', port = 0, allowedHosts, allowedOrigins }: NetworkOptions) {
   if (!isIP(host)) throw new Error('ROWWEAVE_HOST must be an IPv4 or IPv6 bind address.');
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('ROWWEAVE_PORT must be an integer from 0 to 65535.');
+  if (port !== 0 && !isHttpPort(port)) throw new Error(`ROWWEAVE_PORT ${port} is restricted by HTTP clients. Choose an HTTP-compatible port, or 0 for automatic selection.`);
   const local = host === '127.0.0.1' || host === '::1';
   if (!local && !allowedHosts?.length) throw new Error('Set ROWWEAVE_ALLOWED_HOSTS when binding beyond loopback.');
   const hosts = allowedHosts === undefined ? undefined : new Set(allowedHosts.map(value => {

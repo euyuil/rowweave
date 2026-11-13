@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { timingSafeEqual } from 'node:crypto';
 import { RecordService, ServiceError } from '../../../packages/core/src/record-service.js';
 import { networkPolicy, type NetworkOptions } from './network.js';
+import { listenHttp } from './http-listener.js';
 import { maxAttachmentBytes } from '../../../packages/contracts/src/index.js';
 import { Calculations } from './calculations.js';
 
@@ -228,12 +229,7 @@ export async function startServer({ service, token, calculations: suppliedCalcul
   }
 
   server.requestTimeout = 15_000;
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(policy.port, policy.host, () => { server.off('error', reject); resolve(); });
-  });
-  const address = server.address();
-  if (!address || typeof address === 'string') throw new Error('Could not determine the listening address.');
+  const address = await listenHttp(server, policy.host, policy.port);
   const authority = `${address.family === 'IPv6' ? `[${address.address}]` : address.address}:${address.port}`;
   if (!policy.hosts) hosts.add(authority);
   calculations.start();
