@@ -76,7 +76,7 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
             <option value="">No grouping</option>{table.fields.filter(supportsScalarGrouping).map(field =>
               <option key={field.id} value={field.id}>{field.name}</option>)}
           </select></label>
-          <p className="form-note">Empty values have their own group. Options follow their configured order; other values sort in ascending order. Sorting applies within each group. Records move to their new group after saving.</p>
+          <p className="form-note">Empty values have their own group. Options follow their configured order; other values sort in ascending order. Sorting applies within each group. Records move to their new group after saving. Expand and collapse choices are remembered on this device.</p>
         </>}
         {!displayOnly && !groupOnly && <>{!queryOnly && <label className="form-field">Saved search<input value={savedSearch} onChange={event => setSavedSearch(event.target.value)} /></label>}
         <QueryEditor fields={table.fields} filter={filter} sort={sort} section={queryOnly ? kind : undefined}

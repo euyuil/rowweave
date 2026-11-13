@@ -4,6 +4,7 @@ import type { TableModel } from '../../client/src/table-model.js';
 import { ApiFailure, type WorkspaceApi } from '../../client/src/http-client.js';
 import { GroupReader } from '../../client/src/group-reader.js';
 import type { GroupRows } from '../../client/src/group-rows.js';
+import { readGroupPreference, writeGroupPreference, type GroupPreference } from './group-preferences.js';
 
 const emptyCollapse: GroupCollapse = { defaultCollapsed: false, exceptions: [] };
 const snapshotKey = (model: TableModel, view: GridView | undefined, search: string) =>
@@ -19,13 +20,21 @@ export function useGroupedRows(model: TableModel, api: WorkspaceApi, view: GridV
   const field = table?.fields.find(field => field.id === view?.groupBy);
   const key = snapshotKey(model, view, search);
   const [collapsed, setCollapsed] = useState(new Map<string, GroupCollapse>());
+  const preferences = useRef(new Map<string, GroupPreference>());
   const [prepared, setPrepared] = useState<PreparedGroups>();
   const [failure, setFailure] = useState<{ key: string; message: string; stale: boolean }>();
   const preparedRef = useRef(prepared); preparedRef.current = prepared;
   const visibleRef = useRef(visible); visibleRef.current = visible;
   const choiceFor = (nextTable: Table, nextView: GridView) => {
-    const saved = collapsed.get(collapseKey(nextTable, nextView)) ?? emptyCollapse;
-    const field = valueField(nextTable.fields.find(field => field.id === nextView.groupBy)!);
+    const namespace = collapseKey(nextTable, nextView);
+    const definition = nextTable.fields.find(field => field.id === nextView.groupBy)!;
+    let remembered = preferences.current.get(namespace);
+    if (!remembered) {
+      remembered = readGroupPreference(namespace, definition, localStorage);
+      preferences.current.set(namespace, remembered);
+    }
+    const saved = collapsed.get(namespace) ?? remembered.choice;
+    const field = valueField(definition);
     if (field.type !== 'singleSelect') return saved;
     const options = new Set<ScalarValue>([null, ...field.options!.map(option => option.id)]);
     return saved.exceptions.every(key => options.has(key)) ? saved
@@ -40,6 +49,9 @@ export function useGroupedRows(model: TableModel, api: WorkspaceApi, view: GridV
     const next = { ...candidate, key: nextKey, choice: candidate.reader.context.collapse };
     preparedRef.current = next; setPrepared(next); setFailure(undefined);
     const namespace = collapseKey(candidate.reader.context.table, candidate.reader.context.view);
+    if (preferences.current.get(namespace)?.choice !== next.choice) {
+      preferences.current.set(namespace, writeGroupPreference(namespace, next.choice, localStorage));
+    }
     setCollapsed(current => current.get(namespace) === next.choice ? current : new Map(current).set(namespace, next.choice));
   };
   useEffect(() => () => preparedRef.current?.reader.dispose(), []);
@@ -63,8 +75,9 @@ export function useGroupedRows(model: TableModel, api: WorkspaceApi, view: GridV
 
   const current = enabled && prepared?.key === key ? prepared : undefined;
   const pending = enabled && (!current || current.choice !== choice);
+  const preference = enabled && field && table && view ? preferences.current.get(collapseKey(table, view)) : undefined;
   return { enabled, rows: current?.rows, reader: current?.reader, pending,
-    error: enabled && failure?.key === key ? failure.message : undefined,
+    error: (enabled && failure?.key === key ? failure.message : undefined) ?? preference?.error,
     stale: enabled && failure?.key === key && failure.stale,
     collapse: (next: GroupCollapse) => setCollapsed(current => new Map(current).set(collapseKey(table!, view!), next)),
     choice,

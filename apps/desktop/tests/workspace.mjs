@@ -43,6 +43,7 @@ import { verifyCatalogRefresh } from './catalog-refresh-workflow.mjs';
 import { verifyViewportCache } from './viewport-cache-workflow.mjs';
 import { verifyGroupedRefresh } from './grouped-refresh-workflow.mjs';
 import { verifyScalarGroups } from './scalar-groups-workflow.mjs';
+import { verifyGroupPreferences, verifyGroupPreferencesAfterRestart } from './group-preferences-workflow.mjs';
 
 const dataDirectory = await mkdtemp(join(tmpdir(), 'rowweave-workspace-'));
 await mkdir('.artifacts', { recursive: true });
@@ -302,6 +303,7 @@ try {
   await verifyViewportCache(page, application);
   await verifyGroupedRefresh(page);
   await verifyScalarGroups(page);
+  const groupPreferences = await verifyGroupPreferences(page);
   await verifyRelativeDateWorkflow(page, application);
   await verifyExternalRefresh(page, application);
   await verifyCatalogRefresh(page, application);
@@ -318,6 +320,7 @@ try {
   await choose('Projects 项目');
   await page.getByRole('heading', { name: 'Projects 项目', exact: true }).waitFor();
   assert.equal((await tables()).find(table => table.id === original.id).name, 'Projects 项目');
+  await verifyGroupPreferencesAfterRestart(page, groupPreferences);
   for (const name of ['Projects 项目', 'Tasks']) {
     await choose(name);
     await page.getByRole('heading', { name, exact: true }).waitFor();

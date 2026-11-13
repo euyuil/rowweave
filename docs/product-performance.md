@@ -1,12 +1,10 @@
 # Product performance verification
 
-The measurements below describe the initial release. The [workflow report](refinement-validation.md) records the later calculated-field workloads and their measured limits; the [current UI candidate report](ui-refinement-validation.md) identifies the newest package and remaining manual checks. Historical native checks do not establish native behavior of the newer binary.
+The scalar-group section records the latest renderer workload below; the remaining sections preserve earlier release measurements. The [workflow report](refinement-validation.md) records calculated-field workloads and their measured limits, and the [UI candidate report](ui-refinement-validation.md) identifies its tested package and manual checks. Historical native checks do not establish native behavior of newer code.
 
 The [completion plan](completion-plan.md#performance-gate) defines the acceptance targets. The complete 60 Hz reference run below met every timing and memory target. A final-package rerun passed the other gates but encountered a different 32 Hz display environment, so it does not reestablish the 60 Hz scrolling gate. Both runs and a controlled display comparison are reported separately. Native Chinese IME and Excel clipboard checks passed as described below. The user's end-to-end acceptance remains their decision.
 
-## Reproduce
-
-### Scalar group renderer follow-up
+## Scalar group renderer follow-up
 
 Measured on 2026-11-14 (local time) from clean revision `988ef26448253bdcf54bf502fcc173d18d29cb95`, using the compiled production renderer in source Electron and an isolated local service. This is a 100,000-record, 100,000-distinct-text-group workload with one visible field, separate from the mixed-type packaged runs below. Reproduce with `npm run build`, then `node apps/desktop/tests/grouped-benchmark.mjs`; do not overlap other local tests, downloads or benchmarks.
 
@@ -24,6 +22,8 @@ The machine was Windows 11 x64 10.0.22631, Intel Core i7-8700K with 12 logical p
 Deep-window timing includes automation IPC, metadata and record reads, and two frames after the expected record appears. It is not the service-only 500 ms query measurement. Rapid traversal visits 100 scroll positions at approximately 100 ms intervals, then returns to the first record and edits it. This initially exposed a request-queue defect: canceling an HTTP wait released backpressure before synchronous SQLite work finished, creating a long backlog. The fixed reader finishes an active service read before starting another and skips obsolete queued windows; the repeated workload recovered and all three input trials passed. A deterministic client regression covers this behavior.
 
 Raw results and per-process snapshots are in `.artifacts/scalar-grid-performance-0cCEWO/results.json`. The snapshots include renderer-debugger and offscreen overhead and are not a separate memory-gate measurement. This evidence establishes bounded requests, recovery and observed offscreen timing for this workload; final packaged, normal-display, native IME and large linked-array acceptance remain required.
+
+## Reproduce
 
 Use the pinned toolchain, `npm run package:win`, and `npm run benchmark`. `--timings-only` skips scrolling and forced-GC diagnostics; it still measures input, paste/save, and queries. Run `npm run benchmark:memory -- <results.json>` separately for process working sets without a renderer debugger. See [development commands](development.md#reproducible-pressure-datasets) for mixed-type dataset generation and measurement details.
 
