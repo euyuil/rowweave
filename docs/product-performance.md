@@ -1,6 +1,6 @@
 # Product performance verification
 
-The measurements below describe the initial release. See the [current refinement candidate report](refinement-validation.md) for the later package, new calculated-field workloads and its remaining manual checks. Historical native checks do not establish native behavior of the newer binary.
+The measurements below describe the initial release. The [workflow report](refinement-validation.md) records the later calculated-field workloads and their measured limits; the [current UI candidate report](ui-refinement-validation.md) identifies the newest package and remaining manual checks. Historical native checks do not establish native behavior of the newer binary.
 
 The [completion plan](completion-plan.md#performance-gate) defines the acceptance targets. The complete 60 Hz reference run below met every timing and memory target. A final-package rerun passed the other gates but encountered a different 32 Hz display environment, so it does not reestablish the 60 Hz scrolling gate. Both runs and a controlled display comparison are reported separately. Native Chinese IME and Excel clipboard checks passed as described below. The user's end-to-end acceptance remains their decision.
 

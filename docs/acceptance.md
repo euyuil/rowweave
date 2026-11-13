@@ -1,6 +1,6 @@
 # Product candidate acceptance
 
-This walkthrough covers the initial product and the completed [everyday table workflows](refinement-plan.md). The [current candidate report](refinement-validation.md) identifies the exact package, automated checks, measurements and pending manual checks. The owner still decides whether the complete workflow meets their needs. This is a private evaluation build, not a formal public release.
+This walkthrough covers the initial product and the completed [everyday table workflows and UI refinements](refinement-plan.md). The [current candidate report](ui-refinement-validation.md) identifies the exact package, automated checks, historical measurement references and pending manual checks. The owner still decides whether the complete workflow meets their needs. This is a private evaluation build, not a formal public release.
 
 ## Candidate and verification
 
@@ -8,7 +8,7 @@ The Windows ZIP, checksum and exact source revision are identified by `release/l
 
 Source/service setup is in [development.md](development.md) and [service.md](service.md). The SDK, CLI, MCP and Harness archives are built with the corresponding `package:*` scripts; [agent Skills](agent-skills.md) are installed from the repository. No npm publication or AI account is required for RowWeave itself.
 
-The [current candidate report](refinement-validation.md) records the clean source revision, ZIP checksum, 149 locally selected Node tests, passing feature CI, and final extracted-package/shared-interface checks. The local IPv6 fixture runs in CI because this environment cannot bind it. Historical performance/native reports retain their original artifact identifiers.
+The [current candidate report](ui-refinement-validation.md) records the clean source revision, ZIP checksum, all 150 Node tests on both CI platforms, passing feature CI, and final extracted-package/shared-interface checks. The local IPv6 fixture runs in CI because this environment cannot bind it. Historical performance/native reports retain their original artifact identifiers; this UI-only iteration does not claim a new performance benchmark.
 
 | Scenario | Automated evidence |
 | --- | --- |
@@ -22,10 +22,11 @@ The [current candidate report](refinement-validation.md) records the clean sourc
 | Primary display identity, column actions and display settings | Desktop identity/column/display workflows; saved-view migration, density and frozen-column tests. |
 | Full-view summaries and status boards | SQLite/HTTP/MCP tests; desktop summary and 506-record board workflows with bounded loading and conflict recovery. |
 | Formulas and linked numeric summaries | Transactional formula and linked-summary tests; desktop editor, read-only results, error copying and summary/filter workflows. |
+| Workspace navigation and contextual editing | Desktop navigation/query/record-panel/field-panel workflows; keyboard focus, narrow-window scrolling, retained drafts and explicit save/discard. |
 
 Run `npm test` for Node regressions, `npm run test:desktop` for source desktop checks, and `npm run test:harness` for host integration. After `npm run package:win`, run `npm run test:packaged` and `npm run test:interfaces`. Windows and Linux CI run the configured checks; native interaction and reference-machine performance are separate evidence.
 
-See the [refinement candidate report](refinement-validation.md) for the current artifact, results and remaining checks. The historical [product-performance.md](product-performance.md) records earlier Pinyin and Excel clipboard checks, the discovered/fixed multiline-copy defect and Windows line-ending normalization. Synthetic composition or DOM clipboard events alone are not native verification of the current candidate.
+See the [UI candidate report](ui-refinement-validation.md) for the current artifact, results and remaining checks. The historical [product-performance.md](product-performance.md) records earlier Pinyin and Excel clipboard checks, the discovered/fixed multiline-copy defect and Windows line-ending normalization. Synthetic composition or DOM clipboard events alone are not native verification of the current candidate.
 
 ## Owner walkthrough
 
@@ -41,6 +42,7 @@ See the [refinement candidate report](refinement-validation.md) for the current 
 10. **Calculate a field.** Add Quantity and Price numbers, then a Formula named Total with `["Quantity"] * ["Price"]`. Choose currency formatting. Save source changes and confirm the result, rename Quantity and reopen the formula, then test `1 / 0`: the field must show an explicit error. Results cannot be directly edited or pasted over. See the [formula guide](formulas.md) for the bounded language.
 11. **Summarize linked numbers.** On Projects, link multiple Tasks and add a Lookup of Task Total with Sum selected. Confirm that changing a task's saved input changes the project's next read. Try Count numeric values, an empty link list, zero and null inputs. Check the [linked-summary semantics](linked-summaries.md).
 12. **Review the whole view.** Open Summarize, choose a numeric field (including a formula or linked summary), and group by Status. Check sum/average/min/max against a small known dataset. Apply a saved filter and search; record counts and measures must follow both. Results should cover all matching rows rather than only the visible page.
+13. **Check the workspace layout.** Switch view tabs with arrows/Home/End and Enter, including enough views to scroll horizontally. Open Filters and Sort separately, save one, and verify the other rules and temporary search remain. Open a record from both a grid and a board; try many fields, explicit Save/Cancel, and closing an unsaved draft with Escape. Configure a field from its column menu, scroll a long option list, and preview a conversion. Repeat at a narrow window size and confirm that the table context, relevant controls and keyboard focus remain usable.
 
 Record the candidate checksum, OS/display refresh rate/input method/spreadsheet versions, the failing step if any, expected versus observed behavior, and a screenshot or minimal sample without private data. Include scrolling on your normal display: the earlier full reference run used 60 Hz, while the final-binary rerun encountered a 32 Hz desktop session and cannot establish a 60 Hz frame-interval result. The product is ready for owner acceptance only after the required implementation and verification items in the completion plan are complete; this document does not accept it on the owner's behalf.
 
