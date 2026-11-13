@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import type { CellValue, RecordChange, RecordChangeDetail, RecordHistoryPage, RecordHistoryQuery, RecordRestore, RowRecord } from '../../contracts/src/index.js';
+import type { CellValue, RecordChange, RecordChangeDetail, RecordHistoryPage, RecordHistoryQuery, RecordRestore, RowRecord, RecordTrashPage, Table } from '../../contracts/src/index.js';
 import { ServiceError } from '../../core/src/errors.js';
 
 const metadata = 'id, batch_id, record_id, changed_at, before_version, after_version, restored_from, restored_snapshot';
@@ -63,5 +63,33 @@ export class RecordHistory {
     const row = this.db.prepare('SELECT * FROM record_changes WHERE table_id = ? AND record_id = ? AND id = ?').get(tableId, recordId, changeId);
     if (!row) throw new ServiceError('HISTORY_NOT_FOUND', 'This record change does not exist.', 404);
     return { ...change(row), before: snapshot(row, 'before'), after: snapshot(row, 'after') };
+  }
+
+  trash(table: Table, query: RecordHistoryQuery): RecordTrashPage {
+    const limit = query.limit ?? 20;
+    const rows = this.db.prepare(`SELECT c.id, c.record_id, c.batch_id, c.changed_at, c.before_version,
+      c.before_values_json -> :primary AS display_value FROM record_changes c
+      WHERE c.table_id = :table AND c.after_version IS NULL
+      AND NOT EXISTS (SELECT 1 FROM records r WHERE r.id = c.record_id)
+      AND NOT EXISTS (SELECT 1 FROM record_changes newer WHERE newer.table_id = c.table_id AND newer.record_id = c.record_id AND newer.id > c.id)
+      ${query.before === undefined ? '' : 'AND c.id < :before'} ORDER BY c.id DESC LIMIT :limit`)
+      .all({ ':table': table.id, ':primary': `$.${JSON.stringify(table.primaryFieldId)}`, ':limit': limit + 1,
+        ...(query.before === undefined ? {} : { ':before': query.before }) });
+    const records = rows.slice(0, limit).map(row => ({ id: row['record_id'] as string, deletionId: row['id'] as number,
+      batchId: row['batch_id'] as string, deletedAt: row['changed_at'] as string, version: row['before_version'] as number,
+      displayValue: JSON.parse(row['display_value'] as string ?? 'null') as CellValue }));
+    return { records, ...(rows.length > limit ? { nextBefore: records.at(-1)!.deletionId } : {}) };
+  }
+
+  checkDeleted(tableId: string, recordId: string, deletionId: number): void {
+    const latest = this.db.prepare('SELECT id, after_version FROM record_changes WHERE table_id = ? AND record_id = ? ORDER BY id DESC LIMIT 1').get(tableId, recordId);
+    if (latest?.['id'] !== deletionId || latest['after_version'] !== null || this.db.prepare('SELECT 1 FROM records WHERE id = ?').get(recordId)) {
+      throw new ServiceError('VERSION_CONFLICT', 'The deleted record changed or was already restored. Refresh the trash before continuing.', 409);
+    }
+  }
+
+  markRestored(recordId: string, deletionId: number): void {
+    this.db.prepare(`UPDATE record_changes SET restored_from = ?, restored_snapshot = 'before'
+      WHERE record_id = ? AND batch_id = (SELECT batch_id FROM record_change_context)`).run(deletionId, recordId);
   }
 }

@@ -116,6 +116,17 @@ export interface RecordRestore {
   expectedVersion: number;
 }
 
+export interface DeletedRecord {
+  id: string;
+  deletionId: number;
+  batchId: string;
+  deletedAt: string;
+  version: number;
+  displayValue: CellValue;
+}
+export interface RecordTrashPage { records: DeletedRecord[]; nextBefore?: number }
+export interface DeletedRecordRestore { id: string; deletionId: number; values?: Record<string, CellValue> }
+
 export function valueField(field: Field): Field {
   if (isLookupSummary(field)) return field.lookup!.operation === 'count' ? { id: field.id, name: field.name, type: 'number' }
     : { ...valueField(field.lookupResult!), id: field.id, name: field.name, required: false };

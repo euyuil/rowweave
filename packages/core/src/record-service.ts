@@ -10,7 +10,7 @@ import { parseView } from './grid-views.js';
 import { ServiceError } from './errors.js';
 import { prepareCsvImport, type CheckedCsvImport } from './csv.js';
 import { parseSummary, type CheckedSummary } from './record-summary.js';
-import type { RecordSummary, RecordHistoryQuery, RecordHistoryPage, RecordChangeDetail, RecordRestore } from '../../contracts/src/index.js';
+import type { RecordSummary, RecordHistoryQuery, RecordHistoryPage, RecordChangeDetail, RecordRestore, RecordTrashPage } from '../../contracts/src/index.js';
 import { historyId, parseHistoryQuery, parseRecordRestore } from './record-history.js';
 import type { CsvImportResult, CsvPreview } from '../../contracts/src/index.js';
 export { ServiceError } from './errors.js';
@@ -30,6 +30,8 @@ export interface RecordStore {
   recordHistory(tableId: string, recordId: string, query: RecordHistoryQuery): RecordHistoryPage;
   recordChange(tableId: string, recordId: string, changeId: number): RecordChangeDetail;
   restoreRecord(update: RecordUpdate, tableId: string, schemaVersion: number, source: RecordRestore): RowRecord;
+  recordTrash(table: Table, query: RecordHistoryQuery): RecordTrashPage;
+  restoreDeletedRecords(table: Table, records: Array<{ id: string; deletionId: number; version: number; values: Record<string, CellValue> }>): BatchResult;
   previewConversion(tableId: string, version: number, field: Field, convert: (value: CellValue) => CellValue): ConversionPreview;
   applyConversion(tableId: string, version: number, field: Field, convert: (value: CellValue) => CellValue): Table;
   queryRecords(table: Table, query: CheckedQuery, view?: GridView): QueryPage;
@@ -344,6 +346,41 @@ export class RecordService {
       .map(field => [field.id, validateValue(field, snapshot.values[field.id])]));
     if (!Object.keys(values).length) throw new ServiceError('INVALID_HISTORY', 'This snapshot has no current writable fields to restore.');
     return this.store.restoreRecord({ id: recordId, expectedVersion: restore.expectedVersion, values }, id, table.version, restore);
+  }
+
+  recordTrash(id: string, input: unknown): RecordTrashPage {
+    return this.store.recordTrash(this.store.getTable(id), parseHistoryQuery(input));
+  }
+
+  restoreDeletedRecords(id: string, input: unknown): BatchResult {
+    if (!Array.isArray(input) || !input.length || input.length > maxBatchRecords) {
+      throw new ServiceError('INVALID_BATCH', `Restore between 1 and ${maxBatchRecords} deleted records at a time.`);
+    }
+    const table = this.store.getTable(id), fields = new Map(table.fields.map(field => [field.id, field]));
+    const ids = new Set<string>();
+    let cells = 0;
+    const records = input.map(entry => {
+      const item = schemaObject(entry), recordId = item['id'], deletionId = historyId(item['deletionId']);
+      if (typeof recordId !== 'string' || !recordId || ids.has(recordId)) throw new ServiceError('INVALID_BATCH', 'Use unique deleted record IDs.');
+      ids.add(recordId);
+      const change = this.store.recordChange(id, recordId, deletionId);
+      if (change.after || !change.before) throw new ServiceError('INVALID_HISTORY', 'Choose the deletion entry for this record.');
+      const overrides = item['values'] === undefined ? {} : schemaObject(item['values']);
+      for (const key of Object.keys(overrides)) {
+        const field = fields.get(key);
+        if (!field) throw new ServiceError('INVALID_BATCH', `Unknown field: ${key}.`);
+        if (field.type === 'lookup' || field.type === 'formula') throw new ServiceError('READ_ONLY_FIELD', `${field.name}: computed values are read-only.`);
+      }
+      const values = Object.fromEntries(table.fields.filter(field => !['lookup', 'formula'].includes(field.type)).map(field => {
+        const value = Object.hasOwn(overrides, field.id) ? overrides[field.id]
+          : Object.hasOwn(change.before!.values, field.id) ? change.before!.values[field.id] : field.defaultValue ?? null;
+        return [field.id, validateValue(field, value)];
+      }));
+      cells += Object.keys(values).length;
+      if (cells > maxBatchCells) throw new ServiceError('INVALID_BATCH', `A restoration batch may contain at most ${maxBatchCells} cells.`);
+      return { id: recordId, deletionId, version: change.before.version + 1, values };
+    });
+    return this.store.restoreDeletedRecords(table, records);
   }
 
   createRecords(id: string, input: unknown): BatchResult {

@@ -34,6 +34,8 @@ rowweave records update TABLE_ID --input updates.json
 rowweave records history TABLE_ID RECORD_ID
 rowweave records change TABLE_ID RECORD_ID --input change.json
 rowweave records restore TABLE_ID RECORD_ID --input restore.json
+rowweave records trash TABLE_ID
+rowweave records restore-deleted TABLE_ID --input deleted-records.json
 ```
 
 Example request files:
@@ -67,6 +69,8 @@ History queries accept `{ limit?, before? }`; use returned `nextBefore` for cont
 | `records history` | Table ID, record ID | `{ limit?, before? }`; defaults to `{}` |
 | `records change` | Table ID, record ID | `{ changeId }` |
 | `records restore` | Table ID, record ID | `{ changeId, snapshot: 'before' \| 'after', expectedVersion }` |
+| `records trash` | Table ID | `{ limit?, before? }`; defaults to `{}` |
+| `records restore-deleted` | Table ID | Array of `{ id, deletionId, values? }`; latest deletion IDs required, optional writable values repair current-schema conflicts |
 | `records query` | Table ID | RecordQuery; defaults to `{}` |
 | `records summarize` | Table ID | SummaryRequest; defaults to `{}` for the whole-table count |
 | `records create` | Table ID | `[{ values }]` |

@@ -64,6 +64,7 @@ export const recordDelete = z.array(z.strictObject({ id, ...expectedVersion }));
 export const recordGet = z.strictObject({ ...tableId, recordId: id });
 export const recordHistory = z.strictObject({ before: z.int().min(1).exactOptional(), limit: z.int().min(1).max(100).exactOptional() });
 export const recordRestore = z.strictObject({ changeId: z.int().min(1), snapshot: z.enum(['before', 'after']), ...expectedVersion });
+export const deletedRecordRestore = z.array(z.strictObject({ id, deletionId: z.int().min(1), values: values.exactOptional() })).min(1).max(2000);
 const view = {
   name: z.string(), query: z.strictObject(query).exactOptional(),
   columns: z.array(z.strictObject({ fieldId: id, width: z.number(), hidden: z.boolean() })).exactOptional(),
