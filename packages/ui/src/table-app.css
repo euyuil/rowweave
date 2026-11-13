@@ -21,6 +21,7 @@
 .rowweave-app .workspace-body { display: flex; flex: 1; min-height: 0; }
 .rowweave-app .workspace-sidebar { width: 200px; flex-shrink: 0; padding: 16px 10px; overflow-y: auto; border-right: 1px solid #e5eaf1; background: #f0f3f9; }
 .rowweave-app .sidebar-heading { padding: 0 12px 12px; color: #738098; font-size: 11px; font-weight: 600; letter-spacing: 1px; }
+.rowweave-app .catalog-status { padding: 0 12px; color: #9a382a; font-size: 12px; overflow-wrap: anywhere; }
 .rowweave-app .workspace-sidebar nav { display: flex; flex-direction: column; gap: 4px; }
 .rowweave-app .workspace-sidebar button { width: 100%; display: flex; align-items: center; gap: 10px; text-align: left; background: transparent; border-color: transparent; padding: 10px 12px; }
 .rowweave-app .workspace-sidebar button[aria-current] { background: #e0e8fb; color: #244d9e; font-weight: 600; }

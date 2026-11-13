@@ -176,6 +176,10 @@ app.on('window-all-closed', () => app.quit());`);
   await page.getByText('2 records · 2 fields', { exact: true }).waitFor();
   await page.waitForFunction(() => document.querySelector('.grid-host')?.getAttribute('aria-busy') === 'false');
   const hostDraft = page.getByRole('textbox', { name: 'Harness draft', exact: true });
+  let catalogChecks = 0;
+  page.on('request', request => {
+    if (request.url().endsWith('/workspace/state') && Object.keys(request.postDataJSON()).length === 0) catalogChecks++;
+  });
   await hostDraft.fill('Host draft 中文');
   for (const value of [17.25, 12.5]) {
     const current = records()[0];
@@ -184,6 +188,15 @@ app.on('window-all-closed', () => app.quit());`);
     assert.equal(await hostDraft.inputValue(), 'Host draft 中文');
     assert.equal(await hostDraft.evaluate(element => element === document.activeElement), true);
   }
+  let catalogTable = service.createTable({ name: 'Harness external table' });
+  const tableNavigation = page.getByRole('navigation', { name: 'Tables', exact: true });
+  await tableNavigation.getByRole('button', { name: catalogTable.name, exact: true }).waitFor();
+  catalogTable = service.updateTable(catalogTable.id, { name: 'Harness renamed table', expectedVersion: catalogTable.version });
+  await tableNavigation.getByRole('button', { name: catalogTable.name, exact: true }).waitFor();
+  service.deleteTable(catalogTable.id, { expectedVersion: catalogTable.version });
+  await tableNavigation.getByRole('button', { name: catalogTable.name, exact: true }).waitFor({ state: 'detached' });
+  assert.equal(await hostDraft.inputValue(), 'Host draft 中文');
+  assert.equal(await hostDraft.evaluate(element => element === document.activeElement), true);
   await page.screenshot({ path: '.artifacts/desktop-harness-workspace.png' });
   await verifyCrossInterfaceWorkflow({ url: serviceServer.url, token }, page, table.id, process.argv.includes('--packaged'));
   await page.evaluate(() => {
@@ -250,6 +263,9 @@ app.on('window-all-closed', () => app.quit());`);
   assert.deepEqual(await page.evaluate(() => window.harnessTest.inspect()), { main: ['conversation', 'rowweave'], sidebar: ['rowweave'], active: null });
   await page.evaluate(() => window.harnessTest.unload());
   assert.deepEqual(await page.evaluate(() => window.harnessTest.inspect()), { main: ['conversation'], sidebar: [], active: null });
+  const stoppedChecks = catalogChecks;
+  await page.waitForTimeout(2_500);
+  assert.equal(catalogChecks, stoppedChecks, 'Unloading the workspace must stop catalog polling.');
   assert.equal(await page.locator('#portal').count(), 0);
   assert.equal(await page.locator('style[data-plugin="@rowweave/harness"]').count(), 0);
   await page.evaluate(() => {

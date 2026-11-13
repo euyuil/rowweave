@@ -68,7 +68,7 @@ export function createWorkspaceClient(connection: Connection, request: typeof fe
     downloadAttachment: async (id: string, attachmentId: string, signal?: AbortSignal): Promise<Uint8Array> =>
       new Uint8Array(await (await responseFor(`${root(id)}/attachments/${encodeURIComponent(attachmentId)}/content`, signal ? { signal } : {})).arrayBuffer()),
     deleteAttachment: (id: string, attachmentId: string) => call<{ deleted: string }>(`${root(id)}/attachments/${encodeURIComponent(attachmentId)}`, { method: 'DELETE' }),
-    listTables: () => call<Table[]>('/tables'),
+    listTables: (signal?: AbortSignal) => call<Table[]>('/tables', signal ? { signal } : {}),
     getTable: (id: string, signal?: AbortSignal) => call<Table>(root(id), signal ? { signal } : {}),
     createTable: (input: TableCreate) => write<Table>('/tables', 'POST', input),
     updateTable: (id: string, input: TableUpdate) => write<Table>(root(id), 'PATCH', input),

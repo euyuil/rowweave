@@ -16,7 +16,12 @@ export function WorkspaceApp({ api, host, workspaceLabel = 'Local workspace', on
 }) {
   const [tables, setTables] = useState<Table[]>([]);
   const [selected, setSelected] = useState<string>();
-  const [loaded, setLoaded] = useState(false);
+  const [loadedApi, setLoadedApi] = useState<WorkspaceApi>();
+  const loaded = loadedApi === api;
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [catalogError, setCatalogError] = useState<string>();
+  const catalogRevision = useRef<number>();
+  const catalogMutation = useRef(0);
   const [error, setError] = useState<string>();
   const [action, setAction] = useState<TableAction>();
   const [offline, setOffline] = useState(false);
@@ -38,20 +43,51 @@ export function WorkspaceApp({ api, host, workspaceLabel = 'Local workspace', on
     void host.setDirty(value || dirty.current.table).catch(error => setError(message(error)));
   }, [host]);
 
-  const load = useCallback(async () => {
-    const current = await api.listTables();
+  const load = useCallback(async (signal: AbortSignal) => {
+    const state = await api.workspaceState({}, signal);
+    const current = await api.listTables(signal);
+    if (signal.aborted) return;
+    catalogRevision.current = state.catalogRevision;
     setTables(current);
     setSelected(id => current.some(table => table.id === id) ? id : current[0]?.id);
-    setLoaded(true);
+    setLoadedApi(api);
     setError(undefined);
+    setCatalogError(undefined);
   }, [api]);
   useEffect(() => {
-    void load().catch(error => setError(message(error)));
-    return host.onServiceExit(() => {
+    const controller = new AbortController();
+    void load(controller.signal).catch(error => { if (!controller.signal.aborted) setError(message(error)); });
+    const unsubscribe = host.onServiceExit(() => {
       setOffline(true);
       setError('The data service stopped. Restart RowWeave to reconnect.');
     });
-  }, [load, host]);
+    return () => { controller.abort(); unsubscribe(); };
+  }, [load, host, loadAttempt]);
+
+  useEffect(() => {
+    if (!loaded || offline) return;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      let delay = 2_000;
+      const mutation = catalogMutation.current;
+      try {
+        const state = await api.workspaceState({}, controller.signal);
+        if (state.catalogRevision !== catalogRevision.current) {
+          const current = await api.listTables(controller.signal);
+          if (controller.signal.aborted || mutation !== catalogMutation.current) return;
+          catalogRevision.current = state.catalogRevision;
+          setTables(current);
+        }
+        if (!controller.signal.aborted) setCatalogError(undefined);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setCatalogError(message(error)); delay = 5_000;
+      } finally { if (!controller.signal.aborted) timer = setTimeout(() => void poll(), delay); }
+    };
+    timer = setTimeout(() => void poll(), 2_000);
+    return () => { controller.abort(); clearTimeout(timer); };
+  }, [api, loaded, offline]);
 
   const select = async (id: string) => {
     if (id === selected) return;
@@ -63,6 +99,7 @@ export function WorkspaceApp({ api, host, workspaceLabel = 'Local workspace', on
   };
   const completed = async (result: Table | undefined) => {
     const previous = action!;
+    catalogMutation.current++;
     setAction(undefined);
     setFormDirty(false);
     if (previous.kind === 'delete') {
@@ -103,17 +140,19 @@ export function WorkspaceApp({ api, host, workspaceLabel = 'Local workspace', on
         </button>)}</nav>
         <button className="new-table" disabled={!loaded || offline}
           onClick={() => setAction({ kind: 'create' })}>+ New table</button>
+        {catalogError && !offline && <p role="status" className="catalog-status">Could not update the table list: {catalogError}</p>}
       </aside>
       <div className="workspace-content">
         {error && <div className="error-banner" role="alert">{error}
-          {!loaded && <button onClick={() => void load().catch(error => setError(message(error)))}>Retry</button>}
+          {!loaded && <button onClick={() => { setError(undefined); setLoadAttempt(value => value + 1); }}>Retry</button>}
         </div>}
         {model ? <TableApp key={selected} tableId={selected!} model={model} api={api} host={tableHost}
           onManage={(kind, table) => setAction({ kind, table })} /> : <section className="empty-workspace">
           <span className="empty-mark" aria-hidden="true">▦</span>
-          <h1>{loaded ? 'Make room for your ideas' : 'Opening your workspace…'}</h1>
-          {loaded && <><p>Create a table to organize projects, track work, or build your own workflow.</p>
-            <button className="primary" disabled={offline} onClick={() => setAction({ kind: 'create' })}>Create your first table</button></>}
+          <h1>{loaded ? tables.length ? 'Choose a table' : 'Make room for your ideas' : 'Opening your workspace…'}</h1>
+          {loaded && <><p>{tables.length ? 'Open a table from the sidebar to continue your work.'
+            : 'Create a table to organize projects, track work, or build your own workflow.'}</p>
+            <button className="primary" disabled={offline} onClick={() => setAction({ kind: 'create' })}>{tables.length ? 'Create another table' : 'Create your first table'}</button></>}
         </section>}
       </div>
     </div>

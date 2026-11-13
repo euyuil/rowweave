@@ -45,6 +45,16 @@ Active editors, composition, pointer gestures, clipboard reads, local drafts and
 
 **Refresh view** explicitly reloads saved data/settings while retaining cell drafts and their original versions; it resets local undo history. **Reload** or **Discard edits** discards local work with the existing confirmation. An external deletion retains the visible table and edits, with a notice to choose another table. Automatic reads never silently resolve stale-write conflicts.
 
-Grouped grids and boards currently detect changes and offer **Refresh view**; their automatic cache replacement and workspace table-list refresh are still required in the [workflow gap plan](gap-closure-plan.md).
+Grouped grids and boards currently detect changes and offer **Refresh view**; their automatic cache replacement is still required in the [workflow gap plan](gap-closure-plan.md).
 
 Verification covers atomic client snapshots, cancellation, late responses, bounded paging, relative-date rollover, undo/redo protection and real service conflicts. Automated desktop acceptance covers UUID selection after sorting, schema/view changes, forms, Chinese composition events, in-flight reads, narrow-window editor alignment, failed reads, deleted views/tables and polling cleanup. Installed Harness acceptance checks refreshing while a host input retains focus. These checks do not establish native IME behavior; that remains a final-candidate check.
+
+## Automatic table-list refresh
+
+The workspace sidebar independently checks the catalog revision every two seconds. It fetches the table list only after a catalog change, with one poll in flight. Ordinary record changes do not reload every table's schema. Catalog read failures retain the last list, show a sidebar notice and use a five-second interval until recovery. Leaving the workspace or changing connections cancels outstanding reads.
+
+External table creation, renaming and deletion update the sidebar without changing the selected table, active editor, local history or open form. Deleting the selected table removes its sidebar entry but retains its visible contents and drafts until the user explicitly leaves it; switching still asks before discarding local work. When an empty workspace receives its first table from another client, it offers that table in the sidebar without dismissing an open creation form or choosing on the user's behalf.
+
+Catalog snapshots remember the revision read before fetching the list. A later change therefore remains detectable on the next poll. A response that overlaps a completed local create, rename or delete is discarded so it cannot replace that operation's immediate sidebar result. No catalog poll writes workspace data.
+
+Automated acceptance covers empty-workspace discovery, renamed/deleted tables, Chinese editor and form focus, retained drafts after deletion, explicit navigation confirmation, late responses during local creation, read-failure recovery and metadata-only steady-state polling. Harness checks external table changes while a host input retains focus and verifies polling stops on plugin unload.

@@ -80,4 +80,6 @@ test('workspace state is authenticated, bounded, cancellable and shared with sav
   assert.deepEqual(await api.workspaceState(request), after);
   const controller = new AbortController(); controller.abort();
   await assert.rejects(api.workspaceState(request, controller.signal), { name: 'AbortError' });
+  await assert.rejects(api.listTables(controller.signal), { name: 'AbortError' });
+  assert.deepEqual(await api.listTables(), [service.getTable(table.id)]);
 });
