@@ -53,6 +53,7 @@ export async function verifyGroupedWorkflow(page, app) {
   await ready();
   assert.equal((await call(`/tables/${table.id}/views`))[0].groupBy, status);
   await page.getByRole('button', { name: 'Collapse all', exact: true }).click();
+  await ready();
   await page.locator('canvas').first().focus();
   await page.keyboard.press('Control+Home');
   await page.keyboard.press('ArrowDown');
