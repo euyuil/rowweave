@@ -295,8 +295,10 @@ try {
   await verifyGroupedWorkflow(page, application);
   await verifyRelativeDateWorkflow(page, application);
   await verifyExternalRefresh(page, application);
+  console.log('External refresh acceptance passed; restarting the workspace.');
   await application.close();
   application = undefined;
+  console.log('Workspace process exited; checking saved tables after restart.');
   application = await electron.launch({ executablePath, args: packaged ? [] : ['.'],
     cwd: packaged ? dataDirectory : process.cwd(),
     env: { ...process.env, ROWWEAVE_DATA_DIR: dataDirectory, ROWWEAVE_HEADLESS: '1' }, timeout: 40_000 });

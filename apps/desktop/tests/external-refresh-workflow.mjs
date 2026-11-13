@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict';
 
 export async function verifyExternalRefresh(page, application) {
+  const waitForResponse = async (promise, label) => {
+    let timer;
+    try {
+      await Promise.race([promise, new Promise((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(`Timed out waiting for ${label}.`)), 15_000);
+      })]);
+    } finally { clearTimeout(timer); }
+  };
   const call = (path, method = 'GET', body) => page.evaluate(async ({ path, method, body }) => {
     const connection = await window.rowweave.connection();
     const response = await fetch(connection.url + path, { method, headers: { Authorization: 'Bearer ' + connection.token, 'Content-Type': 'application/json' },
@@ -81,16 +89,18 @@ export async function verifyExternalRefresh(page, application) {
     const slowQuery = async route => {
       if (!intercept) return route.continue();
       intercept = false;
-      const response = await route.fetch(); arrived(); await held;
-      try { await route.fulfill({ response }); } finally { completed(); }
+      try {
+        const response = await route.fetch(); arrived(); await held;
+        await route.fulfill({ response });
+      } finally { completed(); }
     };
     const queryPath = '**' + root + '/views/' + view.id + '/query';
     await page.route(queryPath, slowQuery);
     try {
-      await update(records[2], { [name]: 'Remote Gamma' }); await ready;
+      await update(records[2], { [name]: 'Remote Gamma' }); await waitForResponse(ready, 'the held grid query');
       await select(1); await page.keyboard.press('Enter'); await editor.fill('保留输入草稿');
       await editor.evaluate(element => element.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true, data: '保留输入草稿' })));
-      release(); await settled;
+      release(); await waitForResponse(settled, 'the released grid query');
       await page.waitForRequest(request => request.url().endsWith('/workspace/state') && !!request.postDataJSON()?.viewId);
       assert.equal(await editor.inputValue(), '保留输入草稿');
       assert.equal(await editor.evaluate(element => element === document.activeElement), true);
@@ -113,7 +123,11 @@ export async function verifyExternalRefresh(page, application) {
       await page.keyboard.press('Enter');
       await page.getByText('1 unsaved cell', { exact: true }).waitFor();
       assert.equal((await call(root + '/records/' + records[2].id)).values[name], 'Remote Gamma');
-    } finally { release(); await settled; await page.unroute(queryPath, slowQuery); }
+    } finally {
+      release();
+      try { if (!intercept) await waitForResponse(settled, 'grid query cleanup'); }
+      finally { await page.unroute(queryPath, slowQuery); }
+    }
     view = await call(root + '/views/' + view.id, 'PATCH', { expectedVersion: view.version, name: 'Changed while editing' });
     await page.waitForRequest(request => request.url().endsWith('/workspace/state') && !!request.postDataJSON()?.viewId);
     await page.getByRole('tab', { name: 'Current work', exact: true }).waitFor();
