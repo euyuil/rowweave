@@ -158,6 +158,20 @@
 .rowweave-app .form-row > * { flex: 1; min-width: 0; }
 .rowweave-app .check-field { display: flex; align-items: center; gap: 9px; margin: 18px 0; }
 .rowweave-app .form-note { color: #69768b; font-size: 13px; }
+.rowweave-app .trash-toolbar { display: flex; align-items: center; gap: 8px; position: sticky; top: -24px; padding: 12px 0; background: white; z-index: 1; }
+.rowweave-app .trash-toolbar > span { flex: 1; font-size: 13px; font-weight: 600; }
+.rowweave-app .trash-selection { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 16px 0 8px; }
+.rowweave-app .trash-selection small { color: #69768b; }
+.rowweave-app .trash-list { list-style: none; padding: 0; margin: 0; }
+.rowweave-app .trash-list li { display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #e5eaf1; padding: 4px 0; }
+.rowweave-app .trash-list input { flex: 0 0 auto; width: 16px; height: 16px; }
+.rowweave-app .trash-list button { flex: 1; min-width: 0; border: 0; text-align: left; padding: 10px; }
+.rowweave-app .trash-list button[aria-pressed="true"] { background: #eef3ff; }
+.rowweave-app .trash-list strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.rowweave-app .trash-list span { display: block; font-size: 11px; color: #69768b; margin-top: 5px; }
+.rowweave-app .trash-details { margin-top: 24px; scroll-margin-top: 60px; }
+.rowweave-app .trash-details details { margin-top: 20px; }
+.rowweave-app .trash-details summary { cursor: pointer; font-weight: 600; }
 .rowweave-app .summary-results { border-collapse: collapse; width: 100%; font-size: 13px; }
 .rowweave-app .summary-results th, .rowweave-app .summary-results td { text-align: left; padding: 10px; border-bottom: 1px solid #e5eaf1; overflow-wrap: anywhere; }
 .rowweave-app .summary-results td { font-variant-numeric: tabular-nums; }

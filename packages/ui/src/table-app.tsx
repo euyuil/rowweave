@@ -11,6 +11,7 @@ import { parseTextValue } from '../../core/src/field-values.js';
 import { CellEditor, EditorContext, type EditableCell, type EditorHandle } from './cell-editor.js';
 import { parseClipboard, serializeClipboard } from './clipboard.js';
 import { RecordDialog, type RecordAction } from './record-dialog.js';
+import { TrashDialog } from './trash-dialog.js';
 import { FieldsDialog } from './fields-dialog.js';
 import { ViewDialog } from './view-dialog.js';
 import { CsvImportDialog } from './csv-import-dialog.js';
@@ -70,6 +71,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   const [editorDirty, setEditorDirty] = useState(false);
   const [formDirty, setFormDirty] = useState(false);
   const [recordAction, setRecordAction] = useState<RecordAction>();
+  const [trashOpen, setTrashOpen] = useState(false);
   const [managingFields, setManagingFields] = useState(false);
   const [editingField, setEditingField] = useState<{ field: Field; bounds: DialogAnchor }>();
   const [columnAction, setColumnAction] = useState<{ field: Field; bounds: Rectangle }>();
@@ -465,6 +467,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       <button disabled={recordActionsLocked || selectedCount !== 1} onClick={() => void openRecord('duplicate')}>Duplicate</button>
       <button disabled={recordActionsLocked || !selectedCount} onClick={() => void openRecord('delete')}>Delete records</button></>}
       <button disabled={recordActionsLocked} onClick={() => setCsvAction('import')}>Import CSV</button>
+      <button disabled={recordActionsLocked} onClick={() => setTrashOpen(true)}>Trash</button>
       <button disabled={recordActionsLocked || !view || searchComposing} onClick={() => setCsvAction('export')}>Export CSV</button>
       <span>{pending > 0 || editorDirty ? 'Save or discard grid edits to manage records.'
         : view?.type === 'board' ? 'Open a card to edit, or move it to another group.'
@@ -573,6 +576,8 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       <span>{view?.type === 'board' ? 'Move records by dragging or choosing a status' : 'Enter to edit · Esc to cancel · Ctrl+C / Ctrl+V · Ctrl+S to save'}</span></footer>
     {recordAction && table && <RecordDialog action={recordAction} table={table} api={api} setDirty={setFormDirty}
       onClose={() => setRecordAction(undefined)} onSaved={() => { setRecordAction(undefined); void refreshAfterWrite('Records'); }} />}
+    {trashOpen && table && <TrashDialog table={table} api={api} setDirty={setFormDirty} onClose={() => setTrashOpen(false)}
+      onRestored={count => { setTrashOpen(false); setNotice(`${count} record${count === 1 ? '' : 's'} restored.`); void refreshAfterWrite('Restored records'); }} />}
     {summarizing && table && view && <SummaryDialog table={table} view={view} search={search} api={api} onClose={() => setSummarizing(false)} />}
     {csvAction === 'import' && table && <CsvImportDialog initial={table} api={api} setDirty={setFormDirty}
       onClose={() => { setCsvAction(undefined); void reload(false); }} onImported={count => {

@@ -88,7 +88,7 @@ export function RecordDialog({ action, table, api, setDirty, onClose, onSaved }:
         setBusy(false);
       });
     }}>
-      {deleting ? <p>Delete {action.records.length === 1 ? 'this record' : `these ${action.records.length} records`}? Saved snapshots remain in record history.</p>
+      {deleting ? <p>Delete {action.records.length === 1 ? 'this record' : `these ${action.records.length} records`}? You can recover them from Trash.</p>
         : table.fields.map(field => <FieldInput key={field.id} field={field} value={values[field.id]!} disabled={busy} calculationError={original?.formulaErrors?.[field.id]}
           onChange={value => { setValues(current => ({ ...current, [field.id]: value })); setDirty(true); }} />)}
       {error && <p className="form-error" role="alert">{error}</p>}
