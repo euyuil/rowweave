@@ -4,6 +4,7 @@ import type { WorkspaceApi } from '../../client/src/http-client.js';
 import { cellDisplay, sameValue } from '../../client/src/cell-values.js';
 import { Dialog } from './dialog.js';
 import { FieldInput } from './field-input.js';
+import { RecordHistoryPanel } from './record-history.js';
 import { fromFormValue, toFormValue, type FormValue } from './field-input-values.js';
 
 export interface RecordAction {
@@ -25,6 +26,7 @@ export function RecordDialog({ action, table, api, setDirty, onClose, onSaved }:
   const form = useRef<HTMLFormElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const [historyOpen, setHistoryOpen] = useState(false);
   const deleting = action.kind === 'delete';
   const changed = table.fields.some(field => !sameValue(values[field.id], initialValues[field.id]));
   const primary = table.fields.find(field => field.id === table.primaryFieldId)!;
@@ -35,18 +37,28 @@ export function RecordDialog({ action, table, api, setDirty, onClose, onSaved }:
   const requestClose = () => { if (changed) setConfirmClose(true); else onClose(); };
   useEffect(() => () => setDirty(false), [setDirty]);
   return <Dialog title={title} subtitle={`${table.name} · ${action.kind === 'edit' ? 'Record details' : 'Record'}`} onClose={requestClose} busy={busy} drawer={!deleting}>
+    {action.kind === 'edit' && <nav className="record-sections" aria-label="Record sections">
+      <button type="button" aria-pressed={!historyOpen} disabled={busy} onClick={() => setHistoryOpen(false)}>Details</button>
+      <button type="button" aria-pressed={historyOpen} disabled={busy} onClick={() => setHistoryOpen(true)}>History</button>
+    </nav>}
     {confirmClose && <section className="discard-confirmation" aria-label="Unsaved record changes">
       <p>Discard your unsaved changes to this record?</p>
       <div><button type="button" autoFocus onClick={() => {
         setConfirmClose(false);
-        form.current!.querySelector<HTMLElement>('input, textarea, select')?.focus();
+        setHistoryOpen(false);
+        requestAnimationFrame(() => form.current?.querySelector<HTMLElement>('input, textarea, select')?.focus());
       }}>Keep editing</button><button type="button" onClick={onClose}>Discard changes</button></div>
     </section>}
-    {action.kind === 'edit' && <details className="form-note"><summary>Record identity</summary>
+    {action.kind === 'edit' && !historyOpen && <details className="form-note"><summary>Record identity</summary>
       <p>Record ID (primary key): <code>{original!.id}</code></p>
       <p>This UUID stays the same when values or display names change. Linked records refer to this ID.</p>
     </details>}
-    <form ref={form} onKeyDown={event => {
+    {historyOpen && <RecordHistoryPanel table={table} record={original!} api={api} hasDraft={changed} busy={busy} onRestore={async input => {
+      setBusy(true); setDirty(true);
+      try { await api.restoreRecord(table.id, original!.id, input); setDirty(false); onSaved(); }
+      finally { setBusy(false); setDirty(changed); }
+    }} />}
+    <form ref={form} hidden={historyOpen} onKeyDown={event => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's' && !event.nativeEvent.isComposing) {
         event.preventDefault();
         event.stopPropagation();

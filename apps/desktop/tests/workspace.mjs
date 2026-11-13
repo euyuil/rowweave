@@ -23,6 +23,7 @@ import { verifyGroupedWorkflow } from './grouped-workflow.mjs';
 import { verifyRelativeDateWorkflow } from './relative-date-workflow.mjs';
 import { verifyNavigationWorkflow } from './navigation-workflow.mjs';
 import { verifyRecordPanelWorkflow } from './record-panel-workflow.mjs';
+import { verifyHistoryWorkflow } from './history-workflow.mjs';
 import { verifyFieldPanelWorkflow } from './field-panel-workflow.mjs';
 
 const dataDirectory = await mkdtemp(join(tmpdir(), 'rowweave-workspace-'));
@@ -249,6 +250,7 @@ try {
   await verifySchemaWorkflow(page);
   await recordLifecycle();
   await verifyRecordPanelWorkflow(page, application);
+  await verifyHistoryWorkflow(page, application);
   await verifyViewWorkflow(page);
   await verifyNavigationWorkflow(page, application);
   await verifyQueryWorkflow(page, application);
