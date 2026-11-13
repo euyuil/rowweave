@@ -161,7 +161,8 @@ export class RecordService {
     const previous = table.fields.find(field => field.id === fieldId);
     if (!previous) throw new ServiceError('FIELD_NOT_FOUND', 'This field does not exist.', 404);
     const config = schemaObject(item['field']);
-    const field = parseField(config, { id: previous.id, name: previous.name, type: previous.type });
+    const field = parseField(config, { id: previous.id, name: previous.name, type: previous.type,
+      ...(previous.description === undefined ? {} : { description: previous.description }) });
     if (['relation', 'lookup', 'formula'].includes(previous.type) || ['relation', 'lookup', 'formula'].includes(field.type)) {
       throw new ServiceError('CONVERSION_REQUIRED', 'Create linked-record and lookup fields explicitly; they cannot be converted to another type.');
     }

@@ -12,6 +12,7 @@ export type FieldType = 'text' | 'multiline' | 'number' | 'checkbox' | 'date' | 
 export interface Field {
   id: string;
   name: string;
+  description?: string;
   type: FieldType;
   required?: boolean;
   defaultValue?: CellValue;
@@ -52,6 +53,7 @@ export interface TableUpdate extends SchemaWrite {
 
 export interface FieldCreate extends SchemaWrite {
   name: string;
+  description?: string;
   type: FieldType;
   required?: boolean;
   defaultValue?: CellValue;

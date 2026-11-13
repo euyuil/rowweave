@@ -39,6 +39,7 @@ export function ColumnActions({ field, view, bounds, disabled, onAction, onClose
     onCancel={event => { event.preventDefault(); if (!busy) close(); }}
     onClick={event => { if (event.target === event.currentTarget && !busy) close(); }}>
     <div className="column-actions-content"><h2 id={title}>{field.name} column actions</h2>
+      {field.description && <p className="form-note field-description">{field.description}</p>}
       <fieldset disabled={busy || disabled}>
         <button onClick={() => void run('configure')}>Configure field</button>
         <hr />
