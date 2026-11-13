@@ -63,6 +63,7 @@ SQLite stores relational table/field/view metadata and JSON record values, with 
 | `text`, `multiline` | String up to 10,000 UTF-16 code units, or null. Empty strings remain distinct from null. |
 | `url` | Absolute HTTP/HTTPS URL or null, up to 2,048 characters including its encoded form. Credentials, whitespace, control characters and backslashes are rejected. Unicode text remains unchanged in storage, CSV and clipboard; opening uses the encoded URL. |
 | `autoNumber` | Read-only positive integer assigned by the service. Each field has its own sequence starting at 1. See [automatic numbering](#automatic-numbering) for recovery and import behavior. |
+| `createdTime`, `updatedTime` | Read-only UTC ISO timestamp or null. See [automatic record times](#automatic-record-times) for edit, history and restoration semantics. |
 | `number` | Finite JSON number. Optional `numberFormat`: `decimal`, `currency`, or `percent`; `precision`: 0–10; currency formatting requires a three-letter uppercase `currency` code. Formatting never rounds stored values. Percent values use fractions: `0.5` displays as 50%. |
 | `checkbox` | Boolean; false is a valid required value. |
 | `date` | Valid `YYYY-MM-DD` calendar date. |
@@ -95,6 +96,16 @@ Sequences are allocated in the same SQLite transaction as the records. Concurren
 Ordinary HTTP/SDK/CLI/MCP writes cannot supply an automatic value, including null. The grid allows copying but not editing/pasting/clearing automatic cells; record forms display read-only values. Required/default settings and type conversion are unavailable for this field. CSV preview does not consume numbers; import skips matching automatic headers unless explicitly mapped, in which case it rejects the read-only mapping. Successful imported rows receive fresh numbers, and export includes the saved numeric values. Numeric filters, sorting, summaries, formulas and lookups use the same values.
 
 Restoring a saved snapshot of an existing record preserves its current automatic number. Trash restoration, undo of deletion and redo of creation recover the same record UUID and original number from durable history. If an automatic field was added after that record was deleted, restoration assigns a new number for that field. Deleting a field removes its counter; recreating a new field creates a new identity and sequence. Recovery never rolls a counter backwards.
+
+### Automatic record times
+
+**Created time** (`createdTime`) records the original creation of a record. **Last edited time** (`updatedTime`) records a successful versioned record save, restoration, saved undo/redo or reciprocal-link edit. All affected records use the same service transaction time, independent of client clocks and time zones. A failed write or stale-version conflict rolls back timestamps with the other values. A formula or lookup refresh does not count as a record edit, and schema operations (including conversion) do not reset edit time. A desktop save with no changed values sends no write and leaves the time unchanged.
+
+Adding these fields fills existing records from durable history: the original creation entry and latest known saved-record change. Records predating available history keep unknown values as null. Adding a field never fabricates a past time using the installation or upgrade time. Backfilled values preserve record UUIDs and advance affected versions. Timestamp fields cannot accept user values, defaults or required settings, and cannot be converted to another type. You may rename them or use one as the primary display field.
+
+Creating or duplicating records, including CSV imports, assigns fresh times. Restoring a deleted record or redoing creation preserves its original creation time, even if the timestamp field was added after deletion; the restoration receives the current edit time. Restoring an existing record's saved values keeps its creation time and records a new edit time. Unknown original creation remains unknown. Backups and restart preserve timestamps and the history used to recover them.
+
+The grid and forms display UTC values read-only. Date comparisons, relative-date filters, sorting, lookups and formulas consume their timestamp strings. CSV export includes these values; import skips matching automatic headers, rejects explicit read-only mappings and assigns service times to new records. SDK/CLI/MCP use the same schema and write rules. Format 22 gates these field semantics while retaining the existing database structure.
 
 ### Linked records
 

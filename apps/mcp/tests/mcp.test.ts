@@ -140,6 +140,29 @@ test('MCP and CLI create automatic fields without allowing forged numbers', asyn
   assert.deepEqual(service.queryRecords(table.id, {}).records.map(row => row.values[number]), [1, 2, 3]);
 });
 
+test('MCP and CLI share service-owned record timestamps and date filters', async t => {
+  const { environment, service } = await setup(t);
+  const { json, call } = await connect(t, environment);
+  let table = await json<Table>('tables_create', { name: 'Timed records' });
+  for (const type of ['createdTime', 'updatedTime']) table = await json<Table>('fields_create', { tableId: table.id,
+    input: { expectedVersion: table.version, name: type, type } });
+  const created = table.fields[1]!.id, edited = table.fields[2]!.id;
+  const directory = await mkdtemp(join(tmpdir(), 'rowweave-times-cli-')); t.after(() => rm(directory, { recursive: true, force: true }));
+  const input = join(directory, 'records.json');
+  await writeFile(input, JSON.stringify([{ values: { [table.primaryFieldId]: 'CLI record' } }]));
+  const result = await runFile(process.execPath, [resolve('apps/cli/dist/rowweave.js'), 'records', 'create', table.id, '--input', input],
+    { env: { ...process.env, ...environment } });
+  const row = (JSON.parse(result.stdout) as BatchResult).records[0]!;
+  assert.match(row.values[created] as string, /^\d{4}-\d{2}-\d{2}T/); assert.equal(row.values[edited], row.values[created]);
+  assert.equal((await json<QueryPage>('records_query', { tableId: table.id, query: { filter: { conjunction: 'and', conditions: [{ fieldId: edited, operator: 'gte', value: row.values[created] }] } } })).total, 1);
+  const invalid = await call('records_update', { tableId: table.id, records: [{ id: row.id, expectedVersion: row.version, values: { [edited]: null } }] });
+  assert.equal(JSON.parse(text(invalid)).error.code, 'READ_ONLY_FIELD');
+  const saved = (await json<BatchResult>('records_update', { tableId: table.id, records: [{ id: row.id, expectedVersion: row.version, values: { [table.primaryFieldId]: 'MCP edit' } }] })).records[0]!;
+  assert.equal(saved.values[created], row.values[created]);
+  assert.equal(saved.values[edited], service.recordBatches(table.id, {}).batches[0]!.changedAt);
+  assert.deepEqual(service.getRecord(table.id, row.id), saved);
+});
+
 test('MCP and CLI preserve relative date rules and reject continuation after calendar rollover', async t => {
   let now = new Date('2026-07-01T23:59:00Z');
   const service = new RecordService(fixture(t, null, () => now).open());

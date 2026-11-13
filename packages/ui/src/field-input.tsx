@@ -15,7 +15,7 @@ export function FieldInput({ field, value, onChange, disabled = false, calculati
   let input;
   if (calculationError) {
     input = <output id={id} aria-describedby={descriptionId} className="form-error">#ERROR: {calculationError}</output>;
-  } else if (field.type === 'autoNumber') {
+  } else if (['autoNumber', 'createdTime', 'updatedTime'].includes(field.type)) {
     input = <output id={id} aria-describedby={descriptionId}>{scalar}</output>;
   } else if (field.type === 'formula') {
     input = <output id={id} aria-describedby={descriptionId}>{value === null ? ''
@@ -47,7 +47,7 @@ export function FieldInput({ field, value, onChange, disabled = false, calculati
       onChange={event => onChange(event.target.value)} />;
   }
   return <div className="form-field">
-    <div className="field-label"><label htmlFor={id}>{field.name}{field.required ? ' *' : ''}{field.type === 'datetime' ? ' (UTC)' : ''}</label>
+    <div className="field-label"><label htmlFor={id}>{field.name}{field.required ? ' *' : ''}{['datetime', 'createdTime', 'updatedTime'].includes(field.type) ? ' (UTC)' : ''}</label>
       {!field.required && !isReadOnlyField(field) && <button type="button" className="clear-value" disabled={disabled || value === null}
         aria-label={`Clear ${field.name}`} onClick={() => { onChange(null); document.getElementById(id)!.focus(); }}>Clear</button>}</div>
     {input}
@@ -57,6 +57,8 @@ export function FieldInput({ field, value, onChange, disabled = false, calculati
     {field.type === 'lookup' && <small>Updates after saving linked records.</small>}
     {field.type === 'formula' && <small>Updates when changes to its inputs are saved.</small>}
     {field.type === 'autoNumber' && <small>Assigned automatically when the record is created.</small>}
+    {field.type === 'createdTime' && <small>Original creation time, retained when the record is restored.</small>}
+    {field.type === 'updatedTime' && <small>Latest record save or linked-record edit.</small>}
     {field.type === 'number' && field.numberFormat === 'percent' && <small>Enter a fraction: 0.5 displays as 50%.</small>}
     {value === null && !calculationError && <small>No value</small>}
   </div>;
