@@ -27,8 +27,8 @@ try {
     type: 'module', main: manifest.main, description: 'Local structured tables for people and software.',
   }, null, 2));
   const meta = JSON.parse(await readFile('dist/apps/desktop/renderer.meta.json', 'utf8'));
-  const dates = await build({ entryPoints: ['packages/storage-sqlite/src/relative-date-ranges.ts'],
-    outfile: join(stage, 'dist/packages/storage-sqlite/src/relative-date-ranges.js'),
+  const dates = await build({ entryPoints: ['packages/core/src/temporal.ts'],
+    outfile: join(stage, 'dist/packages/core/src/temporal.js'),
     bundle: true, format: 'esm', platform: 'node', target: 'node24', metafile: true });
   await writeFile(join(stage, 'THIRD-PARTY-NOTICES.txt'), await bundledNotices({ outputs: { ...meta.outputs, ...dates.metafile.outputs } }));
   const electronVersion = manifest.devDependencies.electron;

@@ -1,4 +1,4 @@
-import { Temporal } from '@js-temporal/polyfill';
+import { Temporal } from './temporal.js';
 import type { ScalarValue } from '../../contracts/src/index.js';
 import { calculationError } from './calculation-error.js';
 import { validateValue } from './field-values.js';
