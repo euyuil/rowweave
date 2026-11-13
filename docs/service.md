@@ -17,12 +17,14 @@ Set the environment variables below in the process that starts the service, then
 | --- | --- | --- |
 | `ROWWEAVE_TOKEN` | Required bearer secret: at least 32 printable ASCII characters, without spaces. Generate it randomly and pass it through your process's environment/secret configuration. | None |
 | `ROWWEAVE_DB` | Database path. Parent directories are created as needed. | `.data/prototype.sqlite` relative to the working directory; the historical filename is retained for existing installations. |
-| `ROWWEAVE_PORT` | Listen port, 0–65535. Port 0 selects an ephemeral port for tests. | `4317` |
+| `ROWWEAVE_PORT` | HTTP-compatible listen port, 1–65535. Port 0 selects an available HTTP-compatible port automatically. | `4317` |
 | `ROWWEAVE_HOST` | Explicit IPv4 or IPv6 bind address, without brackets. | `127.0.0.1` |
 | `ROWWEAVE_ALLOWED_HOSTS` | Comma-separated HTTP Host authorities, including non-default ports, with no schemes, paths, or wildcards. Required for binding outside `127.0.0.1` / `::1`. | The actual loopback bind address and port. |
 | `ROWWEAVE_ALLOWED_ORIGINS` | Comma-separated exact HTTP(S) browser origins, or `null` for the desktop file renderer. No paths, trailing slash, or wildcards. Set an empty value to disable browser origins. | `null` on loopback; no allowed browser origins on other bind addresses. |
 
 For example, an independently operated local service can use port 4317 and an absolute database path with the default loopback binding. Set `ROWWEAVE_URL=http://127.0.0.1:4317` and the same `ROWWEAVE_TOKEN` in the [CLI](../apps/cli/README.md) process. `rowweave tables list` verifies authentication and the workspace connection. In the desktop, use **Connection → Independent service** with that URL and token; see [desktop setup](connections.md). The startup message contains the listening address, never the token.
+
+Browsers and Fetch-based clients block [restricted HTTP ports](https://fetch.spec.whatwg.org/#port-blocking), including 6000 and 6667. Explicitly configuring one fails before listening. Automatic selection, also used by the bundled desktop service, closes any restricted allocation and requests another port before announcing readiness. A repeated restricted allocation fails with guidance to configure an HTTP-compatible port. An occupied explicitly configured port still fails; startup never silently substitutes another configured address.
 
 Keep the secret outside source files, URLs, command arguments, and logs. Anyone with the token has full access to this workspace; this release does not implement accounts or per-user permissions. Rotate a token by restarting the service with a new value and updating clients. RowWeave does not read `.env` automatically.
 
