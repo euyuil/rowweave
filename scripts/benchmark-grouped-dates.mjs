@@ -15,9 +15,12 @@ const result = { measuredAt: new Date().toISOString(), source: execFileSync('git
   node: process.version, sqlite: process.versions.sqlite, os: `${os.type()} ${os.release()} ${os.arch()}`,
   cpu: os.cpus()[0].model, logicalProcessors: os.cpus().length, memoryBytes: os.totalmem(),
   display: 'Not applicable: direct compiled service calls without renderer, HTTP or GUI.', rows: 100000, columns: 5, samples: {} };
-const measure = (name, operation, repeat = 1) => {
+const measure = (name, operation, repeat = 1, validate = () => {}) => {
   const times = []; let value;
-  for (let i = 0; i < repeat; i++) { const start = performance.now(); value = operation(i); times.push(performance.now() - start); }
+  for (let i = 0; i < repeat; i++) {
+    const start = performance.now(); value = operation(i); times.push(performance.now() - start);
+    validate(value);
+  }
   result.samples[name] = times; return value;
 };
 try {
@@ -48,8 +51,8 @@ try {
     ['groupedRelativeSummary', () => service.summarizeRecords(table.id, { viewId: views[1].id, groupBy: status })],
   ]) {
     operation(); operation();
-    const page = measure(name, operation, 20);
-    assert.equal(page.total ?? page.totals.count, name === 'groupedPage100' ? 100000 : matchingRows);
+    measure(name, operation, 20, page => assert.equal(page.total ?? page.totals.count,
+      name === 'groupedPage100' ? 100000 : matchingRows));
   }
   result.matchingRows = matchingRows;
   result.correctness = 'Every repeated query/summary returned the complete expected matching count.';
