@@ -51,6 +51,7 @@ export async function verifyViewWorkflow(page) {
   await page.keyboard.press('Enter');
   await page.getByRole('tabpanel', { name: 'Reverse', exact: true }).waitFor();
   await tabs.getByRole('tab', { name: 'Reverse', exact: true }).waitFor({ state: 'visible' });
+  await page.waitForFunction(() => document.querySelector('[role="tab"][aria-selected="true"]')?.getAttribute('aria-disabled') === 'false');
   await page.keyboard.press('Home');
   await page.keyboard.press('Enter');
   await page.getByRole('tabpanel', { name: 'All records', exact: true }).waitFor();
