@@ -101,7 +101,7 @@ if (preview.validated && preview.invalid === 0 && preview.total > 0) {
 
 Keep the same query and pass `expectedRevision` for subsequent pages; `DATA_CHANGED` means restart from the first page. `queryView` also accepts `expectedViewVersion`. Query, view-query, CSV preview, and CSV export methods accept an optional `AbortSignal` as their last argument.
 
-Requests time out after 15 seconds. `ApiFailure` exposes `code`, `message`, and HTTP `status` for service errors; network/abort errors remain runtime errors. Writes are never retried automatically. After an uncertain create/import result, inspect the service before resubmitting. A validation preview does not reserve a schema or target records.
+Requests time out after 15 seconds, except explicit `refreshCalculations()` which allows 120 seconds. `calculationStatus()` reports automatic scheduling, current progress and the last result/error. Production services recalculate clock formulas at startup and every minute; reads see committed snapshots while writes wait and retain version checks. After an uncertain refresh, inspect status and saved state. `ApiFailure` exposes `code`, `message`, and HTTP `status` for service errors; network/abort errors remain runtime errors. Writes are never retried automatically. After an uncertain create/import result, inspect the service before resubmitting. A validation preview does not reserve a schema or target records.
 
 All request/response interfaces and service limit constants are exported alongside `createWorkspaceClient`. See the [HTTP API reference](https://github.com/euyuil/rowweave/blob/main/docs/http-api.md) and [CSV semantics](https://github.com/euyuil/rowweave/blob/main/docs/data-exchange.md) for operations, values, constraints, and recovery.
 

@@ -29,9 +29,8 @@ export async function startLocalService(entry: string, database: string, onExit:
     service = { connection: { url, token }, stop: () => {
       if (exited) return Promise.resolve();
       return stopping ??= new Promise<void>(resolve => {
-        const timer = setTimeout(() => { child.kill(); resolve(); }, 3_000);
-        timer.unref();
-        child.once('exit', () => { clearTimeout(timer); resolve(); });
+        // Finish accepted transactions before releasing the workspace.
+        child.once('exit', () => resolve());
         child.postMessage('shutdown');
       });
     } };

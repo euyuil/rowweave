@@ -35,6 +35,7 @@ import { verifyAutomaticNumberWorkflow } from './automatic-number-workflow.mjs';
 import { verifyRecordTimesWorkflow } from './record-times-workflow.mjs';
 import { verifySelectColorsWorkflow } from './select-colors-workflow.mjs';
 import { verifyAttachmentWorkflow } from './attachment-workflow.mjs';
+import { verifyBackgroundCalculations } from './background-calculations.mjs';
 
 const dataDirectory = await mkdtemp(join(tmpdir(), 'rowweave-workspace-'));
 await mkdir('.artifacts', { recursive: true });
@@ -200,6 +201,7 @@ try {
     executablePath = join(directory, 'rowweave-win32-x64', 'rowweave.exe');
   }
   await launch();
+  await verifyBackgroundCalculations(page);
   assert.deepEqual(await tables(), []);
   await page.screenshot({ path: '.artifacts/desktop-empty-workspace.png' });
   await create('Projects');

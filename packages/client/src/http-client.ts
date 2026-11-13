@@ -1,4 +1,4 @@
-import type { CalculationRefresh, FormulaPreview, FormulaPreviewRequest } from '../../contracts/src/index.js';
+import type { CalculationRefresh, CalculationStatus, FormulaPreview, FormulaPreviewRequest } from '../../contracts/src/index.js';
 import {
   tableId, type BatchResult, type ConversionPreview, type DeleteResult, type FieldConversion,
   type FieldCreate, type FieldUpdate, type GridView, type QueryPage, type RecordCreate, type RecordDelete,
@@ -38,8 +38,8 @@ export class ApiFailure extends Error {
 
 export function createWorkspaceClient(connection: Connection, request: typeof fetch = fetch) {
   const base = connection.url.replace(/\/$/, '');
-  async function responseFor(path: string, init: RequestInit = {}): Promise<Response> {
-    const timeout = AbortSignal.timeout(15_000);
+  async function responseFor(path: string, init: RequestInit = {}, timeoutMs = 15_000): Promise<Response> {
+    const timeout = AbortSignal.timeout(timeoutMs);
     const response = await request(`${base}${path}`, {
       ...init, signal: init.signal ? AbortSignal.any([init.signal, timeout]) : timeout,
       headers: { Authorization: `Bearer ${connection.token}`, 'Content-Type': 'application/json' },
@@ -50,8 +50,8 @@ export function createWorkspaceClient(connection: Connection, request: typeof fe
     }
     return response;
   }
-  async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
-    return (await responseFor(path, init)).json() as Promise<T>;
+  async function call<T>(path: string, init: RequestInit = {}, timeoutMs?: number): Promise<T> {
+    return (await responseFor(path, init, timeoutMs)).json() as Promise<T>;
   }
   const root = (id: string) => `/tables/${encodeURIComponent(id)}`;
   const field = (id: string, fieldId: string) => `${root(id)}/fields/${encodeURIComponent(fieldId)}`;
@@ -71,7 +71,8 @@ export function createWorkspaceClient(connection: Connection, request: typeof fe
     createTable: (input: TableCreate) => write<Table>('/tables', 'POST', input),
     updateTable: (id: string, input: TableUpdate) => write<Table>(root(id), 'PATCH', input),
     deleteTable: (id: string, expectedVersion: number) => write<{ deleted: string }>(root(id), 'DELETE', { expectedVersion }),
-    refreshCalculations: () => write<CalculationRefresh>('/calculations/refresh', 'POST', {}),
+    refreshCalculations: () => call<CalculationRefresh>('/calculations/refresh', { method: 'POST', body: '{}' }, 120_000),
+    calculationStatus: (signal?: AbortSignal) => call<CalculationStatus>('/calculations/status', signal ? { signal } : {}),
     previewFormula: (id: string, input: FormulaPreviewRequest) => write<FormulaPreview>(`${root(id)}/formulas/preview`, 'POST', input),
     createField: (id: string, input: FieldCreate) => write<Table>(`${root(id)}/fields`, 'POST', input),
     updateField: (id: string, fieldId: string, input: FieldUpdate) => write<Table>(field(id, fieldId), 'PATCH', input),

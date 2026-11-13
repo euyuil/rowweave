@@ -286,7 +286,7 @@ Windows CI packages and tests the app, then publishes the `rowweave-windows` art
 
 ## Reproducible pressure datasets
 
-For current-time calculations, build first and run `node scripts/benchmark-clock.mjs`. It creates an isolated 100,000-record workspace and checks explicit refresh timing and version correctness. See [clock calculation measurements](clock-calculation-performance.md) for the workload, hardware, raw samples and the remaining automatic-refresh responsiveness requirement.
+For current-time calculations, build first and run `node scripts/benchmark-clock.mjs` for explicit refresh, or `node scripts/benchmark-background-calculations.mjs` for concurrent HTTP reads during automatic startup refresh. Each creates an isolated 100,000-record workspace and verifies saved results/versions. Run these measurements separately from tests and each other. See [clock calculation measurements](clock-calculation-performance.md) for workload, hardware, raw samples and remaining desktop acceptance.
 
 Build once before generating data. These commands require new destination files and refuse to overwrite existing workspaces:
 

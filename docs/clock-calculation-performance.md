@@ -1,6 +1,6 @@
 # Clock calculation measurements
 
-These are service measurements during implementation, not desktop input/scrolling measurements or final-candidate acceptance. Current-time formulas and explicit refresh are implemented; automatic scheduling still requires a separate design that keeps long calculations from blocking ordinary service requests.
+These are service measurements during implementation, not desktop input/scrolling measurements or final-candidate acceptance. Production services run automatic clock refresh in a worker so reads can continue against committed SQLite snapshots.
 
 ## Reproduce
 
@@ -21,8 +21,14 @@ The last comparison used an online backup of the preceding synthetic database, s
 
 The original and first two optimized full runs are retained locally in `.artifacts/clock-performance-LkD4m2/results.json`, `.artifacts/clock-performance-7WYS37/results.json` and `.artifacts/clock-performance-vkvjfz/results.json`. The compact-table comparison is in `.artifacts/clock-variant-kzrwGP/results.json`. Generated databases/results remain ignored. The third full run's subsequent 100-record read took 33.6 ms; this does not measure a read competing with a refresh.
 
+## Concurrent HTTP reads
+
+After building, run `node scripts/benchmark-background-calculations.mjs` alone. It creates a separate 100,000-record workspace with the same three formulas, saved at an old clock. It starts the production workspace server, checks its automatic startup refresh, and queries 100 records over loopback HTTP repeatedly while calculation runs. Every page must contain one committed version; the final page must contain the new version and captured clock value.
+
+On the same hardware and dependency versions above, the working tree based on `34038c280174f96f9bedf83e2d90088699695afd` completed startup plus refresh in **9,412 ms**. Across **67** reads during that operation, median latency was **28.1 ms**, p95 **37.8 ms**, and maximum **57.4 ms**. Seeding took 70,930 ms. Raw samples, correctness checks and machine metadata are in `.artifacts/background-clock-RTkZQt/results.json`. These are the samples of one startup run, not a capacity or long-term percentile claim. There was no renderer or display in this measurement.
+
 ## Limits and remaining work
 
-The final measured refresh still takes about 7.5–10 seconds for this dataset. Do not attach a blocking interval to the HTTP service and call the automatic-refresh workflow complete. The follow-up must keep reads responsive during a long calculation, coordinate concurrent writes, expose evaluation time/failures and preserve local drafts. Expressions that depend on per-record inputs use the bounded page path; these measurements do not establish their worst-case latency. Temporary tracking storage scales with affected field/record pairs even though JavaScript does not load all record bodies or IDs at once.
+The refresh still takes about 7.5–10 seconds for this dataset. Worker calculation keeps reads responsive; writes wait until calculation settles and then retain ordinary version checks. HTTP, SDK, CLI and MCP expose evaluation time and failures. Desktop controls and draft-preserving automatic view refresh remain required. Expressions that depend on per-record inputs use the bounded page path; these measurements do not establish their worst-case latency. Temporary tracking storage scales with affected field/record pairs even though JavaScript does not load all record bodies or IDs at once. Other synchronous service operations, including large imports, are outside this measurement.
 
 Regression tests verify paged rollback, stable UUIDs, one version increment per changed record, typed JSON results, unchanged user timestamps/history, cross-table propagation, zone-dependent selective updates, reciprocal edits, preview, CSV, restart, backup and format migration. Business validation uses Node/SQLite/HTTP/CLI/MCP; this change has no desktop control change. Native input and final renderer acceptance remain pending in the delivery plan.

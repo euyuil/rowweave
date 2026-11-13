@@ -20,6 +20,8 @@ The authenticated file API stores immutable, table-scoped files up to 8 MiB insi
 
 ## Calculation refresh
 
+`GET /calculations/status` returns `CalculationStatus`: `automatic`, `running`, optional ISO `startedAt`/`completedAt`, `lastResult` and `lastError`. SDK `calculationStatus()`, CLI `calculations status` and read-only MCP `calculations_status` share this response. Production services refresh at startup and every minute in a worker. Reads see committed snapshots during calculation; writes wait and retain their version guards. Status resets on process restart. Explicit refresh joins any running refresh, and its SDK timeout is 120 seconds. On a lost response, inspect status and saved state before retrying.
+
 `POST /calculations/refresh` with `{}` atomically recalculates clock-dependent formulas and downstream dependencies across the workspace. SDK `refreshCalculations()`, CLI `calculations refresh` and MCP `calculations_refresh` share this operation. It returns `{ evaluatedAt, changedRecords, changedTableIds }`; `evaluatedAt` is the captured UTC minute. Changed record versions and data revisions advance, while user edit times and history remain unchanged. Existing stale writes/undo receipts remain subject to version checks. See [clock semantics and limits](formulas.md#current-time-and-explicit-refresh).
 
 ## Tables and schema
