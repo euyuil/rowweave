@@ -76,14 +76,14 @@ export function RecordDialog({ action, table, api, setDirty, onClose, onSaved }:
         setBusy(false);
       });
     }}>
-      {deleting ? <p>Delete {action.records.length === 1 ? 'this record' : `these ${action.records.length} records`} permanently? This cannot be undone.</p>
+      {deleting ? <p>Delete {action.records.length === 1 ? 'this record' : `these ${action.records.length} records`}? Saved snapshots remain in record history.</p>
         : table.fields.map(field => <FieldInput key={field.id} field={field} value={values[field.id]!} disabled={busy} calculationError={original?.formulaErrors?.[field.id]}
           onChange={value => { setValues(current => ({ ...current, [field.id]: value })); setDirty(true); }} />)}
       {error && <p className="form-error" role="alert">{error}</p>}
       <div className="dialog-actions">{!deleting && <span className="record-save-status">{changed ? 'Unsaved changes' : action.kind === 'edit' ? 'Saved values' : 'Not created yet'}</span>}
         <button type="button" disabled={busy} title={changed ? 'Discard changes and close' : 'Close without saving'} onClick={onClose}>Cancel</button>
         <button className={deleting ? 'danger' : 'primary'} disabled={busy}>
-          {busy ? 'Working…' : deleting ? 'Delete permanently' : action.kind === 'edit' ? 'Save record' : 'Create record'}</button></div>
+          {busy ? 'Working…' : deleting ? 'Delete record' : action.kind === 'edit' ? 'Save record' : 'Create record'}</button></div>
     </form>
   </Dialog>;
 }

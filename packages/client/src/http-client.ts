@@ -5,7 +5,7 @@ import {
   type ViewCreate, type ViewPage, type ViewPageRequest, type ViewUpdate,
   type CsvImportRequest, type CsvPreview, type CsvImportResult, type CsvExportRequest,
 } from '../../contracts/src/index.js';
-import type { RecordSummary, SummaryRequest } from '../../contracts/src/index.js';
+import type { RecordSummary, SummaryRequest, RecordHistoryQuery, RecordHistoryPage, RecordChangeDetail, RecordRestore } from '../../contracts/src/index.js';
 
 export interface Connection {
   url: string;
@@ -53,6 +53,7 @@ export function createWorkspaceClient(connection: Connection, request: typeof fe
   const root = (id: string) => `/tables/${encodeURIComponent(id)}`;
   const field = (id: string, fieldId: string) => `${root(id)}/fields/${encodeURIComponent(fieldId)}`;
   const view = (id: string, viewId: string) => `${root(id)}/views/${encodeURIComponent(viewId)}`;
+  const record = (id: string, recordId: string) => `${root(id)}/records/${encodeURIComponent(recordId)}`;
   const write = <T>(path: string, method: string, body: unknown, signal?: AbortSignal) =>
     call<T>(path, { method, body: JSON.stringify(body), ...(signal ? { signal } : {}) });
   const api = {
@@ -67,6 +68,9 @@ export function createWorkspaceClient(connection: Connection, request: typeof fe
     previewConversion: (id: string, fieldId: string, input: FieldConversion) => write<ConversionPreview>(`${field(id, fieldId)}/conversion/preview`, 'POST', input),
     applyConversion: (id: string, fieldId: string, input: FieldConversion) => write<Table>(`${field(id, fieldId)}/conversion/apply`, 'POST', input),
     getRecord: (id: string, recordId: string) => call<RowRecord>(`${root(id)}/records/${encodeURIComponent(recordId)}`),
+    recordHistory: (id: string, recordId: string, query: RecordHistoryQuery = {}) => write<RecordHistoryPage>(`${record(id, recordId)}/history`, 'POST', query),
+    recordChange: (id: string, recordId: string, changeId: number) => call<RecordChangeDetail>(`${record(id, recordId)}/history/${changeId}`),
+    restoreRecord: (id: string, recordId: string, input: RecordRestore) => write<RowRecord>(`${record(id, recordId)}/restore`, 'POST', input),
     queryRecords: (id: string, input: RecordQuery, signal?: AbortSignal) => write<QueryPage>(`${root(id)}/query`, 'POST', input, signal),
     summarizeRecords: (id: string, input: SummaryRequest, signal?: AbortSignal) => write<RecordSummary>(`${root(id)}/summary`, 'POST', input, signal),
     previewCsv: (id: string, input: CsvImportRequest, signal?: AbortSignal) => write<CsvPreview>(`${root(id)}/import/preview`, 'POST', input, signal),

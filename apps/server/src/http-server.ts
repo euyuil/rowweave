@@ -61,6 +61,18 @@ export async function startServer({ service, token, ...options }: ServerOptions)
       throw new ServiceError('UNAUTHORIZED', 'A valid access token is required.', 401);
     }
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+    const history = url.pathname.match(/^\/tables\/([^/]+)\/records\/([^/]+)\/(history|restore)(?:\/([^/]+))?$/);
+    if (history) {
+      const [, tableId, recordId, action, changeId] = history;
+      if (action === 'history' && changeId && request.method === 'GET') {
+        send(response, 200, service.recordChange(tableId!, recordId!, Number(changeId)));
+      } else if (action === 'history' && !changeId && request.method === 'POST') {
+        send(response, 200, service.recordHistory(tableId!, recordId!, await readJson(request)));
+      } else if (action === 'restore' && !changeId && request.method === 'POST') {
+        send(response, 200, service.restoreRecord(tableId!, recordId!, await readJson(request)));
+      } else throw new ServiceError('NOT_FOUND', 'This endpoint does not exist.', 404);
+      return;
+    }
     const view = url.pathname.match(/^\/tables\/([^/]+)\/views(?:\/([^/]+)(?:\/(query))?)?$/);
     if (view) {
       const id = view[1]!;

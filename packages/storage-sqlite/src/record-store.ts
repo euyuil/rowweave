@@ -4,7 +4,8 @@ import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { summarize } from './record-summary.js';
 import type { CheckedSummary } from '../../core/src/record-summary.js';
-import type { RecordSummary } from '../../contracts/src/index.js';
+import type { RecordSummary, RecordHistoryQuery, RecordHistoryPage, RecordChangeDetail, RecordRestore } from '../../contracts/src/index.js';
+import { RecordHistory } from './record-history.js';
 import { tableId, type BatchResult, type CellValue, type ConversionPreview, type DeleteResult, type Field, type GridView, type QueryPage, type RecordDelete, type RecordPage, type RecordUpdate, type RowRecord, type Table } from '../../contracts/src/index.js';
 import { ServiceError, type RecordStore } from '../../core/src/record-service.js';
 import type { CheckedQuery } from '../../core/src/record-query.js';
@@ -53,6 +54,7 @@ export class SqliteRecordStore implements RecordStore {
   private readonly db: DatabaseSync;
   private readonly relations: Relations;
   private readonly lookups: Lookups;
+  private readonly history: RecordHistory;
 
   constructor(path: string, seed: SeedOptions | null = null, private readonly clock: () => Date = () => new Date()) {
     if (seed && (!Number.isSafeInteger(seed.rows) || seed.rows < 1 || seed.rows > 100_000 ||
@@ -66,6 +68,7 @@ export class SqliteRecordStore implements RecordStore {
     try {
       this.db.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;');
       const fresh = migrate(this.db);
+      this.history = new RecordHistory(this.db);
       if (fresh && seed) this.seed(seed);
     } catch (error) {
       this.db.close();
@@ -73,10 +76,12 @@ export class SqliteRecordStore implements RecordStore {
     }
   }
 
-  private transaction<T>(operation: () => T, mode: 'IMMEDIATE' | 'DEFERRED' = 'IMMEDIATE'): T {
+  private transaction<T>(operation: () => T, mode: 'IMMEDIATE' | 'DEFERRED' = 'IMMEDIATE', restore?: RecordRestore): T {
     this.db.exec(`BEGIN ${mode}`);
     try {
+      if (mode === 'IMMEDIATE') this.history.begin(this.clock().toISOString(), restore);
       const result = operation();
+      if (mode === 'IMMEDIATE') this.history.end();
       this.db.exec('COMMIT');
       return result;
     } catch (error) {
@@ -569,32 +574,46 @@ export class SqliteRecordStore implements RecordStore {
   }
 
   updateBatch(updates: RecordUpdate[], id: string, schemaVersion: number): BatchResult {
+    return this.transaction(() => this.writeBatch(updates, id, schemaVersion));
+  }
+
+  recordHistory(id: string, recordId: string, query: RecordHistoryQuery): RecordHistoryPage {
+    return this.transaction(() => this.history.list(id, recordId, query), 'DEFERRED');
+  }
+
+  recordChange(id: string, recordId: string, changeId: number): RecordChangeDetail {
+    return this.history.get(id, recordId, changeId);
+  }
+
+  restoreRecord(update: RecordUpdate, id: string, schemaVersion: number, source: RecordRestore): RowRecord {
+    return this.transaction(() => this.writeBatch([update], id, schemaVersion).records[0]!, 'IMMEDIATE', source);
+  }
+
+  private writeBatch(updates: RecordUpdate[], id: string, schemaVersion: number): BatchResult {
     const read = this.db.prepare('SELECT id, version, values_json, formula_errors_json FROM records WHERE id = ? AND table_id = ?');
     const write = this.db.prepare('UPDATE records SET values_json = ?, formula_errors_json = ?, version = version + 1 WHERE id = ? AND table_id = ?');
-    return this.transaction(() => {
-      this.checkSchema(id, schemaVersion);
-      const table = this.getTable(id);
-      const calculate = compileFormulas(table, { skipLinked: true });
-      const records = updates.map(update => {
-        const stored = read.get(update.id, id) as unknown as StoredRecord | undefined;
-        if (!stored) throw new ServiceError('RECORD_NOT_FOUND', `Record ${update.id} does not exist.`, 404);
-        if (stored.version !== update.expectedVersion) {
-          throw new ServiceError('VERSION_CONFLICT', `Record ${update.id} changed. Reload before saving again.`, 409);
-        }
-        const record = this.decode(stored);
-        const result = calculate({ ...record.values, ...update.values }, record.formulaErrors);
-        record.values = result.values;
-        if (result.formulaErrors) record.formulaErrors = result.formulaErrors;
-        else delete record.formulaErrors;
-        record.version++;
-        write.run(JSON.stringify(record.values), JSON.stringify(record.formulaErrors ?? {}), record.id, id);
-        return record;
-      });
-      const linked = this.relations.write(table, updates);
-      for (const record of records) if (linked.values.has(record.id)) record.values = linked.values.get(record.id)!;
-      const computed = this.finishRecordWrite(id, records.map(record => record.id), linked);
-      return { records: this.lookups.hydrate(table, this.relations.hydrate(table, records.map(record => computed.has(record.id) ? this.readRecord(id, record.id) : record))) };
+    this.checkSchema(id, schemaVersion);
+    const table = this.getTable(id);
+    const calculate = compileFormulas(table, { skipLinked: true });
+    const records = updates.map(update => {
+      const stored = read.get(update.id, id) as unknown as StoredRecord | undefined;
+      if (!stored) throw new ServiceError('RECORD_NOT_FOUND', `Record ${update.id} does not exist.`, 404);
+      if (stored.version !== update.expectedVersion) {
+        throw new ServiceError('VERSION_CONFLICT', `Record ${update.id} changed. Reload before saving again.`, 409);
+      }
+      const record = this.decode(stored);
+      const result = calculate({ ...record.values, ...update.values }, record.formulaErrors);
+      record.values = result.values;
+      if (result.formulaErrors) record.formulaErrors = result.formulaErrors;
+      else delete record.formulaErrors;
+      record.version++;
+      write.run(JSON.stringify(record.values), JSON.stringify(record.formulaErrors ?? {}), record.id, id);
+      return record;
     });
+    const linked = this.relations.write(table, updates);
+    for (const record of records) if (linked.values.has(record.id)) record.values = linked.values.get(record.id)!;
+    const computed = this.finishRecordWrite(id, records.map(record => record.id), linked);
+    return { records: this.lookups.hydrate(table, this.relations.hydrate(table, records.map(record => computed.has(record.id) ? this.readRecord(id, record.id) : record))) };
   }
 
   close(): void {

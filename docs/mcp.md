@@ -53,6 +53,9 @@ Tools have discoverable strict JSON schemas. Read descriptions and use stable ID
 | `fields_delete` | `{ tableId, fieldId, expectedVersion }` |
 | `fields_preview_conversion`, `fields_apply_conversion` | `{ tableId, fieldId, input: FieldConversion }` |
 | `records_get` | `{ tableId, recordId }` |
+| `records_history` | `{ tableId, recordId, query: { limit?, before? } }` for bounded metadata pages |
+| `records_change` | `{ tableId, recordId, changeId }` to inspect a before/after snapshot |
+| `records_restore` | `{ tableId, recordId, input: { changeId, snapshot: 'before' \| 'after', expectedVersion } }` |
 | `records_query` | `{ tableId, query: RecordQuery }` (use `{}` for the default page) |
 | `records_summarize` | `{ tableId, input: SummaryRequest }` for full-set counts, numeric measures and bounded group pages |
 | `records_create`, `records_update`, `records_delete` | `{ tableId, records: [...] }` with the corresponding create/update/delete objects |
@@ -95,7 +98,7 @@ Service limits still apply: 500 records per page, 2,000 records/20,000 cells per
 
 ## Verification
 
-`npm test` includes real MCP subprocess/client tests against isolated SQLite/HTTP services. They exercise all 25 tools, protocol discovery and legacy negotiation, live schema/view resources, typed links/lookups, summaries, schema/record/view conflicts, atomic batch rollback, CSV, input rejection, authentication, uncertain-write recovery without retries, secret-free diagnostics, and offline archive installation outside the repository. These tests do not assert that any particular agent will choose the correct workflow without user review.
+`npm test` includes real MCP subprocess/client tests against isolated SQLite/HTTP services. They exercise all 28 tools, protocol discovery and legacy negotiation, live schema/view resources, typed links/lookups, summaries, durable history and snapshot restoration, schema/record/view conflicts, atomic batch rollback, CSV, input rejection, authentication, uncertain-write recovery without retries, secret-free diagnostics, and offline archive installation outside the repository. These tests do not assert that any particular agent will choose the correct workflow without user review.
 
 Formula fields use the existing field and record tools. Configure `formula: { expression, resultType }` with stable field-ID references; read computed values and optional `formulaErrors` from record responses. See the [formula language](formulas.md). Computed fields reject direct writes.
 

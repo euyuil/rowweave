@@ -179,13 +179,13 @@ test('format eleven migration keeps existing values and schemas while protecting
   const schema = service.getTable(table.id);
   store.close();
   const previous = new DatabaseSync(data.path);
-  previous.exec('PRAGMA user_version = 11;');
+  previous.exec('DROP TABLE record_changes; PRAGMA user_version = 11;');
   previous.close();
   const reopened = new RecordService(data.open());
   assert.deepEqual(reopened.getTable(table.id), schema);
   assert.deepEqual(reopened.getRecord(table.id, record.id), record);
   const current = new DatabaseSync(data.path);
-  assert.equal(current.prepare('PRAGMA user_version').get()!['user_version'], 15);
+  assert.equal(current.prepare('PRAGMA user_version').get()!['user_version'], 16);
   current.close();
 });
 
