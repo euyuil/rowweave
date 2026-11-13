@@ -43,7 +43,7 @@ const snapshot = await api.recordChange(tableId, deleted.id, deleted.deletionId)
 await api.restoreDeletedRecords(tableId, [{ id: deleted.id, deletionId: deleted.deletionId }]);
 ```
 
-Trash survives restart and backup/restore. Desktop, HTTP, SDK, CLI and MCP share the same recovery rules. Saved batch undo remains required delivery work.
+Trash survives restart and backup/restore. Desktop, HTTP, SDK, CLI and MCP share the same recovery rules.
 
 ## Inspect a complete transaction
 
@@ -53,9 +53,29 @@ Trash survives restart and backup/restore. Desktop, HTTP, SDK, CLI and MCP share
 
 Receipts capture the final coalesced record count in the same transaction as the write. Failed writes leave neither changes nor receipts. `recordWrite: true` identifies record creation, updates, deletion, CSV import or restoration. Schema-driven value conversions and recalculations have `recordWrite: false`; a record operation must not be mistaken for a schema undo.
 
-Deleting a table removes its snapshots and table-to-batch associations, but keeps the receipt's original count. A surviving related table can therefore show that `remainingCount` is smaller than `recordCount`; the remaining entries are not a complete original batch. Receipt metadata is retained with history and included in backups. These inspection APIs do not yet perform batch undo.
+Deleting a table removes its snapshots and table-to-batch associations, but keeps the receipt's original count. A surviving related table can therefore show that `remainingCount` is smaller than `recordCount`; the remaining entries are not a complete original batch. Receipt metadata is retained with history and included in backups.
 
 Receipts start with workspace format 18. Older record history remains available through individual history APIs, but no original transaction size is invented: earlier entries may already have been removed with their tables. Legacy batch IDs return `HISTORY_NOT_FOUND` from receipt inspection.
+
+## Undo a saved batch
+
+After inspecting a complete transaction, call `undoRecordBatch(tableId, batchId)`. The service reverses the complete record operation, including changes to other tables through reciprocal links and stored calculations. Created records are deleted, edited records receive their prior writable values, and deleted records are recreated with their original UUIDs. Recreated records append to their tables. Existing later-added fields keep their current values; recreated rows use current defaults/null for later fields. Removed fields and schemas are not recreated, and formulas recalculate with current definitions and targets.
+
+Every record must still match the original transaction's final version. A deleted record must still have the same latest deletion entry and remain absent. One stale or missing record rejects the entire operation with `VERSION_CONFLICT`. Updates to unrelated records are preserved. Current field, relationship, required-value and deletion-dependency rules apply. Relationship assignments are validated as a single final graph, allowing complete reciprocal swaps and closed self-linked batches. A late failure rolls back every record, edge, revision and journal entry.
+
+Only complete record-operation receipts can be undone. Schema batches return `INVALID_HISTORY`; receipts missing changes after table deletion return `HISTORY_INCOMPLETE`. An undo is limited to 2,000 original affected records, including indirect changes, and 20,000 current writable cells to restore. Larger operations return `INVALID_BATCH` without partially undoing them. Inspect and deliberately restore individual records or deleted sets when a complete batch is no longer eligible.
+
+The result is `{ batchId, undoneBatchId }`. The new receipt records `undoOf`, and each directly reversed change references its original entry in `restoredFrom`. Undoing that new batch provides redo, subject to the same current-version and schema rules. A repeated request against the original batch fails; no write is automatically retried. If a response is lost, inspect current transaction history before deciding the next action. Batch IDs and undo links survive restart and backup/restore.
+
+```ts
+const page = await api.recordBatchChanges(tableId, batchId);
+// Review every affected page and current schema before undoing.
+const undo = await api.undoRecordBatch(tableId, page.batch.id);
+// A later deliberate redo, if no affected record has changed:
+await api.undoRecordBatch(tableId, undo.batchId);
+```
+
+HTTP, SDK, CLI and MCP expose saved-batch undo. The desktop saved-batch inspection and undo workflow remains required delivery work; the grid's existing Undo/Redo controls still apply to unsaved drafts.
 
 ## Desktop workflow
 
@@ -71,6 +91,6 @@ Open a deleted record, then expand **Adjust values for restoration** to repair c
 
 ## Storage and verification
 
-Workspace format 16 introduced the journal; format 17 added the trash query index; format 18 adds transaction receipts and indexed table associations. Migration preserves existing records, UUIDs, versions, views, schemas and journal entries without creating fictitious past events. The first subsequent edit captures the previous stored state. Service connections install temporary SQLite triggers on `main.records`, with transaction-local context; this captures indirect writes without spreading journal calls across relationship and calculation code. Direct SQLite edits outside the service are unsupported and are not journaled. Online backup/restore retains the durable journal, not the temporary connection context. Older programs reject newer workspace formats.
+Workspace format 16 introduced the journal; format 17 added the trash query index; format 18 added transaction receipts and indexed table associations; format 19 adds receipt undo links. Migration preserves existing records, UUIDs, versions, views, schemas, journal entries and receipts without creating fictitious past events. The first subsequent edit captures the previous stored state. Service connections install temporary SQLite triggers on `main.records`, with transaction-local context; this captures indirect writes without spreading journal calls across relationship and calculation code. Direct SQLite edits outside the service are unsupported and are not journaled. Online backup/restore retains the durable journal, not the temporary connection context. Older programs reject newer workspace formats.
 
-Regression coverage includes typed snapshots, rollback after a late batch conflict, stable pagination, current-schema restoration, retained later fields, recalculated formulas, missing targets, reverse links, coalesced calculations, multiple connections, CSV/conversion writes, restart, backup, migration, authenticated HTTP/SDK and real CLI/MCP subprocesses. Trash tests cover deletion cycles, stale requests, explicit field repairs, reciprocal cardinality, late rollback and closed self-linked batches. Automated desktop acceptance verifies history pagination, keyboard entry, before/after comparison, current-value preview, draft retention, cancellation, stale restores and successful restoration with recalculation. Trash acceptance covers cross-page selection and adjustments, Unicode/zero/false snapshots, confirmation cancellation, concurrent restoration, current-type repairs and defaults added after deletion. Screenshots at 1024 × 768 were reviewed; native input-method checks remain a final-candidate task. Batch undo remains open in [the active delivery plan](gap-closure-plan.md).
+Regression coverage includes typed snapshots, rollback after a late batch conflict, stable pagination, current-schema restoration, retained later fields, recalculated formulas, missing targets, reverse links, coalesced calculations, multiple connections, CSV/conversion writes, restart, backup, migration, authenticated HTTP/SDK and real CLI/MCP subprocesses. Trash tests cover deletion cycles, stale requests, explicit field repairs, reciprocal cardinality, late rollback and closed self-linked batches. Automated desktop acceptance verifies history pagination, keyboard entry, before/after comparison, current-value preview, draft retention, cancellation, stale restores and successful restoration with recalculation. Trash acceptance covers cross-page selection and adjustments, Unicode/zero/false snapshots, confirmation cancellation, concurrent restoration, current-type repairs and defaults added after deletion. Screenshots at 1024 × 768 were reviewed; native input-method checks remain a final-candidate task. Saved-batch tests also cover final-graph swaps, undo/redo version cycles, current constraints, incomplete/oversized rejection, late rollback, restart and backup. Desktop saved-batch undo remains open in [the active delivery plan](gap-closure-plan.md).

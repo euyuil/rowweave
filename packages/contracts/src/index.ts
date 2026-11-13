@@ -134,10 +134,12 @@ export interface RecordBatch {
   recordCount: number;
   remainingCount: number;
   recordWrite: boolean;
+  undoOf?: string;
 }
 export interface RecordBatchPage { batches: RecordBatch[]; nextBefore?: number }
 export interface RecordBatchChange extends RecordChange { tableId: string }
 export interface RecordBatchChanges { batch: RecordBatch; changes: RecordBatchChange[]; nextBefore?: number }
+export interface RecordBatchUndoResult { batchId: string; undoneBatchId: string }
 
 export function valueField(field: Field): Field {
   if (isLookupSummary(field)) return field.lookup!.operation === 'count' ? { id: field.id, name: field.name, type: 'number' }

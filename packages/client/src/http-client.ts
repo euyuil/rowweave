@@ -6,7 +6,7 @@ import {
   type CsvImportRequest, type CsvPreview, type CsvImportResult, type CsvExportRequest,
 } from '../../contracts/src/index.js';
 import type { RecordSummary, SummaryRequest, RecordHistoryQuery, RecordHistoryPage, RecordChangeDetail, RecordRestore, RecordTrashPage, DeletedRecordRestore } from '../../contracts/src/index.js';
-import type { RecordBatchPage, RecordBatchChanges } from '../../contracts/src/index.js';
+import type { RecordBatchPage, RecordBatchChanges, RecordBatchUndoResult } from '../../contracts/src/index.js';
 
 export interface Connection {
   url: string;
@@ -72,6 +72,7 @@ export function createWorkspaceClient(connection: Connection, request: typeof fe
     recordHistory: (id: string, recordId: string, query: RecordHistoryQuery = {}) => write<RecordHistoryPage>(`${record(id, recordId)}/history`, 'POST', query),
     recordBatches: (id: string, query: RecordHistoryQuery = {}) => write<RecordBatchPage>(`${root(id)}/batches/query`, 'POST', query),
     recordBatchChanges: (id: string, batchId: string, query: RecordHistoryQuery = {}) => write<RecordBatchChanges>(`${root(id)}/batches/${encodeURIComponent(batchId)}`, 'POST', query),
+    undoRecordBatch: (id: string, batchId: string) => write<RecordBatchUndoResult>(`${root(id)}/batches/${encodeURIComponent(batchId)}/undo`, 'POST', {}),
     recordChange: (id: string, recordId: string, changeId: number) => call<RecordChangeDetail>(`${record(id, recordId)}/history/${changeId}`),
     restoreRecord: (id: string, recordId: string, input: RecordRestore) => write<RowRecord>(`${record(id, recordId)}/restore`, 'POST', input),
     recordTrash: (id: string, query: RecordHistoryQuery = {}) => write<RecordTrashPage>(`${root(id)}/trash/query`, 'POST', query),

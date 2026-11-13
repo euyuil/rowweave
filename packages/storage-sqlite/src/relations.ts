@@ -43,18 +43,18 @@ export class Relations {
     if (missing) throw new ServiceError('INVALID_LINK', `${field.name}: record ${missing} does not exist in the target table.`);
   }
 
-  write(table: Table, changes: Array<{ id: string; values: Record<string, CellValue> }>, deleting = new Set<string>()) {
+  write(inputFields: Field[], changes: Array<{ id: string; values: Record<string, CellValue> }>, deleting = new Set<string>()) {
     const key = (recordId: string, fieldId: string) => JSON.stringify([recordId, fieldId]);
+    const fields = new Map(inputFields.map(field => [field.id, field]));
     const direct = new Map<string, { recordId: string; field: Field; ids: string[] }>();
-    for (const change of changes) for (const field of table.fields) {
-      if (field.type !== 'relation' || !Object.hasOwn(change.values, field.id)) continue;
-      const value = change.values[field.id]!;
+    for (const change of changes) for (const [fieldId, value] of Object.entries(change.values)) {
+      const field = fields.get(fieldId);
+      if (field?.type !== 'relation') continue;
       this.validateTargets(field, value);
       direct.set(key(change.id, field.id), { recordId: change.id, field, ids: (value ?? []) as string[] });
     }
     if (!direct.size) return { records: new Map<string, Set<string>>(), values: new Map<string, Record<string, CellValue>>() };
     const states = new Map(direct);
-    const fields = new Map(table.fields.map(field => [field.id, field]));
     const readIds = this.db.prepare('SELECT target_record_id FROM relation_edges WHERE source_record_id = ? AND field_id = ? ORDER BY position');
     for (const entry of direct.values()) {
       const inverseId = entry.field.relation!.inverseFieldId;
@@ -180,18 +180,22 @@ export class Relations {
   }
 
   deleteRecords(table: Table, ids: string[]) {
+    const paired = table.fields.filter(field => field.relation?.inverseFieldId);
+    const affected = this.write(table.fields, ids.map(id => ({ id, values: Object.fromEntries(paired.map(field => [field.id, null])) })), new Set(ids));
+    this.removeRecords(ids);
+    return affected;
+  }
+
+  removeRecords(ids: string[]): void {
     const selected = JSON.stringify(ids);
     if (this.db.prepare(`SELECT 1 FROM fields f, json_each(f.definition_json, '$.defaultValue') choice
       WHERE json_extract(f.definition_json, '$.type') = 'relation'
       AND choice.value IN (SELECT value FROM json_each(?)) LIMIT 1`).get(selected)) {
       throw new ServiceError('RELATION_DEPENDENCY', 'Remove linked-field defaults before deleting these records.', 409);
     }
-    const paired = table.fields.filter(field => field.relation?.inverseFieldId);
-    const affected = this.write(table, ids.map(id => ({ id, values: Object.fromEntries(paired.map(field => [field.id, null])) })), new Set(ids));
     this.db.prepare('DELETE FROM relation_edges WHERE source_record_id IN (SELECT value FROM json_each(?))').run(selected);
     if (this.db.prepare('SELECT 1 FROM relation_edges WHERE target_record_id IN (SELECT value FROM json_each(?)) LIMIT 1').get(selected)) {
       throw new ServiceError('RELATION_DEPENDENCY', 'Unlink these records from other records before deleting them.', 409);
     }
-    return affected;
   }
 }

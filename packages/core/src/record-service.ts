@@ -12,7 +12,7 @@ import { prepareCsvImport, type CheckedCsvImport } from './csv.js';
 import { parseSummary, type CheckedSummary } from './record-summary.js';
 import type { RecordSummary, RecordHistoryQuery, RecordHistoryPage, RecordChangeDetail, RecordRestore, RecordTrashPage } from '../../contracts/src/index.js';
 import { historyId, parseHistoryQuery, parseRecordRestore } from './record-history.js';
-import type { RecordBatchPage, RecordBatchChanges } from '../../contracts/src/index.js';
+import type { RecordBatchPage, RecordBatchChanges, RecordBatchUndoResult } from '../../contracts/src/index.js';
 import type { CsvImportResult, CsvPreview } from '../../contracts/src/index.js';
 export { ServiceError } from './errors.js';
 
@@ -31,6 +31,7 @@ export interface RecordStore {
   recordHistory(tableId: string, recordId: string, query: RecordHistoryQuery): RecordHistoryPage;
   recordBatches(tableId: string, query: RecordHistoryQuery): RecordBatchPage;
   recordBatchChanges(tableId: string, batchId: string, query: RecordHistoryQuery): RecordBatchChanges;
+  undoRecordBatch(tableId: string, batchId: string): RecordBatchUndoResult;
   recordChange(tableId: string, recordId: string, changeId: number): RecordChangeDetail;
   restoreRecord(update: RecordUpdate, tableId: string, schemaVersion: number, source: RecordRestore): RowRecord;
   recordTrash(table: Table, query: RecordHistoryQuery): RecordTrashPage;
@@ -363,6 +364,11 @@ export class RecordService {
   recordBatchChanges(id: string, batchId: string, input: unknown): RecordBatchChanges {
     this.store.getTable(id);
     return this.store.recordBatchChanges(id, batchId, parseHistoryQuery(input));
+  }
+
+  undoRecordBatch(id: string, batchId: string): RecordBatchUndoResult {
+    this.store.getTable(id);
+    return this.store.undoRecordBatch(id, batchId);
   }
 
   restoreDeletedRecords(id: string, input: unknown): BatchResult {

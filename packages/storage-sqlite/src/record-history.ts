@@ -2,16 +2,17 @@ import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { CellValue, RecordChange, RecordChangeDetail, RecordHistoryPage, RecordHistoryQuery, RecordRestore, RowRecord, RecordTrashPage, Table } from '../../contracts/src/index.js';
 import { ServiceError } from '../../core/src/errors.js';
-import type { RecordBatch, RecordBatchPage, RecordBatchChanges } from '../../contracts/src/index.js';
+import { maxBatchRecords, type RecordBatch, type RecordBatchPage, type RecordBatchChanges, type RecordBatchChange } from '../../contracts/src/index.js';
 
-export interface HistoryContext { recordWrite?: boolean; restore?: Pick<RecordRestore, 'changeId' | 'snapshot'> }
+export interface HistoryContext { recordWrite?: boolean; restore?: Pick<RecordRestore, 'changeId' | 'snapshot'>; undoOf?: string }
 
 const metadata = 'id, batch_id, record_id, changed_at, before_version, after_version, restored_from, restored_snapshot';
 const batchMetadata = 'b.*, (SELECT COUNT(*) FROM record_changes c WHERE c.batch_id = b.id) AS remaining_count';
 
 function batch(row: Record<string, unknown>): RecordBatch {
   return { sequence: row['sequence'] as number, id: row['id'] as string, changedAt: row['changed_at'] as string,
-    recordCount: row['record_count'] as number, remainingCount: row['remaining_count'] as number, recordWrite: row['record_write'] === 1 };
+    recordCount: row['record_count'] as number, remainingCount: row['remaining_count'] as number, recordWrite: row['record_write'] === 1,
+    ...(row['undo_of'] === null ? {} : { undoOf: row['undo_of'] as string }) };
 }
 
 function change(row: Record<string, unknown>): RecordChange {
@@ -31,7 +32,7 @@ function snapshot(row: Record<string, unknown>, side: 'before' | 'after'): RowRe
 export class RecordHistory {
   constructor(private readonly db: DatabaseSync) {
     // Connection-local context records every service write, including indirect formula and relationship changes.
-    db.exec(`CREATE TEMP TABLE record_change_context (batch_id TEXT NOT NULL, changed_at TEXT NOT NULL, restored_from INTEGER, restored_snapshot TEXT, record_write INTEGER NOT NULL);`);
+    db.exec(`CREATE TEMP TABLE record_change_context (batch_id TEXT NOT NULL, changed_at TEXT NOT NULL, restored_from INTEGER, restored_snapshot TEXT, record_write INTEGER NOT NULL, undo_of TEXT);`);
     for (const event of ['INSERT', 'UPDATE', 'DELETE']) {
       const previous = event === 'INSERT' ? 'NULL, NULL, NULL' : 'OLD.version, OLD.values_json, OLD.formula_errors_json';
       const next = event === 'DELETE' ? 'NULL, NULL, NULL' : 'NEW.version, NEW.values_json, NEW.formula_errors_json';
@@ -49,13 +50,13 @@ export class RecordHistory {
   }
 
   begin(changedAt: string, context: HistoryContext = {}): void {
-    this.db.prepare('INSERT INTO record_change_context VALUES (?, ?, ?, ?, ?)')
-      .run(randomUUID(), changedAt, context.restore?.changeId ?? null, context.restore?.snapshot ?? null, context.recordWrite ? 1 : 0);
+    this.db.prepare('INSERT INTO record_change_context VALUES (?, ?, ?, ?, ?, ?)')
+      .run(randomUUID(), changedAt, context.restore?.changeId ?? null, context.restore?.snapshot ?? null, context.recordWrite ? 1 : 0, context.undoOf ?? null);
   }
 
   end(): void {
-    this.db.exec(`INSERT INTO record_batches (id, changed_at, record_count, record_write)
-      SELECT context.batch_id, context.changed_at, COUNT(c.id), context.record_write
+    this.db.exec(`INSERT INTO record_batches (id, changed_at, record_count, record_write, undo_of)
+      SELECT context.batch_id, context.changed_at, COUNT(c.id), context.record_write, context.undo_of
       FROM record_change_context context JOIN record_changes c ON c.batch_id = context.batch_id
       GROUP BY context.batch_id;
       INSERT INTO record_batch_tables (table_id, batch_id, sequence)
@@ -85,6 +86,24 @@ export class RecordHistory {
     const changes = rows.slice(0, limit).map(row => ({ ...change(row), tableId: row['table_id'] as string }));
     return { batch: batch(row), changes, ...(rows.length > limit ? { nextBefore: changes.at(-1)!.id } : {}) };
   }
+
+  undoChanges(tableId: string, batchId: string): RecordBatchChange[] {
+    const { batch } = this.batchChanges(tableId, batchId, { limit: 1 });
+    if (!batch.recordWrite) throw new ServiceError('INVALID_HISTORY', 'This batch contains schema changes. Restore individual record values using the current schema instead.');
+    if (batch.recordCount !== batch.remainingCount) throw new ServiceError('HISTORY_INCOMPLETE', 'Part of this batch was removed with a table. It cannot be undone as a complete operation.', 409);
+    if (batch.recordCount > maxBatchRecords) throw new ServiceError('INVALID_BATCH', `Undo at most ${maxBatchRecords} affected records, including linked and calculated changes.`);
+    return this.db.prepare(`SELECT ${metadata}, table_id FROM record_changes WHERE batch_id = ? ORDER BY id`).all(batchId)
+      .map(row => ({ ...change(row), tableId: row['table_id'] as string }));
+  }
+
+  beforeValues(changeId: number, fieldIds: string[]): Record<string, CellValue> {
+    const row = this.db.prepare(`SELECT json_group_object(field.value, json(c.before_values_json -> ('$.' || json_quote(field.value)))) AS values_json
+      FROM record_changes c, json_each(?) field WHERE c.id = ? AND json_type(c.before_values_json, '$.' || json_quote(field.value)) IS NOT NULL`)
+      .get(JSON.stringify(fieldIds), changeId)!;
+    return JSON.parse(row['values_json'] as string) as Record<string, CellValue>;
+  }
+
+  currentBatchId(): string { return this.db.prepare('SELECT batch_id FROM record_change_context').get()!['batch_id'] as string; }
 
   list(tableId: string, recordId: string, query: RecordHistoryQuery): RecordHistoryPage {
     if (!this.db.prepare('SELECT 1 FROM records WHERE table_id = ? AND id = ?').get(tableId, recordId)

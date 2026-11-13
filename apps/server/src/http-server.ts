@@ -61,6 +61,12 @@ export async function startServer({ service, token, ...options }: ServerOptions)
       throw new ServiceError('UNAUTHORIZED', 'A valid access token is required.', 401);
     }
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+    const undo = url.pathname.match(/^\/tables\/([^/]+)\/batches\/([^/]+)\/undo$/);
+    if (undo && request.method === 'POST') {
+      await readJson(request);
+      send(response, 200, service.undoRecordBatch(undo[1]!, undo[2]!));
+      return;
+    }
     const batches = url.pathname.match(/^\/tables\/([^/]+)\/batches\/([^/]+)$/);
     if (batches && request.method === 'POST') {
       const input = await readJson(request);
