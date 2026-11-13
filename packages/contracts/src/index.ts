@@ -249,6 +249,7 @@ export interface SortRule {
 
 export interface RecordQuery {
   recordIds?: string[];
+  groupBy?: string;
   offset?: number;
   limit?: number;
   filter?: FilterGroup;
@@ -297,6 +298,27 @@ export interface RecordSummary {
   revision: number;
   schemaVersion: number;
   dateContext?: string;
+}
+
+export const maxGroupCollapseKeys = 100_000;
+export interface GroupCollapse { defaultCollapsed: boolean; exceptions: ScalarValue[] }
+export interface GroupQuery extends Pick<RecordQuery, 'groupBy' | 'filter' | 'search' | 'offset' | 'limit' | 'expectedRevision' | 'expectedDateContext'> {
+  viewId?: string;
+  expectedViewVersion?: number;
+  collapse?: GroupCollapse;
+}
+export interface GroupSegment { key: ScalarValue; label: string; count: number; recordOffset: number; rowStart: number; collapsed: boolean }
+export interface GroupLayout {
+  groups: GroupSegment[];
+  totalRecords: number;
+  totalGroups: number;
+  totalRows: number;
+  offset: number;
+  revision: number;
+  schemaVersion: number;
+  dateContext?: string;
+  viewId?: string;
+  viewVersion?: number;
 }
 
 export interface ViewColumn {

@@ -17,6 +17,7 @@ import { startServer } from '../../server/src/http-server.js';
 import type { Attachment } from '../../../packages/contracts/src/index.js';
 import type { CalculationRefresh, CalculationStatus, FormulaPreview } from '../../../packages/contracts/src/index.js';
 import { createWorkspaceClient } from '../../../packages/client/src/index.js';
+import type { GroupLayout } from '../../../packages/contracts/src/index.js';
 
 const runFile = promisify(execFile);
 const entry = resolve('apps/mcp/dist/rowweave-mcp.js');
@@ -63,6 +64,36 @@ async function setup(t: Context, clock?: () => Date) {
   const environment = { ROWWEAVE_URL: server.url, ROWWEAVE_TOKEN: token };
   return { service, server, token, environment };
 }
+
+test('SDK, MCP and CLI share bounded group positions and matching scalar record queries', async t => {
+  const { service, server, token, environment } = await setup(t), { json, call } = await connect(t, environment);
+  const api = createWorkspaceClient({ url: server.url, token });
+  const table = await api.createTable({ name: 'Group windows' });
+  await api.createRecords(table.id, Array.from({ length: 607 }, (_, index) => ({
+    values: { [table.primaryFieldId]: 'Group ' + String(606 - index).padStart(3, '0') },
+  })));
+  const input = { groupBy: table.primaryFieldId, offset: 600, limit: 5,
+    collapse: { defaultCollapsed: true, exceptions: ['Group 601'] } };
+  const expected = await api.queryGroups(table.id, input);
+  assert.equal(expected.totalGroups, 608); assert.equal(expected.totalRows, 609);
+  assert.deepEqual(expected.groups.map(group => group.key), ['Group 600', 'Group 601', 'Group 602', 'Group 603']);
+  assert.deepEqual(await json<GroupLayout>('records_groups', { tableId: table.id, input }), expected);
+  const cli = await runFile(process.execPath, [resolve('apps/cli/dist/rowweave.js'), 'records', 'groups', table.id, '--json', JSON.stringify(input)],
+    { env: { ...process.env, ...environment } });
+  assert.deepEqual(JSON.parse(cli.stdout), expected);
+  const query = { groupBy: table.primaryFieldId, offset: expected.groups[1]!.recordOffset, limit: 1, expectedRevision: expected.revision };
+  const page = await api.queryRecords(table.id, query);
+  assert.equal(page.records[0]!.values[table.primaryFieldId], 'Group 601');
+  assert.deepEqual(await json<QueryPage>('records_query', { tableId: table.id, query }), page);
+  const queryCli = await runFile(process.execPath, [resolve('apps/cli/dist/rowweave.js'), 'records', 'query', table.id, '--json', JSON.stringify(query)],
+    { env: { ...process.env, ...environment } });
+  assert.deepEqual(JSON.parse(queryCli.stdout), page);
+  const invalid = await call('records_groups', { tableId: table.id, input: { ...input, collapse: { defaultCollapsed: false, exceptions: [null, null] } } });
+  assert.equal(invalid.isError, true); assert.equal(JSON.parse(text(invalid)).error.code, 'INVALID_QUERY');
+  service.createRecords(table.id, [{ values: {} }]);
+  const stale = await call('records_groups', { tableId: table.id, input: { ...input, expectedRevision: expected.revision } });
+  assert.equal(stale.isError, true); assert.equal(JSON.parse(text(stale)).error.code, 'DATA_CHANGED');
+});
 
 test('SDK, MCP and CLI share explicit clock refresh without automatic write retries or history growth', async t => {
   let now = new Date('2024-02-29T23:59:00Z');
@@ -431,12 +462,13 @@ test('MCP discovers all operations and runs versioned schema, records, views and
   const { service, environment } = await setup(t);
   const { client, call, json, used, stderr } = await connect(t, environment);
   const tools = (await client.listTools()).tools;
-  assert.equal(tools.length, 42);
+  assert.equal(tools.length, 43);
   assert.equal(tools.find(tool => tool.name === 'workspace_state')!.annotations!.readOnlyHint, true);
   assert.deepEqual(await json('workspace_state'), service.workspaceState({}));
   assert.equal(tools.find(tool => tool.name === 'formulas_preview')!.annotations!.readOnlyHint, true);
   assert.ok(tools.every(tool => tool.inputSchema.type === 'object' && tool.inputSchema.additionalProperties === false));
   assert.equal(tools.find(tool => tool.name === 'records_query')!.annotations!.readOnlyHint, true);
+  assert.equal(tools.find(tool => tool.name === 'records_groups')!.annotations!.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === 'records_update')!.annotations!.destructiveHint, true);
   assert.equal(tools.find(tool => tool.name === 'records_create')!.annotations!.idempotentHint, false);
   assert.equal((await client.listResourceTemplates()).resourceTemplates.length, 2);
@@ -490,6 +522,11 @@ test('MCP discovers all operations and runs versioned schema, records, views and
     tableId: table.id, input: { measures: [{ fieldId: budget, operation: 'sum' }] },
   });
   assert.deepEqual(summary.totals, { count: 2, values: [19] });
+  const groups = await json<{ totalRecords: number; groups: Array<{ key: number | null; recordOffset: number }> }>('records_groups', {
+    tableId: table.id, input: { groupBy: budget, limit: 5 },
+  });
+  assert.equal(groups.totalRecords, 2);
+  assert.deepEqual(groups.groups.map(group => [group.key, group.recordOffset]), [[7, 0], [12, 1], [null, 2]]);
   await json('records_update', { tableId: table.id, records: [{ id: created[0]!.id, expectedVersion: 1, values: { [budget]: 15 } }] });
   const historyArgs = { tableId: table.id, recordId: created[0]!.id };
   const history = await json<RecordHistoryPage>('records_history', { ...historyArgs, query: { limit: 1 } });

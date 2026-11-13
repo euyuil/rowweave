@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { maxRelativeDays, relativeDatePeriods } from '../../../packages/contracts/src/index.js';
+import { maxRelativeDays, relativeDatePeriods, maxGroupCollapseKeys } from '../../../packages/contracts/src/index.js';
 
 const id = z.string().describe('Stable ID from the workspace schema or a query result; never a display name or position.');
 const version = z.number().int().describe('Version from the most recent read of this object.');
@@ -54,7 +54,13 @@ const page = {
   fields: z.array(id).exactOptional(), expectedRevision: version.describe('Reuse the first page revision for consistent continuation pages.').exactOptional(),
   expectedDateContext: z.string().regex(/^[a-f0-9]{64}$/).describe('Reuse dateContext from the first page or summary; DATA_CHANGED requires refreshing after the calendar period changes.').exactOptional(),
 };
-export const recordQuery = z.strictObject({ ...page, ...query, recordIds: z.array(id).exactOptional() });
+export const recordQuery = z.strictObject({ ...page, ...query, recordIds: z.array(id).exactOptional(), groupBy: id.exactOptional() });
+export const recordGroups = z.strictObject({
+  viewId: id.exactOptional(), expectedViewVersion: version.exactOptional(), groupBy: id.exactOptional(),
+  filter: filter.exactOptional(), search: z.string().exactOptional(),
+  offset: page.offset, limit: page.limit, expectedRevision: page.expectedRevision, expectedDateContext: page.expectedDateContext,
+  collapse: z.strictObject({ defaultCollapsed: z.boolean(), exceptions: z.array(scalar).max(maxGroupCollapseKeys) }).exactOptional(),
+});
 export const recordSummary = z.strictObject({
   viewId: id.exactOptional(), expectedViewVersion: version.exactOptional(),
   filter: filter.exactOptional(), search: z.string().exactOptional(), groupBy: id.exactOptional(),

@@ -18,6 +18,8 @@ import { historyId, parseHistoryQuery, parseRecordRestore } from './record-histo
 import type { RecordBatchPage, RecordBatchChanges, RecordBatchUndoResult } from '../../contracts/src/index.js';
 import type { CsvImportResult, CsvPreview } from '../../contracts/src/index.js';
 import type { WorkspaceState, WorkspaceStateRequest } from '../../contracts/src/index.js';
+import type { GroupCollapse, GroupLayout } from '../../contracts/src/index.js';
+import { parseGroupCollapse } from './record-groups.js';
 export { ServiceError } from './errors.js';
 
 export interface RecordStore {
@@ -52,6 +54,7 @@ export interface RecordStore {
   applyConversion(tableId: string, version: number, field: Field, convert: (value: CellValue) => CellValue): Table;
   queryRecords(table: Table, query: CheckedQuery, view?: GridView): QueryPage;
   summarizeRecords(table: Table, query: CheckedQuery, summary: CheckedSummary, view?: GridView): RecordSummary;
+  queryGroups(table: Table, query: CheckedQuery, collapse: GroupCollapse, view?: GridView): GroupLayout;
   listViews(tableId: string): GridView[];
   getView(tableId: string, viewId: string): GridView;
   saveView(table: Table, view: GridView, expectedVersion?: number): GridView;
@@ -269,6 +272,28 @@ export class RecordService {
       search: item['search'] === undefined ? view?.query.search : item['search'],
       offset: item['offset'], limit: item['limit'], expectedRevision: item['expectedRevision'], expectedDateContext: item['expectedDateContext'] });
     return this.store.summarizeRecords(table, query, parseSummary(table, item), view);
+  }
+
+  queryGroups(id: string, input: unknown): GroupLayout {
+    const table = this.store.getTable(id);
+    const item = schemaObject(input);
+    if (item['viewId'] !== undefined && (typeof item['viewId'] !== 'string' || !item['viewId'])) {
+      throw new ServiceError('INVALID_QUERY', 'viewId must be a non-empty string.');
+    }
+    const view = item['viewId'] === undefined ? undefined : this.store.getView(id, item['viewId'] as string);
+    if (item['expectedViewVersion'] !== undefined && (!view || schemaVersion(item['expectedViewVersion']) !== view.version)) {
+      throw new ServiceError('VIEW_CONFLICT', 'The view changed. Refresh before reading groups.', 409);
+    }
+    if (view && (view.type !== 'grid' || !view.groupBy || item['filter'] !== undefined ||
+        (item['groupBy'] !== undefined && item['groupBy'] !== view.groupBy))) {
+      throw new ServiceError('INVALID_QUERY', 'Use a grouped grid and its saved grouping and filter.');
+    }
+    const query = parseQuery(table, { groupBy: view?.groupBy ?? item['groupBy'],
+      filter: view?.query.filter ?? item['filter'], search: item['search'] === undefined ? view?.query.search : item['search'],
+      offset: item['offset'], limit: item['limit'], expectedRevision: item['expectedRevision'], expectedDateContext: item['expectedDateContext'] });
+    if (!query.groupBy) throw new ServiceError('INVALID_QUERY', 'Choose a grouping field or a saved grouped grid.');
+    const collapse = parseGroupCollapse(table.fields.find(field => field.id === query.groupBy)!, item['collapse']);
+    return this.store.queryGroups(table, query, collapse, view);
   }
 
   importCsv(id: string, input: unknown): CsvImportResult {

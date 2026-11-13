@@ -11,6 +11,12 @@ function sqlLiteral(value: string | number | null): string {
   return value.includes('\0') ? `CAST(X'${Buffer.from(value).toString('hex')}' AS TEXT)` : `'${value.replaceAll("'", "''")}'`;
 }
 
+export function groupOrder(field: Field, value: string): string[] {
+  return [`(${value} IS NULL) ASC`, field.type === 'singleSelect' && field.options!.length
+    ? `(CASE ${value} ${field.options!.map((option, index) => `WHEN ${sqlLiteral(option.id)} THEN ${index}`).join(' ')} END) ASC`
+    : `${value} ASC`];
+}
+
 export function querySql(table: Pick<Table, 'id' | 'fields'>, query: CheckedQuery, targets: Map<string, Table>,
   options: { forIndex?: boolean; dateRanges?: ReadonlyMap<FieldFilter, DateRange>; materializeLookups?: boolean } = {}) {
   const { forIndex = false, dateRanges = new Map(), materializeLookups = false } = options;
@@ -123,11 +129,7 @@ export function querySql(table: Pick<Table, 'id' | 'fields'>, query: CheckedQuer
   const order: string[] = [];
   if (query.groupBy) {
     const field = fields.get(query.groupBy)!;
-    const value = raw(field);
-    order.push(`(${value} IS NULL) ASC`);
-    order.push(field.type === 'singleSelect' && field.options!.length
-      ? `(CASE ${value} ${field.options!.map((option, index) => `WHEN ${sqlLiteral(option.id)} THEN ${index}`).join(' ')} END) ASC`
-      : `${value} ASC`);
+    order.push(...groupOrder(field, raw(field)));
   }
   order.push(...(query.sort ?? []).filter(sort => sort.fieldId !== query.groupBy).flatMap(sort => {
     const expression = display(fields.get(sort.fieldId)!, forIndex ? '' : 'r', true);

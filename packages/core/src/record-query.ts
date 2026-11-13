@@ -3,7 +3,7 @@ import { maxPageSize, maxTextLength, valueField, isLookupSummary, relativeDatePe
 import { ServiceError } from './errors.js';
 import { validateValue } from './field-values.js';
 
-export type CheckedQuery = RecordQuery & { offset: number; limit: number; groupBy?: string };
+export type CheckedQuery = RecordQuery & { offset: number; limit: number };
 
 export function queryValueField(field: Field): Field {
   return valueField(field.type === 'lookup' && !isLookupSummary(field) ? { ...field.lookupResult!, id: field.id, name: field.name, required: false } : field);
@@ -27,6 +27,13 @@ export function parseQuery(table: Table, input: unknown): CheckedQuery {
     return invalid(`Use a non-negative offset and a limit between 1 and ${maxPageSize}.`);
   }
   const query: CheckedQuery = { offset: offset as number, limit: limit as number };
+  if (source['groupBy'] !== undefined) {
+    const selected = field(source['groupBy']);
+    if (['multiSelect', 'relation', 'lookup', 'attachment'].includes(valueField(selected).type)) {
+      return invalid('Group by a text, number, checkbox, date, timestamp or single-select field.');
+    }
+    query.groupBy = selected.id;
+  }
   if (source['recordIds'] !== undefined) {
     const ids = source['recordIds'];
     if (!Array.isArray(ids) || ids.length > 2_000 || new Set(ids).size !== ids.length ||
