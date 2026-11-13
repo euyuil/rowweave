@@ -64,8 +64,8 @@ Records have `{ id, version, values }`, with values keyed by field ID. Relation 
 | `POST /tables/:table/batches/:batch` | `{ limit?, before? }` | `RecordBatchChanges` / `recordBatchChanges(tableId, batchId, query)` |
 | `POST /tables/:table/batches/:batch/undo` | `{}` | `RecordBatchUndoResult` / `undoRecordBatch(tableId, batchId)` |
 | `GET /tables/:table/records?offset=0&limit=100` | None | `{ offset, records }` in insertion order; prefer the query endpoint for revision-aware pagination. |
-| `POST /tables/:table/records` | `[{ values: { fieldId: value } }]` | `201 { records }` / `createRecords(id, inputs)` |
-| `PATCH /tables/:table/records` | `[{ id, expectedVersion, values: { fieldId: value } }]` | `{ records }` with new versions / `updateRecords(id, updates)` |
+| `POST /tables/:table/records` | `[{ values: { fieldId: value } }]` | `201 { records, batchId }` / `createRecords(id, inputs)` |
+| `PATCH /tables/:table/records` | `[{ id, expectedVersion, values: { fieldId: value } }]` | `{ records, batchId }` with new versions / `updateRecords(id, updates)` |
 | `DELETE /tables/:table/records` | `[{ id, expectedVersion }]` | `{ deleted: recordIds }` / `deleteRecords(id, inputs)` |
 | `POST /tables/:table/query` | RecordQuery below | QueryPage / `queryRecords(id, query, signal?)` |
 | `POST /tables/:table/summary` | SummaryRequest below | RecordSummary / `summarizeRecords(id, input, signal?)` |

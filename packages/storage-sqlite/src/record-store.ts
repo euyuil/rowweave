@@ -563,7 +563,7 @@ export class SqliteRecordStore implements RecordStore {
     const linked = this.relations.write(table.fields, records);
     for (const record of records) if (linked.values.has(record.id)) record.values = linked.values.get(record.id)!;
     const computed = this.finishRecordWrite(table.id, records.map(record => record.id), linked);
-    return { records: this.lookups.hydrate(table, this.relations.hydrate(table, records.map(record => computed.has(record.id) ? this.readRecord(table.id, record.id) : record))) };
+    return { batchId: this.history.currentBatchId(), records: this.lookups.hydrate(table, this.relations.hydrate(table, records.map(record => computed.has(record.id) ? this.readRecord(table.id, record.id) : record))) };
   }
 
   recordTrash(table: Table, query: RecordHistoryQuery): RecordTrashPage {
@@ -698,7 +698,7 @@ export class SqliteRecordStore implements RecordStore {
     const linked = this.relations.write(table.fields, updates);
     for (const record of records) if (linked.values.has(record.id)) record.values = linked.values.get(record.id)!;
     const computed = this.finishRecordWrite(id, records.map(record => record.id), linked);
-    return { records: this.lookups.hydrate(table, this.relations.hydrate(table, records.map(record => computed.has(record.id) ? this.readRecord(id, record.id) : record))) };
+    return { batchId: this.history.currentBatchId(), records: this.lookups.hydrate(table, this.relations.hydrate(table, records.map(record => computed.has(record.id) ? this.readRecord(id, record.id) : record))) };
   }
 
   close(): void {

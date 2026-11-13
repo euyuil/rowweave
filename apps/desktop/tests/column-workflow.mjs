@@ -59,7 +59,9 @@ export async function verifyColumnWorkflow(page) {
   assert.deepEqual((await readView()).columns.map(column => column.fieldId), [score.id, name.id, notes.id]);
   const bounds = await page.locator('canvas').first().boundingBox();
   await page.mouse.click(bounds.x + 100, bounds.y + 58);
+  await page.waitForFunction(() => document.querySelector('canvas')?.contains(document.activeElement));
   await page.keyboard.press('Control+c');
+  await page.waitForFunction(async () => await navigator.clipboard.readText() === '1');
   assert.equal(await page.evaluate(() => navigator.clipboard.readText()), '1');
   await page.keyboard.press('ArrowRight');
   await page.keyboard.press('Enter');

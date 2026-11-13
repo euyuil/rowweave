@@ -74,7 +74,7 @@ Select fields have up to 200 `options`, each with `name`, optional `color` (`#RR
 
 Writable fields accept `required` and `defaultValue`. Defaults apply only when a new record omits that field; explicit null does not apply the default. Passing `defaultValue: null` clears a configured default. Required text must not be blank, required multi-select must contain an option, and required fields reject null. To add a required field to a populated table, add it as optional, populate it, then enable `required`; enabling it checks all existing values transactionally.
 
-- `POST /tables/:tableId/records`: array of `{ values }` objects; returns `{ records }` with generated IDs and version 1. Creation is atomic and uses the same 2,000-record/20,000-cell limits (including defaulted cells).
+- `POST /tables/:tableId/records`: array of `{ values }` objects; returns `{ records, batchId }` with generated IDs and version 1. Creation is atomic and uses the same 2,000-record/20,000-cell limits (including defaulted cells). Updates and trash restoration also return their own transaction receipt ID for saved-operation inspection and undo.
 - `GET /tables/:tableId/records/:recordId`: fetch one record by stable ID.
 - `DELETE /tables/:tableId/records`: array of `{ id, expectedVersion }` objects; returns `{ deleted: [id, ...] }`. A missing/stale record rolls back the whole batch.
 

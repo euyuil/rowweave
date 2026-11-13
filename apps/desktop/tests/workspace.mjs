@@ -25,6 +25,7 @@ import { verifyNavigationWorkflow } from './navigation-workflow.mjs';
 import { verifyRecordPanelWorkflow } from './record-panel-workflow.mjs';
 import { verifyHistoryWorkflow } from './history-workflow.mjs';
 import { verifyTrashWorkflow } from './trash-workflow.mjs';
+import { verifyBatchHistoryWorkflow } from './batch-history-workflow.mjs';
 import { verifyFieldPanelWorkflow } from './field-panel-workflow.mjs';
 
 const dataDirectory = await mkdtemp(join(tmpdir(), 'rowweave-workspace-'));
@@ -215,6 +216,7 @@ try {
   await page.getByText('1 record · 1 field', { exact: true }).waitFor();
   const bounds = await page.locator('canvas').first().boundingBox();
   await page.mouse.click(bounds.x + 100, bounds.y + 58);
+  await page.waitForFunction(() => document.querySelector('canvas')?.contains(document.activeElement));
   await page.keyboard.press('Enter');
   await page.getByRole('textbox', { name: 'Cell value' }).fill('Keep this draft');
   await page.keyboard.press('Enter');
@@ -253,6 +255,7 @@ try {
   await verifyRecordPanelWorkflow(page, application);
   await verifyHistoryWorkflow(page, application);
   await verifyTrashWorkflow(page, application);
+  await verifyBatchHistoryWorkflow(page, application);
   await verifyViewWorkflow(page);
   await verifyNavigationWorkflow(page, application);
   await verifyQueryWorkflow(page, application);
