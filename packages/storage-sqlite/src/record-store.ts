@@ -69,7 +69,7 @@ export class SqliteRecordStore implements RecordStore {
     this.relations = new Relations(this.db);
     this.lookups = new Lookups(this.db);
     try {
-      this.db.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;');
+      this.db.exec('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
       const fresh = migrate(this.db);
       this.history = new RecordHistory(this.db);
       if (fresh && seed) this.seed(seed);
