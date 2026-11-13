@@ -111,6 +111,7 @@ export async function verifyQueryWorkflow(page, application) {
   await page.waitForFunction(() => document.querySelector('.grid-host')?.getAttribute('aria-busy') === 'false');
   const grid = await page.locator('canvas').first().boundingBox();
   await page.mouse.click(grid.x + 100, grid.y + 58);
+  await page.waitForFunction(() => document.querySelector('canvas')?.contains(document.activeElement));
   await page.keyboard.press('Enter');
   await page.getByRole('textbox', { name: 'Cell value', exact: true }).fill('Draft A');
   await page.keyboard.press('Enter');
