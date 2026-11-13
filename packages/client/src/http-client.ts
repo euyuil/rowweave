@@ -71,7 +71,7 @@ export function createWorkspaceClient(connection: Connection, request: typeof fe
     createTable: (input: TableCreate) => write<Table>('/tables', 'POST', input),
     updateTable: (id: string, input: TableUpdate) => write<Table>(root(id), 'PATCH', input),
     deleteTable: (id: string, expectedVersion: number) => write<{ deleted: string }>(root(id), 'DELETE', { expectedVersion }),
-    refreshCalculations: () => call<CalculationRefresh>('/calculations/refresh', { method: 'POST', body: '{}' }, 120_000),
+    refreshCalculations: (signal?: AbortSignal) => call<CalculationRefresh>('/calculations/refresh', { method: 'POST', body: '{}', ...(signal ? { signal } : {}) }, 120_000),
     calculationStatus: (signal?: AbortSignal) => call<CalculationStatus>('/calculations/status', signal ? { signal } : {}),
     previewFormula: (id: string, input: FormulaPreviewRequest) => write<FormulaPreview>(`${root(id)}/formulas/preview`, 'POST', input),
     createField: (id: string, input: FieldCreate) => write<Table>(`${root(id)}/fields`, 'POST', input),
