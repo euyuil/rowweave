@@ -67,6 +67,7 @@ export async function verifyReciprocalWorkflow(page, application) {
   await page.getByRole('heading', { name: 'Two-way projects', exact: true }).waitFor();
   await page.getByText('1 record · 3 fields', { exact: true }).waitFor();
   await ready();
+  await page.locator('canvas').first().waitFor({ state: 'visible' });
   const canvas = await page.locator('canvas').first().boundingBox();
   await page.mouse.click(canvas.x + 100, canvas.y + 58);
   await page.getByRole('button', { name: 'Open record', exact: true }).click();

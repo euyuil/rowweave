@@ -100,6 +100,8 @@ Deleting referenced records returns `RELATION_DEPENDENCY` until external links a
 
 The [formula guide](formulas.md) defines the language, UI workflow and API contract. The core parses bounded expressions and orders dependencies; SQLite materializes results/errors transactionally on every supported write path. Schema changes recalculate records without loading them into the renderer. Database format 10 adds an empty error map to existing records without changing their versions or saved views.
 
+Numeric lookup summaries are also formula inputs. The storage dependency plan orders formulas and lookups across tables, rejects cycles, and uses indexed relation edges to recalculate affected records in batches inside the write transaction. Local-only formulas retain their ordinary calculation path. Lookup inputs remain derived; only formula results and errors are persisted. A changed dependent result advances its record version once per record mutation and invalidates affected query revisions. SQLite format 13 marks this write behavior so older applications cannot leave connected results stale; migration preserves existing data and versions.
+
 ### Linked numeric summaries
 
 Lookup fields can return count/sum/average/min/max through the existing relationship. See [linked summaries](linked-summaries.md) for configuration, null/error semantics and API usage. The SQLite lookup expression is shared by hydration, filters, sorting, search and grouped summary queries. Format 11 preserves existing array lookups and blocks incompatible older applications.

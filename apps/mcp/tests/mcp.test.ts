@@ -84,6 +84,36 @@ test('MCP and CLI create paired fields and update the same relationship from eit
   assert.equal((await call('records_update', { tableId: source.id, records: [{ id: task.id, expectedVersion: 1, values: { [link.id]: [project.id] } }] })).isError, true);
 });
 
+test('MCP formulas over linked summaries stay consistent after CLI target edits', async t => {
+  const { environment, service } = await setup(t);
+  const { json, call } = await connect(t, environment);
+  let items = await json<Table>('tables_create', { name: 'Items' });
+  items = await json<Table>('fields_create', { tableId: items.id, input: { expectedVersion: items.version, name: 'Amount', type: 'number' } });
+  const amount = items.fields[1]!.id;
+  const item = (await json<BatchResult>('records_create', { tableId: items.id, records: [{ values: { [amount]: 30 } }] })).records[0]!;
+  let orders = await json<Table>('tables_create', { name: 'Orders' });
+  orders = await json<Table>('fields_create', { tableId: orders.id, input: { expectedVersion: orders.version, name: 'Items', type: 'relation', relation: { tableId: items.id, multiple: true } } });
+  const link = orders.fields[1]!.id;
+  orders = await json<Table>('fields_create', { tableId: orders.id, input: { expectedVersion: orders.version, name: 'Subtotal', type: 'lookup', lookup: { relationFieldId: link, fieldId: amount, operation: 'sum' } } });
+  const subtotal = orders.fields[2]!.id;
+  orders = await json<Table>('fields_create', { tableId: orders.id, input: { expectedVersion: orders.version, name: 'Total', type: 'formula', formula: { expression: '[' + subtotal + '] * 2', resultType: 'number' } } });
+  const total = orders.fields[3]!.id;
+  const order = (await json<BatchResult>('records_create', { tableId: orders.id, records: [{ values: { [link]: [item.id] } }] })).records[0]!;
+  assert.equal(order.values[total], 60);
+  const directory = await mkdtemp(join(tmpdir(), 'rowweave-linked-formula-cli-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const input = join(directory, 'updates.json');
+  await writeFile(input, JSON.stringify([{ id: item.id, expectedVersion: item.version, values: { [amount]: 40 } }]));
+  await runFile(process.execPath, [resolve('apps/cli/dist/rowweave.js'), 'records', 'update', items.id, '--input', input], { env: { ...process.env, ...environment } });
+  const result = await json<QueryPage>('records_query', { tableId: orders.id, query: { filter: { conjunction: 'and', conditions: [{ fieldId: total, operator: 'eq', value: 80 }] } } });
+  assert.equal(result.total, 1);
+  assert.equal(result.records[0]!.version, 2);
+  assert.equal(service.getRecord(orders.id, order.id).values[total], 80);
+  const stale = await call('records_update', { tableId: orders.id, records: [{ id: order.id, expectedVersion: 1, values: { [link]: [] } }] });
+  assert.equal(stale.isError, true);
+  assert.equal(JSON.parse(text(stale)).error.code, 'VERSION_CONFLICT');
+});
+
 test('MCP creates formulas and returns recalculated values and explicit errors', async t => {
   const { environment } = await setup(t);
   const { json, call } = await connect(t, environment);

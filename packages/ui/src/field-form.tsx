@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ConversionPreview, Field, FieldCreate, FieldType, SelectOption, Table } from '../../contracts/src/index.js';
 import type { WorkspaceApi } from '../../client/src/http-client.js';
 import { cellText } from '../../client/src/cell-values.js';
@@ -6,7 +6,7 @@ import { Dialog, type DialogAnchor } from './dialog.js';
 import { FieldInput } from './field-input.js';
 import { fromFormValue, toFormValue, type FormValue } from './field-input-values.js';
 import { rewriteFormulaReferences } from '../../core/src/formulas.js';
-import { valueField } from '../../contracts/src/index.js';
+import { isLookupSummary, valueField } from '../../contracts/src/index.js';
 
 export const fieldTypeNames: Record<FieldType, string> = {
   text: 'Text', multiline: 'Multiline text', number: 'Number', checkbox: 'Checkbox', date: 'Date',
@@ -46,13 +46,22 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved, ancho
     if (!lookupTarget) return;
     setLookupField(current => lookupFields.some(candidate => candidate.id === current) ? current : lookupFields[0]?.id ?? '');
   }, [lookupTarget, lookupOperation]);
-  const formulaFields = table.fields.filter(candidate => candidate.id !== field?.id && !['relation', 'lookup', 'multiSelect'].includes(candidate.type));
+  const formulaFields = table.fields.filter(candidate => candidate.id !== field?.id && !['relation', 'multiSelect'].includes(candidate.type) &&
+    (candidate.type !== 'lookup' || isLookupSummary(candidate)));
   const referenceName = (candidate: Field) => table.fields.filter(other => other.name === candidate.name).length > 1
     ? `${candidate.name} (${candidate.id})` : candidate.name;
   const [expression, setExpression] = useState(() => field?.formula
     ? rewriteFormulaReferences(field.formula.expression, id => referenceName(table.fields.find(candidate => candidate.id === id)!)) : '');
   const [resultType, setResultType] = useState<NonNullable<Field['formula']>['resultType']>(field?.formula?.resultType ?? 'number');
   const formulaInput = useRef<HTMLTextAreaElement>(null);
+  const insertedPosition = useRef<number>();
+  useLayoutEffect(() => {
+    if (insertedPosition.current === undefined) return;
+    const input = formulaInput.current!;
+    input.focus();
+    input.setSelectionRange(insertedPosition.current, insertedPosition.current);
+    insertedPosition.current = undefined;
+  }, [expression]);
   const relation = table.fields.find(field => field.id === lookupRelation);
   useEffect(() => {
     if (type === 'relation') void api.listTables().then(setTargets).catch(error => setError(error.message));
@@ -139,16 +148,16 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved, ancho
             const input = formulaInput.current!;
             const token = `[${JSON.stringify(referenceName(candidate))}]`;
             const start = input.selectionStart, end = input.selectionEnd;
+            insertedPosition.current = start + token.length;
             setExpression(expression.slice(0, start) + token + expression.slice(end));
             changed();
-            requestAnimationFrame(() => { input.focus(); input.setSelectionRange(start + token.length, start + token.length); });
           }}><option value="" disabled>Choose a field…</option>{formulaFields.map(candidate =>
             <option key={candidate.id} value={candidate.id}>{referenceName(candidate)}</option>)}</select></label>
-          <p className="form-note">Calculated after saving. Field references survive renaming. Empty inputs stay empty unless you use COALESCE.</p>
+          <p className="form-note">Calculated after saving, including changes to linked summary inputs. Field references survive renaming. Empty inputs stay empty unless you use COALESCE.</p>
           <details className="form-note"><summary>Formula help</summary>
             <p>Use + − * / %, comparisons == != &gt; &gt;= &lt; &lt;=, parentheses, numbers, double-quoted text, TRUE, FALSE and NULL.</p>
             <p>Functions: IF, COALESCE, CONCAT, LOWER, UPPER, TRIM, LEN, ROUND, ABS, AND, OR and NOT.</p>
-            <p>Example: IF(["Quantity"] &gt; 0, ROUND(["Quantity"] * ["Price"], 2), 0). Linked and multiple-select values are unavailable in formulas.</p>
+            <p>Example: ROUND(["Subtotal"] * (1 + ["Tax rate"]), 2). Numeric linked summaries can be used as inputs. Record links, arrays of looked-up values and multiple-select values are unavailable in formulas.</p>
           </details>
         </>}
         {type === 'lookup' && <>

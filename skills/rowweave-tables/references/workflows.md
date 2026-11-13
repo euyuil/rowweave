@@ -84,7 +84,9 @@ Read both source and target schemas. Search the target's primary display values 
 }
 ```
 
-Set the link's record value to `["project-record-id"]`, not the project name or a bare string. To display a project field in Tasks, create a `lookup` with `lookup: { "relationFieldId": "project-link-field-id", "fieldId": "target-field-id" }`. The lookup's target must be an ordinary field; chained lookups and linked targets are not supported. Omit lookup values when creating or duplicating records.
+Set the link's record value to `["project-record-id"]`, not the project name or a bare string. To display a project field in Tasks, create a `lookup` with `lookup: { "relationFieldId": "project-link-field-id", "fieldId": "target-field-id" }`. The lookup's target can be an ordinary field or a formula; direct lookup and linked-record targets are not supported. Omit lookup values when creating or duplicating records.
+
+For numeric targets, set `operation` to `count`, `sum`, `average`, `min`, or `max` to return a scalar. Formulas can reference these summary field IDs, but cannot reference array lookups. A downstream lookup can summarize a numeric formula result, provided the field dependency graph stays acyclic. Target edits recalculate connected formulas transactionally; changed results advance source record versions. Read current versions before writing rather than retrying conflicts. Empty sums are null; use `COALESCE` explicitly when zero is intended.
 
 For a new two-way relation, also provide `reverseField: { name, multiple, expectedVersion }` in the field input, using the target table's schema version. Both fields are created together and expose `relation.inverseFieldId`. Updating either side changes opposite record values and versions; read those records again before editing them. Ordinary incoming references still block deletion; reciprocal links are removed atomically when deleting a record, unless required constraints or other dependencies block it. Deleting one field keeps the opposite side as one-way links. Do not invent inverse IDs or retry a failed/uncertain write automatically.
 

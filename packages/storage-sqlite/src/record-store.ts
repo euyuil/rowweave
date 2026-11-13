@@ -17,6 +17,7 @@ import { Lookups } from './lookups.js';
 import { maxCsvBytes, maxCsvCells, maxCsvRows, type CsvPreview } from '../../contracts/src/index.js';
 import { csvCell, csvLimit, csvRecord, csvRecordValues, type CheckedCsvImport } from '../../core/src/csv.js';
 import { compileFormulas } from '../../core/src/formulas.js';
+import { ConnectedCalculations, type ChangedRecords } from './connected-calculations.js';
 
 export interface SeedOptions {
   rows: number;
@@ -180,7 +181,9 @@ export class SqliteRecordStore implements RecordStore {
     const before = this.getTable(table.id);
     this.relations.validateSchema(table, before);
     this.lookups.validateSchema(table, before);
-    const calculate = compileFormulas(table);
+    const calculate = compileFormulas(table, { skipLinked: true });
+    const calculations = new ConnectedCalculations(this.db, table);
+    const versioned = new Set<string>();
     if (validateRecord) {
       for (const row of this.db.prepare('SELECT id, version, values_json, formula_errors_json FROM records WHERE table_id = ?').iterate(table.id)) {
         validateRecord(this.decode(row as unknown as StoredRecord));
@@ -196,14 +199,14 @@ export class SqliteRecordStore implements RecordStore {
     }
     this.insertFields(table);
     if (JSON.stringify(before.fields.filter(field => field.type === 'formula')) !== JSON.stringify(table.fields.filter(field => field.type === 'formula'))) {
-      this.recalculate(table, calculate);
+      for (const id of this.recalculate(table, calculate)) versioned.add(id);
     }
     this.relations.syncFields(table);
     this.lookups.sync(table);
     this.syncViews(table);
     this.db.prepare('UPDATE tables SET name = ?, primary_field_id = ?, version = version + 1 WHERE id = ?')
       .run(table.name, table.primaryFieldId, table.id);
-    this.relations.bumpRevisions([table.id, ...detached]);
+    this.relations.bumpRevisions([table.id, ...detached, ...this.recalculateConnectedTable(table.id, calculations, versioned)]);
     if (syncDependents) this.syncLookupViews(table, true);
     return this.getTable(table.id);
   }
@@ -218,7 +221,7 @@ export class SqliteRecordStore implements RecordStore {
     });
   }
 
-  private scanConversion(table: Table, field: Field, convert: (value: CellValue) => CellValue, apply: boolean): ConversionPreview {
+  private scanConversion(table: Table, field: Field, convert: (value: CellValue) => CellValue, apply: boolean, versioned?: Set<string>): ConversionPreview {
     const preview: ConversionPreview = { tableId: table.id, fieldId: field.id, field, schemaVersion: table.version,
       total: 0, changed: 0, invalid: 0, samples: [], issues: [] };
     const update = this.db.prepare('UPDATE records SET values_json = ?, version = version + 1 WHERE id = ?');
@@ -238,7 +241,7 @@ export class SqliteRecordStore implements RecordStore {
       if (JSON.stringify(before) === JSON.stringify(after)) continue;
       preview.changed++;
       if (preview.samples.length < 10) preview.samples.push({ recordId: record.id, before, after });
-      if (apply) update.run(JSON.stringify({ ...record.values, [field.id]: after }), record.id);
+      if (apply) { update.run(JSON.stringify({ ...record.values, [field.id]: after }), record.id); versioned?.add(record.id); }
     }
     return preview;
   }
@@ -250,6 +253,7 @@ export class SqliteRecordStore implements RecordStore {
       const next = { ...table, fields: table.fields.map(previous => previous.id === field.id ? field : previous) };
       this.lookups.validateSchema(next, table);
       compileFormulas(next);
+      new ConnectedCalculations(this.db, next);
       for (const view of this.listViews(id)) reconcileView(view, next);
       this.syncLookupViews(next, false);
       return this.scanConversion(table, field, convert, false);
@@ -262,17 +266,19 @@ export class SqliteRecordStore implements RecordStore {
       const table = this.getTable(id);
       const next = { ...table, fields: table.fields.map(previous => previous.id === field.id ? field : previous) };
       this.lookups.validateSchema(next, table);
-      const calculate = compileFormulas(next);
+      const calculate = compileFormulas(next, { skipLinked: true });
+      const calculations = new ConnectedCalculations(this.db, next);
+      const versioned = new Set<string>();
       this.syncViews(next);
-      const result = this.scanConversion(table, field, convert, true);
+      const result = this.scanConversion(table, field, convert, true, versioned);
       if (result.invalid) {
         throw new ServiceError('CONVERSION_FAILED', `${result.invalid} records could not be converted. Record ${result.issues[0]!.recordId}: ${result.issues[0]!.message}`);
       }
       this.db.prepare('UPDATE fields SET definition_json = ? WHERE id = ? AND table_id = ?')
         .run(JSON.stringify(field), field.id, id);
-      this.recalculate(next, calculate);
+      for (const id of this.recalculate(next, calculate)) versioned.add(id);
       this.db.prepare('UPDATE tables SET version = version + 1 WHERE id = ?').run(id);
-      this.relations.bumpRevision(id);
+      this.relations.bumpRevisions([id, ...this.recalculateConnectedTable(id, calculations, versioned)]);
       this.syncLookupViews(next, true);
       return this.getTable(id);
     });
@@ -408,13 +414,33 @@ export class SqliteRecordStore implements RecordStore {
       ...(Object.keys(errors).length ? { formulaErrors: errors } : {}) };
   }
 
-  private recalculate(table: Table, calculate: ReturnType<typeof compileFormulas>): void {
+  private recalculate(table: Table, calculate: ReturnType<typeof compileFormulas>): Set<string> {
+    const changed = new Set<string>();
     const write = this.db.prepare('UPDATE records SET values_json = ?, formula_errors_json = ?, version = version + 1 WHERE id = ?');
     for (const stored of this.db.prepare('SELECT id, values_json, formula_errors_json FROM records WHERE table_id = ?').iterate(table.id)) {
-      const result = calculate(JSON.parse(stored['values_json'] as string) as RowRecord['values']);
+      const result = calculate(JSON.parse(stored['values_json'] as string) as RowRecord['values'], JSON.parse(stored['formula_errors_json'] as string) as Record<string, string>);
       const values = JSON.stringify(result.values), errors = JSON.stringify(result.formulaErrors ?? {});
-      if (values !== stored['values_json'] || errors !== stored['formula_errors_json']) write.run(values, errors, stored['id']!);
+      if (values !== stored['values_json'] || errors !== stored['formula_errors_json']) {
+        write.run(values, errors, stored['id']!);
+        changed.add(stored['id'] as string);
+      }
     }
+    return changed;
+  }
+
+  private recalculateConnectedTable(tableId: string, calculations: ConnectedCalculations, versioned: Set<string>): Set<string> {
+    if (!calculations.hasLinked) return new Set();
+    const ids = new Set(this.db.prepare('SELECT id FROM records WHERE table_id = ?').all(tableId).map(row => row['id'] as string));
+    return calculations.run(new Map([[tableId, ids]]), versioned, this.lookups, id => this.getTable(id)).tables;
+  }
+
+  private finishRecordWrite(tableId: string, ids: string[], linked: { records: ChangedRecords }): Set<string> {
+    const seeds = new Map(linked.records);
+    seeds.set(tableId, new Set([...seeds.get(tableId) ?? [], ...ids]));
+    const versioned = new Set([...seeds.values()].flatMap(ids => [...ids]));
+    const result = new ConnectedCalculations(this.db).run(seeds, versioned, this.lookups, id => this.getTable(id));
+    this.relations.bumpRevisions([...seeds.keys(), ...result.tables]);
+    return result.changed;
   }
 
   getRecord(id: string, recordId: string): RowRecord {
@@ -431,10 +457,11 @@ export class SqliteRecordStore implements RecordStore {
         mapping: plan.mapping, validated: plan.validated, total: 0, invalid: 0, samples: [], issues: [] };
       let position = (this.db.prepare('SELECT COALESCE(MAX(position), -1) AS last FROM records WHERE table_id = ?')
         .get(table.id)!['last'] as number) + 1;
-      const calculate = compileFormulas(table);
+      const calculate = compileFormulas(table, { skipLinked: true });
       const insert = this.db.prepare('INSERT INTO records (id, table_id, position, values_json, formula_errors_json) VALUES (?, ?, ?, ?, ?)');
       const links: Array<{ id: string; values: Record<string, CellValue> }> = [];
       const relationFields = table.fields.filter(field => field.type === 'relation');
+      const created: string[] = [];
       for (const row of plan.rows) {
         result.total++;
         if (result.samples.length < 10) result.samples.push({ row: row.row, cells: row.cells.map(cell =>
@@ -446,6 +473,7 @@ export class SqliteRecordStore implements RecordStore {
             const id = randomUUID();
             const result = calculate(values);
             insert.run(id, table.id, position++, JSON.stringify(result.values), JSON.stringify(result.formulaErrors ?? {}));
+            created.push(id);
             if (relationFields.length) links.push({ id, values: Object.fromEntries(relationFields.map(field => [field.id, values[field.id]!])) });
           } else {
             for (const field of table.fields.filter(field => field.type === 'relation')) this.relations.validateTargets(field, values[field.id]!);
@@ -457,7 +485,7 @@ export class SqliteRecordStore implements RecordStore {
           if (result.issues.length < 20) result.issues.push({ row: row.row, code: error.code, message: error.message });
         }
       }
-      if (apply && result.total) this.relations.bumpRevisions([table.id, ...this.relations.write(table, links).tables]);
+      if (apply && result.total) this.finishRecordWrite(table.id, created, this.relations.write(table, links));
       return result;
     }, apply ? 'IMMEDIATE' : 'DEFERRED');
   }
@@ -512,7 +540,7 @@ export class SqliteRecordStore implements RecordStore {
       this.checkSchema(table.id, table.version);
       let position = (this.db.prepare('SELECT COALESCE(MAX(position), -1) AS last FROM records WHERE table_id = ?')
         .get(table.id)!['last'] as number) + 1;
-      const calculate = compileFormulas(table);
+      const calculate = compileFormulas(table, { skipLinked: true });
       const insert = this.db.prepare('INSERT INTO records (id, table_id, position, version, values_json, formula_errors_json) VALUES (?, ?, ?, 1, ?, ?)');
       const records = values.map(values => {
         const id = randomUUID();
@@ -522,8 +550,8 @@ export class SqliteRecordStore implements RecordStore {
       });
       const linked = this.relations.write(table, records);
       for (const record of records) if (linked.values.has(record.id)) record.values = linked.values.get(record.id)!;
-      this.relations.bumpRevisions([table.id, ...linked.tables]);
-      return { records: this.lookups.hydrate(table, this.relations.hydrate(table, records)) };
+      const computed = this.finishRecordWrite(table.id, records.map(record => record.id), linked);
+      return { records: this.lookups.hydrate(table, this.relations.hydrate(table, records.map(record => computed.has(record.id) ? this.readRecord(table.id, record.id) : record))) };
     });
   }
 
@@ -538,7 +566,7 @@ export class SqliteRecordStore implements RecordStore {
       }
       const affected = this.relations.deleteRecords(this.getTable(id), records.map(record => record.id));
       for (const item of records) remove.run(id, item.id);
-      this.relations.bumpRevisions([id, ...affected]);
+      this.finishRecordWrite(id, records.map(record => record.id), affected);
       return { deleted: records.map(record => record.id) };
     });
   }
@@ -549,7 +577,7 @@ export class SqliteRecordStore implements RecordStore {
     return this.transaction(() => {
       this.checkSchema(id, schemaVersion);
       const table = this.getTable(id);
-      const calculate = compileFormulas(table);
+      const calculate = compileFormulas(table, { skipLinked: true });
       const records = updates.map(update => {
         const stored = read.get(update.id, id) as unknown as StoredRecord | undefined;
         if (!stored) throw new ServiceError('RECORD_NOT_FOUND', `Record ${update.id} does not exist.`, 404);
@@ -557,7 +585,7 @@ export class SqliteRecordStore implements RecordStore {
           throw new ServiceError('VERSION_CONFLICT', `Record ${update.id} changed. Reload before saving again.`, 409);
         }
         const record = this.decode(stored);
-        const result = calculate({ ...record.values, ...update.values });
+        const result = calculate({ ...record.values, ...update.values }, record.formulaErrors);
         record.values = result.values;
         if (result.formulaErrors) record.formulaErrors = result.formulaErrors;
         else delete record.formulaErrors;
@@ -567,8 +595,8 @@ export class SqliteRecordStore implements RecordStore {
       });
       const linked = this.relations.write(table, updates);
       for (const record of records) if (linked.values.has(record.id)) record.values = linked.values.get(record.id)!;
-      this.relations.bumpRevisions([id, ...linked.tables]);
-      return { records: this.lookups.hydrate(table, this.relations.hydrate(table, records)) };
+      const computed = this.finishRecordWrite(id, records.map(record => record.id), linked);
+      return { records: this.lookups.hydrate(table, this.relations.hydrate(table, records.map(record => computed.has(record.id) ? this.readRecord(id, record.id) : record))) };
     });
   }
 

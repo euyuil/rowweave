@@ -46,7 +46,7 @@ export function FieldInput({ field, value, onChange, disabled = false, calculati
         aria-label={`Clear ${field.name}`} onClick={() => { onChange(null); document.getElementById(id)!.focus(); }}>Clear</button>}</div>
     {input}
     {field.type === 'lookup' && <small>Updates after saving linked records.</small>}
-    {field.type === 'formula' && <small>Calculated after saving this record.</small>}
+    {field.type === 'formula' && <small>Updates when changes to its inputs are saved.</small>}
     {field.type === 'number' && field.numberFormat === 'percent' && <small>Enter a fraction: 0.5 displays as 50%.</small>}
     {value === null && !calculationError && <small>No value</small>}
   </div>;
