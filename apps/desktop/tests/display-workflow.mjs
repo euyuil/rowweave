@@ -57,12 +57,12 @@ export async function verifyDisplayWorkflow(page) {
   }, table.id);
   assert.equal(rows[1].values[table.primaryFieldId], '布局测试');
   assert.equal(rows[1].values[table.fields[1].id], '1:1');
-  await page.getByLabel('Current view', { exact: true }).selectOption({ label: 'Default layout' });
+  await page.getByRole('tab', { name: 'Default layout', exact: true }).click();
   await page.getByRole('button', { name: 'Display', exact: true }).click();
   assert.equal(await page.getByLabel('Row density', { exact: true }).inputValue(), '36');
   assert.equal(await page.getByLabel('Frozen columns', { exact: true }).inputValue(), '0');
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await page.getByLabel('Current view', { exact: true }).selectOption({ label: 'All records' });
+  await page.getByRole('tab', { name: 'All records', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('.grid-host')?.getAttribute('aria-busy') === 'false');
   await page.reload();
   await page.getByRole('navigation', { name: 'Tables', exact: true }).getByRole('button', { name: 'Display lab', exact: true }).click();

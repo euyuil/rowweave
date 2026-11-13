@@ -100,7 +100,7 @@ export async function verifyBoardWorkflow(page) {
   await page.getByRole('button', { name: 'Create record', exact: true }).click();
   await empty.getByRole('button', { name: 'No group task', exact: true }).waitFor();
   assert.ok(await page.locator('.board-scroll').evaluate(element => element.scrollLeft > 1000));
-  await page.getByLabel('Current view', { exact: true }).selectOption({ label: 'All records' });
+  await page.getByRole('tab', { name: 'All records', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('.grid-host')?.getAttribute('aria-busy') === 'false');
   const bounds = await page.locator('canvas').first().boundingBox();
   await page.mouse.click(bounds.x + 100, bounds.y + 58);
@@ -108,7 +108,7 @@ export async function verifyBoardWorkflow(page) {
   await page.getByRole('textbox', { name: 'Cell value', exact: true }).fill('Keep this draft');
   await page.keyboard.press('Enter');
   await page.getByText('1 unsaved cell', { exact: true }).waitFor();
-  await page.getByLabel('Current view', { exact: true }).selectOption({ label: 'By status' });
+  await page.getByRole('tab', { name: 'By status', exact: true }).click();
   await page.getByRole('region', { name: 'By status board', exact: true }).waitFor();
   await page.getByText('1 unsaved cell', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();

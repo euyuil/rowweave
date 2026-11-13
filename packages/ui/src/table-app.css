@@ -1,11 +1,11 @@
 .rowweave-app, .rowweave-app * { box-sizing: border-box; }
 .rowweave-app { height: 100vh; display: flex; flex-direction: column; background: #f7f9fc; color: #17243b; font: 14px 'Segoe UI', 'Microsoft YaHei', sans-serif; }
-.rowweave-app .app-header { min-height: 64px; padding: 0 30px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e5eaf1; background: #fff; }
+.rowweave-app .app-header { min-height: 48px; padding: 0 18px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e5eaf1; background: #fff; }
 .rowweave-app .brand { display: flex; align-items: center; gap: 10px; font-size: 21px; font-weight: 650; letter-spacing: -.5px; }
 .rowweave-app .brand-mark { display: inline-grid; place-items: center; width: 32px; height: 32px; background: #315cbe; border-radius: 8px; color: #fff; font-size: 25px; }
 .rowweave-app .workspace-label { color: #69768b; display: flex; align-items: center; gap: 14px; }
 .rowweave-app .workspace-body { display: flex; flex: 1; min-height: 0; }
-.rowweave-app .workspace-sidebar { width: 200px; flex-shrink: 0; padding: 24px 12px; overflow-y: auto; border-right: 1px solid #e5eaf1; background: #f0f3f9; }
+.rowweave-app .workspace-sidebar { width: 200px; flex-shrink: 0; padding: 16px 10px; overflow-y: auto; border-right: 1px solid #e5eaf1; background: #f0f3f9; }
 .rowweave-app .sidebar-heading { padding: 0 12px 12px; color: #738098; font-size: 11px; font-weight: 600; letter-spacing: 1px; }
 .rowweave-app .workspace-sidebar nav { display: flex; flex-direction: column; gap: 4px; }
 .rowweave-app .workspace-sidebar button { width: 100%; display: flex; align-items: center; gap: 10px; text-align: left; background: transparent; border-color: transparent; padding: 10px 12px; }
@@ -13,9 +13,9 @@
 .rowweave-app .workspace-sidebar .table-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rowweave-app .workspace-sidebar .new-table { margin-top: 12px; color: #315cbe; }
 .rowweave-app .workspace-content, .rowweave-app .table-workspace { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-.rowweave-app .table-heading { padding: 22px 24px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
+.rowweave-app .table-heading { padding: 10px 16px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
 .rowweave-app .table-title { min-width: 0; }
-.rowweave-app .table-title h1 { overflow-wrap: anywhere; }
+.rowweave-app .table-title h1 { overflow-wrap: anywhere; font-size: 20px; }
 .rowweave-app .table-management { display: flex; gap: 10px; margin-top: 7px; }
 .rowweave-app .table-management button { padding: 0; background: none; border: 0; color: #69768b; font-size: 12px; }
 .rowweave-app .empty-workspace { margin: auto; padding: 40px; max-width: 540px; text-align: center; }
@@ -23,14 +23,20 @@
 .rowweave-app .empty-mark { color: #315cbe; font-size: 56px; }
 .rowweave-app h1 { margin: 0; font-size: 25px; font-weight: 620; letter-spacing: -.5px; }
 .rowweave-app .actions { display: flex; gap: 9px; flex-shrink: 0; }
+.rowweave-app .actions button, .rowweave-app .workspace-label button { padding: 6px 10px; font-size: 12px; }
 .rowweave-app button { padding: 9px 15px; border: 1px solid #d7dfec; border-radius: 6px; background: #fff; color: #243654; font: inherit; cursor: pointer; }
 .rowweave-app button.primary { background: #315cbe; border-color: #315cbe; color: white; }
 .rowweave-app button:disabled { opacity: .5; cursor: default; }
 .rowweave-app button:focus-visible { outline: 2px solid #315cbe; outline-offset: 3px; }
-.rowweave-app .table-panel { margin: 0 24px; flex: 1; min-height: 0; display: flex; flex-direction: column; border: 1px solid #dde4ef; border-radius: 8px; overflow: hidden; background: #fff; }
-.rowweave-app .table-toolbar { display: flex; align-items: center; justify-content: space-between; min-height: 45px; padding: 0 16px; border-bottom: 1px solid #dde4ef; font-size: 12px; }
-.rowweave-app .table-toolbar strong { color: #315cbe; font-weight: 600; }
-.rowweave-app .table-toolbar span { color: #738098; }
+.rowweave-app .table-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; background: #fff; }
+.rowweave-app .view-navigation { display: flex; align-items: center; min-width: 0; padding: 0 12px; border-bottom: 1px solid #dde4ef; background: #f0f3f9; }
+.rowweave-app .view-tabs { display: flex; min-width: 0; overflow-x: auto; gap: 3px; padding: 3px 2px 0; scrollbar-width: thin; }
+.rowweave-app .view-tabs button { display: flex; align-items: center; flex-shrink: 0; gap: 7px; max-width: 220px; padding: 9px 12px; font-size: 13px; border-color: transparent; border-bottom: 2px solid transparent; border-radius: 6px 6px 0 0; background: transparent; }
+.rowweave-app .view-tabs button[aria-selected="true"] { background: #fff; color: #244d9e; border-bottom-color: #315cbe; font-weight: 600; }
+.rowweave-app .view-tabs button[aria-disabled="true"] { opacity: .5; cursor: default; }
+.rowweave-app .view-tab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rowweave-app .view-type-icon { flex-shrink: 0; }
+.rowweave-app button.new-view { flex-shrink: 0; padding: 5px 10px; margin-left: 5px; font-size: 20px; line-height: 1; border-color: transparent; background: transparent; }
 .rowweave-app .grid-host { flex: 1; min-height: 0; overflow: hidden; }
 .rowweave-app .board-view { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 .rowweave-app .board-tools { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; font-size: 12px; color: #69768b; }
@@ -55,7 +61,7 @@
 .rowweave-app .board-move select { min-width: 0; flex: 1; padding: 4px; font-size: 12px; }
 .rowweave-app .board-pages { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 12px; font-size: 11px; }
 .rowweave-app .board-pages button { padding: 5px; font-size: 11px; }
-.rowweave-app footer { display: flex; justify-content: space-between; align-items: center; min-height: 43px; padding: 0 30px; font-size: 11px; color: #748199; gap: 16px; }
+.rowweave-app footer { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; min-height: 32px; padding: 6px 16px; font-size: 11px; color: #748199; gap: 6px 16px; }
 .rowweave-app .pending-status { color: #99650d; }
 .rowweave-app .error-banner { margin: 0 30px 15px; padding: 12px 16px; background: #fff0ed; color: #9a382a; border-radius: 6px; font-size: 13px; }
 .rowweave-app .loading-state { display: grid; place-items: center; height: 100%; color: #738098; }
@@ -81,7 +87,7 @@
 .rowweave-app .csv-samples th:first-child { min-width: 42px; }
 .rowweave-app .csv-samples em { color: #738098; }
 .rowweave-app button.danger { background: #b33e2f; border-color: #b33e2f; color: #fff; }
-.rowweave-app .record-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 0 24px 14px; }
+.rowweave-app .record-toolbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 14px; }
 .rowweave-app .record-toolbar button { padding: 7px 10px; font-size: 12px; }
 .rowweave-app .record-toolbar > span { font-size: 11px; color: #69768b; }
 .rowweave-app .field-label { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
@@ -115,9 +121,8 @@
 .rowweave-app .conversion-preview { padding: 14px; background: #f0f4fb; border-radius: 8px; font-size: 12px; overflow-wrap: anywhere; }
 .rowweave-app .conversion-preview table { table-layout: fixed; width: 100%; border-collapse: collapse; }
 .rowweave-app .conversion-preview th, .rowweave-app .conversion-preview td { text-align: left; vertical-align: top; padding: 8px; border-bottom: 1px solid #d7dfec; white-space: pre-wrap; }
-.rowweave-app .view-toolbar { display: flex; align-items: center; gap: 8px; padding: 10px 12px; flex-wrap: wrap; border-bottom: 1px solid #dde4ef; }
+.rowweave-app .view-toolbar { display: flex; align-items: center; gap: 6px; padding: 6px 14px; flex-wrap: wrap; border-bottom: 1px solid #dde4ef; }
 .rowweave-app .view-toolbar button, .rowweave-app .view-toolbar input, .rowweave-app .view-toolbar select { font-size: 12px; padding: 7px 9px; }
-.rowweave-app .view-toolbar select { max-width: 200px; }
 .rowweave-app .view-toolbar input { margin-left: auto; min-width: 130px; flex: 1; max-width: 240px; }
 .rowweave-app .view-column { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #e5eaf1; }
 .rowweave-app .view-column .check-field { flex: 1; margin: 0; min-width: 0; overflow-wrap: anywhere; }

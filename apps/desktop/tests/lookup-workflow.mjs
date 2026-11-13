@@ -90,7 +90,7 @@ export async function verifyLookupWorkflow(page) {
   await call(`/tables/${target.id}/records`, 'PATCH', [{ id: targets[1].id, expectedVersion: 1, values: { [budget.id]: 5 } }]);
   await page.getByRole('button', { name: 'Reload', exact: true }).click();
   await page.getByText('0 records · 3 fields', { exact: true }).waitFor();
-  await page.getByLabel('Current view', { exact: true }).selectOption({ label: 'All records' });
+  await page.getByRole('tab', { name: 'All records', exact: true }).click();
   await select();
   await page.getByRole('button', { name: 'Open record', exact: true }).click();
   assert.equal(await page.getByLabel('Project budget', { exact: true }).textContent(), '$0.00, $5.00');
@@ -118,7 +118,7 @@ export async function verifyLookupWorkflow(page) {
   await page.getByText('$10.00', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Done', exact: true }).click();
   await call(`/tables/${target.id}/records`, 'PATCH', [{ id: targets[1].id, expectedVersion: 2, values: { [budget.id]: 15 } }]);
-  await page.getByLabel('Current view', { exact: true }).selectOption({ label: 'With budget' });
+  await page.getByRole('tab', { name: 'With budget', exact: true }).click();
   await page.getByText('2 records · 3 fields', { exact: true }).waitFor();
   await select(2);
   await page.getByRole('button', { name: 'Open record', exact: true }).click();

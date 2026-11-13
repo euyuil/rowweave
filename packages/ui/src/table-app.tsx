@@ -19,6 +19,7 @@ import { SummaryDialog } from './summary-dialog.js';
 import { FieldForm } from './field-form.js';
 import { ColumnActions, type ColumnAction } from './column-actions.js';
 import { BoardView } from './board-view.js';
+import { ViewTabs } from './view-tabs.js';
 import './table-app.css';
 
 export interface TableHost {
@@ -416,6 +417,9 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       {model.conflicted && <span> Your edits are still here. Copy them before discarding and reloading the current records.</span>}
     </div>}
     {notice && <div role="status" className="notice-banner"><span>{notice}</span><button onClick={() => setNotice(undefined)}>Dismiss</button></div>}
+    <ViewTabs views={views} selected={view?.id} disabled={!ready || locked} panelId={`table-view-${tableId}`}
+      onSelect={selected => void applyView(selected)} onCreate={() => setViewAction('create')} />
+    <section className="table-panel" id={`table-view-${tableId}`} role="tabpanel" aria-label={view?.name ?? 'Loading view'}>
     <div className="record-toolbar">
       <button className="primary" disabled={recordActionsLocked} onClick={() => void openRecord('create')}>+ New record</button>
       {view?.type !== 'board' && <><button disabled={recordActionsLocked || selectedCount !== 1} onClick={() => void openRecord('edit')}>Open record</button>
@@ -427,13 +431,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
         : view?.type === 'board' ? 'Open a card to edit, or move it to another group.'
           : selectedCount ? `${selectedCount.toLocaleString()} selected` : 'Select a row or cell to open a record.'}</span>
     </div>
-    <section className="table-panel" aria-label="Data table">
       <div className="view-toolbar">
-        <select aria-label="Current view" value={view?.id ?? ''} disabled={!ready || locked}
-          onChange={event => void applyView(views.find(item => item.id === event.target.value)!)}>
-          {views.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-        </select>
-        <button disabled={!view || locked} onClick={() => setViewAction('create')}>New view</button>
         <button disabled={!view || locked} onClick={() => setViewAction('edit')}>View settings</button>
         <button disabled={!view || locked} onClick={() => setViewAction('query')}>Filter &amp; sort</button>
         <button disabled={!view || locked} onClick={() => setViewAction('display')}>Display</button>
@@ -443,8 +441,6 @@ export function TableApp({ tableId, model, api, host, onManage }: {
           disabled={!ready || model.saving || offline} onChange={event => setSearch(event.target.value)}
           onCompositionStart={() => setSearchComposing(true)} onCompositionEnd={() => setSearchComposing(false)} />
       </div>
-      <div className="table-toolbar"><strong>▦ &nbsp; {view?.name ?? 'Loading view…'}</strong>
-        <span>{table ? `${model.rowCount.toLocaleString()} ${model.rowCount === 1 ? 'record' : 'records'} · ${fields.length} ${fields.length === 1 ? 'field' : 'fields'}` : 'Loading records…'}</span></div>
       {ready && table && view?.type === 'board' ? <BoardView table={table} view={view} search={appliedSearch.current} generation={queryVersion} api={api}
         disabled={recordActionsLocked} onOpen={record => void openBoardRecord(record)} onRefresh={() => void reload()}
         onCreate={lane => setRecordAction({ kind: 'create', records: [], initialValues: { [view.groupBy!]: lane } })} onMove={moveBoardRecord} />
@@ -512,6 +508,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       </div>}
     </section>
     <footer><span role="status" className={pending ? 'pending-status' : ''}>{status}</span>
+      <span>{table ? `${model.rowCount.toLocaleString()} ${model.rowCount === 1 ? 'record' : 'records'} · ${fields.length} ${fields.length === 1 ? 'field' : 'fields'}` : 'Loading records…'}</span>
       <span>{view?.type === 'board' ? 'Move records by dragging or choosing a status' : 'Enter to edit · Esc to cancel · Ctrl+C / Ctrl+V · Ctrl+S to save'}</span></footer>
     {recordAction && table && <RecordDialog action={recordAction} table={table} api={api} setDirty={setFormDirty}
       onClose={() => setRecordAction(undefined)} onSaved={() => { setRecordAction(undefined); void refreshAfterWrite('Records'); }} />}
