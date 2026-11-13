@@ -43,3 +43,4 @@ For each row, record merged PRs, observed behavior, regression evidence, current
 
 - Baseline: PRs #54–#58 delivered two-way links, connected scalar formulas, one-level enum grouping, relative calendar dates and their verification report. They are prerequisites, not closure of this inventory.
 - Active work starts with the measured grouped-summary bottleneck, followed by linked-query performance and durable recovery. This ordering does not remove the other required outcomes.
+- Grouped-summary implementation and regression checks now pass: the 100,000-record relative-date workload reached p95 191.4 ms versus 592.5 ms before. See [query-performance.md](query-performance.md) for exact sources and samples. The aggregate/query row remains pending until linked-summary queries also meet its criteria.
