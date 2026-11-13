@@ -12,6 +12,7 @@ import { prepareCsvImport, type CheckedCsvImport } from './csv.js';
 import { parseSummary, type CheckedSummary } from './record-summary.js';
 import type { RecordSummary, RecordHistoryQuery, RecordHistoryPage, RecordChangeDetail, RecordRestore, RecordTrashPage } from '../../contracts/src/index.js';
 import { historyId, parseHistoryQuery, parseRecordRestore } from './record-history.js';
+import type { RecordBatchPage, RecordBatchChanges } from '../../contracts/src/index.js';
 import type { CsvImportResult, CsvPreview } from '../../contracts/src/index.js';
 export { ServiceError } from './errors.js';
 
@@ -28,6 +29,8 @@ export interface RecordStore {
   createRecords(table: Table, values: Array<Record<string, CellValue>>): BatchResult;
   deleteRecords(tableId: string, records: RecordDelete[]): DeleteResult;
   recordHistory(tableId: string, recordId: string, query: RecordHistoryQuery): RecordHistoryPage;
+  recordBatches(tableId: string, query: RecordHistoryQuery): RecordBatchPage;
+  recordBatchChanges(tableId: string, batchId: string, query: RecordHistoryQuery): RecordBatchChanges;
   recordChange(tableId: string, recordId: string, changeId: number): RecordChangeDetail;
   restoreRecord(update: RecordUpdate, tableId: string, schemaVersion: number, source: RecordRestore): RowRecord;
   recordTrash(table: Table, query: RecordHistoryQuery): RecordTrashPage;
@@ -350,6 +353,16 @@ export class RecordService {
 
   recordTrash(id: string, input: unknown): RecordTrashPage {
     return this.store.recordTrash(this.store.getTable(id), parseHistoryQuery(input));
+  }
+
+  recordBatches(id: string, input: unknown): RecordBatchPage {
+    this.store.getTable(id);
+    return this.store.recordBatches(id, parseHistoryQuery(input));
+  }
+
+  recordBatchChanges(id: string, batchId: string, input: unknown): RecordBatchChanges {
+    this.store.getTable(id);
+    return this.store.recordBatchChanges(id, batchId, parseHistoryQuery(input));
   }
 
   restoreDeletedRecords(id: string, input: unknown): BatchResult {

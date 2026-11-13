@@ -103,4 +103,6 @@ All request/response interfaces and service limit constants are exported alongsi
 
 `recordTrash` reads bounded pages of deleted records and their latest deletion IDs. `restoreDeletedRecords` atomically restores an array of `{ id, deletionId, values? }`, preserving UUIDs with newer versions and appending them to the table. Optional writable values repair incompatible historical fields; current schema and linked-target constraints apply. Repeated restores and stale deletion IDs fail with `VERSION_CONFLICT` and are never retried automatically.
 
+`recordBatches` lists transaction receipts affecting a table; `recordBatchChanges` pages through all affected tables' change metadata. Receipts preserve the original change count when a related table is later deleted. Compare `recordCount` with `remainingCount` before treating a batch as complete. `recordWrite` distinguishes record mutations from schema side effects. Receipt history starts at workspace format 18; older individual record history remains readable.
+
 The repository's package regression installs the actual archive offline into an isolated application, checks its public TypeScript declarations, and runs a schema/record/view/CSV workflow against a real temporary service.

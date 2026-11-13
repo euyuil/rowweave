@@ -28,6 +28,8 @@ export const commands: Record<string, Command> = {
   'fields apply-conversion': { ids: 2, input: 'required', run: (api, [id, field], input) => api.applyConversion(id!, field!, input as FieldConversion) },
   'records get': { ids: 2, input: 'none', run: (api, [id, record]) => api.getRecord(id!, record!) },
   'records history': { ids: 2, input: 'optional', run: (api, [id, record], input) => api.recordHistory(id!, record!, input as RecordHistoryQuery) },
+  'records batches': { ids: 1, input: 'optional', run: (api, [id], input) => api.recordBatches(id!, input as RecordHistoryQuery) },
+  'records batch-changes': { ids: 2, input: 'optional', run: (api, [id, batch], input) => api.recordBatchChanges(id!, batch!, input as RecordHistoryQuery) },
   'records change': { ids: 2, input: 'required', run: (api, [id, record], input) => api.recordChange(id!, record!, inputObject(input)['changeId'] as number) },
   'records restore': { ids: 2, input: 'required', run: (api, [id, record], input) => api.restoreRecord(id!, record!, input as RecordRestore) },
   'records trash': { ids: 1, input: 'optional', run: (api, [id], input) => api.recordTrash(id!, input as RecordHistoryQuery) },
@@ -51,7 +53,7 @@ Usage: rowweave <resource> <action> [table-id] [field/record/view-id] [options]
 
   tables   list | get | create | update | delete
   fields   create | update | delete | preview-conversion | apply-conversion
-  records  get | query | summarize | create | update | delete | history | change | restore | trash | restore-deleted
+  records  get | query | summarize | create | update | delete | history | change | restore | trash | restore-deleted | batches | batch-changes
   views    list | get | create | update | delete | query
   csv      preview | import | export
 

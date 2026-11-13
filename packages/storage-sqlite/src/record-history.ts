@@ -2,8 +2,17 @@ import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { CellValue, RecordChange, RecordChangeDetail, RecordHistoryPage, RecordHistoryQuery, RecordRestore, RowRecord, RecordTrashPage, Table } from '../../contracts/src/index.js';
 import { ServiceError } from '../../core/src/errors.js';
+import type { RecordBatch, RecordBatchPage, RecordBatchChanges } from '../../contracts/src/index.js';
+
+export interface HistoryContext { recordWrite?: boolean; restore?: Pick<RecordRestore, 'changeId' | 'snapshot'> }
 
 const metadata = 'id, batch_id, record_id, changed_at, before_version, after_version, restored_from, restored_snapshot';
+const batchMetadata = 'b.*, (SELECT COUNT(*) FROM record_changes c WHERE c.batch_id = b.id) AS remaining_count';
+
+function batch(row: Record<string, unknown>): RecordBatch {
+  return { sequence: row['sequence'] as number, id: row['id'] as string, changedAt: row['changed_at'] as string,
+    recordCount: row['record_count'] as number, remainingCount: row['remaining_count'] as number, recordWrite: row['record_write'] === 1 };
+}
 
 function change(row: Record<string, unknown>): RecordChange {
   return { id: row['id'] as number, batchId: row['batch_id'] as string, recordId: row['record_id'] as string,
@@ -22,7 +31,7 @@ function snapshot(row: Record<string, unknown>, side: 'before' | 'after'): RowRe
 export class RecordHistory {
   constructor(private readonly db: DatabaseSync) {
     // Connection-local context records every service write, including indirect formula and relationship changes.
-    db.exec(`CREATE TEMP TABLE record_change_context (batch_id TEXT NOT NULL, changed_at TEXT NOT NULL, restored_from INTEGER, restored_snapshot TEXT);`);
+    db.exec(`CREATE TEMP TABLE record_change_context (batch_id TEXT NOT NULL, changed_at TEXT NOT NULL, restored_from INTEGER, restored_snapshot TEXT, record_write INTEGER NOT NULL);`);
     for (const event of ['INSERT', 'UPDATE', 'DELETE']) {
       const previous = event === 'INSERT' ? 'NULL, NULL, NULL' : 'OLD.version, OLD.values_json, OLD.formula_errors_json';
       const next = event === 'DELETE' ? 'NULL, NULL, NULL' : 'NEW.version, NEW.values_json, NEW.formula_errors_json';
@@ -39,12 +48,43 @@ export class RecordHistory {
     }
   }
 
-  begin(changedAt: string, restore?: Pick<RecordRestore, 'changeId' | 'snapshot'>): void {
-    this.db.prepare('INSERT INTO record_change_context VALUES (?, ?, ?, ?)')
-      .run(randomUUID(), changedAt, restore?.changeId ?? null, restore?.snapshot ?? null);
+  begin(changedAt: string, context: HistoryContext = {}): void {
+    this.db.prepare('INSERT INTO record_change_context VALUES (?, ?, ?, ?, ?)')
+      .run(randomUUID(), changedAt, context.restore?.changeId ?? null, context.restore?.snapshot ?? null, context.recordWrite ? 1 : 0);
   }
 
-  end(): void { this.db.exec('DELETE FROM record_change_context'); }
+  end(): void {
+    this.db.exec(`INSERT INTO record_batches (id, changed_at, record_count, record_write)
+      SELECT context.batch_id, context.changed_at, COUNT(c.id), context.record_write
+      FROM record_change_context context JOIN record_changes c ON c.batch_id = context.batch_id
+      GROUP BY context.batch_id;
+      INSERT INTO record_batch_tables (table_id, batch_id, sequence)
+      SELECT c.table_id, b.id, b.sequence FROM record_change_context context
+      JOIN record_batches b ON b.id = context.batch_id JOIN record_changes c ON c.batch_id = b.id
+      GROUP BY c.table_id, b.id;
+      DELETE FROM record_change_context;`);
+  }
+
+  batches(tableId: string, query: RecordHistoryQuery): RecordBatchPage {
+    const limit = query.limit ?? 20;
+    const rows = this.db.prepare(`SELECT ${batchMetadata} FROM record_batch_tables link JOIN record_batches b ON b.id = link.batch_id
+      WHERE link.table_id = ? ${query.before === undefined ? '' : 'AND link.sequence < ?'} ORDER BY link.sequence DESC LIMIT ?`)
+      .all(tableId, ...(query.before === undefined ? [] : [query.before]), limit + 1);
+    const batches = rows.slice(0, limit).map(batch);
+    return { batches, ...(rows.length > limit ? { nextBefore: batches.at(-1)!.sequence } : {}) };
+  }
+
+  batchChanges(tableId: string, batchId: string, query: RecordHistoryQuery): RecordBatchChanges {
+    const row = this.db.prepare(`SELECT ${batchMetadata} FROM record_batches b JOIN record_batch_tables link ON link.batch_id = b.id
+      WHERE b.id = ? AND link.table_id = ?`).get(batchId, tableId);
+    if (!row) throw new ServiceError('HISTORY_NOT_FOUND', 'This table has no complete transaction receipt for this batch. Older changes can still be inspected in record history.', 404);
+    const limit = query.limit ?? 20;
+    const rows = this.db.prepare(`SELECT ${metadata}, table_id FROM record_changes WHERE batch_id = ?
+      ${query.before === undefined ? '' : 'AND id < ?'} ORDER BY id DESC LIMIT ?`)
+      .all(batchId, ...(query.before === undefined ? [] : [query.before]), limit + 1);
+    const changes = rows.slice(0, limit).map(row => ({ ...change(row), tableId: row['table_id'] as string }));
+    return { batch: batch(row), changes, ...(rows.length > limit ? { nextBefore: changes.at(-1)!.id } : {}) };
+  }
 
   list(tableId: string, recordId: string, query: RecordHistoryQuery): RecordHistoryPage {
     if (!this.db.prepare('SELECT 1 FROM records WHERE table_id = ? AND id = ?').get(tableId, recordId)

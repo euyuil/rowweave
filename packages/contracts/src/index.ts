@@ -127,6 +127,18 @@ export interface DeletedRecord {
 export interface RecordTrashPage { records: DeletedRecord[]; nextBefore?: number }
 export interface DeletedRecordRestore { id: string; deletionId: number; values?: Record<string, CellValue> }
 
+export interface RecordBatch {
+  sequence: number;
+  id: string;
+  changedAt: string;
+  recordCount: number;
+  remainingCount: number;
+  recordWrite: boolean;
+}
+export interface RecordBatchPage { batches: RecordBatch[]; nextBefore?: number }
+export interface RecordBatchChange extends RecordChange { tableId: string }
+export interface RecordBatchChanges { batch: RecordBatch; changes: RecordBatchChange[]; nextBefore?: number }
+
 export function valueField(field: Field): Field {
   if (isLookupSummary(field)) return field.lookup!.operation === 'count' ? { id: field.id, name: field.name, type: 'number' }
     : { ...valueField(field.lookupResult!), id: field.id, name: field.name, required: false };

@@ -5,7 +5,8 @@ import { randomUUID } from 'node:crypto';
 import { summarize } from './record-summary.js';
 import type { CheckedSummary } from '../../core/src/record-summary.js';
 import type { RecordSummary, RecordHistoryQuery, RecordHistoryPage, RecordChangeDetail, RecordRestore, RecordTrashPage } from '../../contracts/src/index.js';
-import { RecordHistory } from './record-history.js';
+import { RecordHistory, type HistoryContext } from './record-history.js';
+import type { RecordBatchPage, RecordBatchChanges } from '../../contracts/src/index.js';
 import { tableId, type BatchResult, type CellValue, type ConversionPreview, type DeleteResult, type Field, type GridView, type QueryPage, type RecordDelete, type RecordPage, type RecordUpdate, type RowRecord, type Table } from '../../contracts/src/index.js';
 import { ServiceError, type RecordStore } from '../../core/src/record-service.js';
 import type { CheckedQuery } from '../../core/src/record-query.js';
@@ -76,10 +77,10 @@ export class SqliteRecordStore implements RecordStore {
     }
   }
 
-  private transaction<T>(operation: () => T, mode: 'IMMEDIATE' | 'DEFERRED' = 'IMMEDIATE', restore?: RecordRestore): T {
+  private transaction<T>(operation: () => T, mode: 'IMMEDIATE' | 'DEFERRED' = 'IMMEDIATE', context?: HistoryContext): T {
     this.db.exec(`BEGIN ${mode}`);
     try {
-      if (mode === 'IMMEDIATE') this.history.begin(this.clock().toISOString(), restore);
+      if (mode === 'IMMEDIATE') this.history.begin(this.clock().toISOString(), context);
       const result = operation();
       if (mode === 'IMMEDIATE') this.history.end();
       this.db.exec('COMMIT');
@@ -489,7 +490,7 @@ export class SqliteRecordStore implements RecordStore {
       }
       if (apply && result.total) this.finishRecordWrite(table.id, created, this.relations.write(table, links));
       return result;
-    }, apply ? 'IMMEDIATE' : 'DEFERRED');
+    }, apply ? 'IMMEDIATE' : 'DEFERRED', { recordWrite: apply });
   }
 
   exportCsv(table: Table, query: CheckedQuery, view?: GridView): string {
@@ -541,7 +542,7 @@ export class SqliteRecordStore implements RecordStore {
     return this.transaction(() => {
       this.checkSchema(table.id, table.version);
       return this.insertRecords(table, values.map(values => ({ id: randomUUID(), version: 1, values })));
-    });
+    }, 'IMMEDIATE', { recordWrite: true });
   }
 
   private insertRecords(table: Table, input: Array<{ id: string; version: number; values: Record<string, CellValue> }>): BatchResult {
@@ -570,7 +571,7 @@ export class SqliteRecordStore implements RecordStore {
       const result = this.insertRecords(table, records);
       for (const record of records) this.history.markRestored(record.id, record.deletionId);
       return result;
-    });
+    }, 'IMMEDIATE', { recordWrite: true });
   }
 
   deleteRecords(id: string, records: RecordDelete[]): DeleteResult {
@@ -586,11 +587,11 @@ export class SqliteRecordStore implements RecordStore {
       for (const item of records) remove.run(id, item.id);
       this.finishRecordWrite(id, records.map(record => record.id), affected);
       return { deleted: records.map(record => record.id) };
-    });
+    }, 'IMMEDIATE', { recordWrite: true });
   }
 
   updateBatch(updates: RecordUpdate[], id: string, schemaVersion: number): BatchResult {
-    return this.transaction(() => this.writeBatch(updates, id, schemaVersion));
+    return this.transaction(() => this.writeBatch(updates, id, schemaVersion), 'IMMEDIATE', { recordWrite: true });
   }
 
   recordHistory(id: string, recordId: string, query: RecordHistoryQuery): RecordHistoryPage {
@@ -602,7 +603,15 @@ export class SqliteRecordStore implements RecordStore {
   }
 
   restoreRecord(update: RecordUpdate, id: string, schemaVersion: number, source: RecordRestore): RowRecord {
-    return this.transaction(() => this.writeBatch([update], id, schemaVersion).records[0]!, 'IMMEDIATE', source);
+    return this.transaction(() => this.writeBatch([update], id, schemaVersion).records[0]!, 'IMMEDIATE', { recordWrite: true, restore: source });
+  }
+
+  recordBatches(id: string, query: RecordHistoryQuery): RecordBatchPage {
+    return this.transaction(() => this.history.batches(id, query), 'DEFERRED');
+  }
+
+  recordBatchChanges(id: string, batchId: string, query: RecordHistoryQuery): RecordBatchChanges {
+    return this.transaction(() => this.history.batchChanges(id, batchId, query), 'DEFERRED');
   }
 
   private writeBatch(updates: RecordUpdate[], id: string, schemaVersion: number): BatchResult {

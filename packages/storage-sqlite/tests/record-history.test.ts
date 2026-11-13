@@ -161,7 +161,7 @@ test('history survives restart and backup, retains deletion snapshots and migrat
   const oldRecord = oldService.createRecords(oldTable.id, [{ values: { [oldTable.primaryFieldId]: 'Kept' } }]).records[0]!;
   oldStore.close();
   const db = new DatabaseSync(old.path);
-  db.exec('DROP TABLE record_changes; PRAGMA user_version = 15;'); db.close();
+  db.exec('DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; PRAGMA user_version = 15;'); db.close();
   const migrated = new RecordService(old.open());
   assert.deepEqual(migrated.getRecord(oldTable.id, oldRecord.id), oldRecord);
   assert.deepEqual(migrated.recordHistory(oldTable.id, oldRecord.id, {}), { changes: [] });

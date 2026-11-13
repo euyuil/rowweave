@@ -9,7 +9,7 @@ import { join, resolve } from 'node:path';
 import { createServer } from 'node:http';
 import { Client, type CallToolResult } from '@modelcontextprotocol/client';
 import { StdioClientTransport, getDefaultEnvironment } from '@modelcontextprotocol/client/stdio';
-import type { Table, GridView, BatchResult, QueryPage, ConversionPreview, RecordHistoryPage, RecordChangeDetail, RowRecord, RecordTrashPage } from '../../../packages/contracts/src/index.js';
+import type { Table, GridView, BatchResult, QueryPage, ConversionPreview, RecordHistoryPage, RecordChangeDetail, RowRecord, RecordTrashPage, RecordBatchPage, RecordBatchChanges } from '../../../packages/contracts/src/index.js';
 import { fixture } from '../../../packages/storage-sqlite/tests/helpers.js';
 import { RecordService } from '../../../packages/core/src/record-service.js';
 import { parseCsv } from '../../../packages/core/src/csv.js';
@@ -219,7 +219,7 @@ test('MCP discovers all operations and runs versioned schema, records, views and
   const { service, environment } = await setup(t);
   const { client, call, json, used, stderr } = await connect(t, environment);
   const tools = (await client.listTools()).tools;
-  assert.equal(tools.length, 30);
+  assert.equal(tools.length, 32);
   assert.ok(tools.every(tool => tool.inputSchema.type === 'object' && tool.inputSchema.additionalProperties === false));
   assert.equal(tools.find(tool => tool.name === 'records_query')!.annotations!.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === 'records_update')!.annotations!.destructiveHint, true);
@@ -276,6 +276,10 @@ test('MCP discovers all operations and runs versioned schema, records, views and
   assert.deepEqual(recovered.records[0], { ...restored, version: restored.version + 1 });
   const repeated = await call('records_restore_deleted', recover);
   assert.equal(JSON.parse(text(repeated)).error.code, 'VERSION_CONFLICT');
+  const batches = await json<RecordBatchPage>('records_batches', { tableId: table.id, query: { limit: 1 } });
+  const transaction = await json<RecordBatchChanges>('records_batch_changes', { tableId: table.id, batchId: batches.batches[0]!.id, query: { limit: 1 } });
+  assert.equal(transaction.batch.recordWrite, true);
+  assert.equal(transaction.changes[0]!.recordId, restored.id);
   const conversion = { expectedVersion: table.version, field: { name: 'Code', type: 'number' } };
   const preview = await json<ConversionPreview>('fields_preview_conversion', { tableId: table.id, fieldId: reference, input: conversion });
   assert.equal(preview.invalid, 0);
