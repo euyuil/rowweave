@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import type { CellValue, Field, RecordChangeDetail, RecordHistoryPage, RecordRestore, RowRecord, Table } from '../../contracts/src/index.js';
+import { isReadOnlyField, type CellValue, type Field, type RecordChangeDetail, type RecordHistoryPage, type RecordRestore, type RowRecord, type Table } from '../../contracts/src/index.js';
 import type { WorkspaceApi } from '../../client/src/http-client.js';
 import { sameValue } from '../../client/src/cell-values.js';
 
@@ -51,7 +51,7 @@ export function RecordHistoryPanel({ table, record, api, hasDraft, busy, onResto
     ...Object.keys(detail.before?.formulaErrors ?? {}), ...Object.keys(detail.after?.formulaErrors ?? {})])]
     .filter(id => !sameValue(detail.before?.values[id], detail.after?.values[id]) || detail.before?.formulaErrors?.[id] !== detail.after?.formulaErrors?.[id]) : [];
   const snapshot = restoreSide && detail?.[restoreSide];
-  const restoring = snapshot ? table.fields.filter(field => !['lookup', 'formula'].includes(field.type) && Object.hasOwn(snapshot.values, field.id)
+  const restoring = snapshot ? table.fields.filter(field => !isReadOnlyField(field) && Object.hasOwn(snapshot.values, field.id)
     && !sameValue(record.values[field.id], snapshot.values[field.id])) : [];
   const name = (id: string) => fields.get(id)?.name ?? `Removed field (${id})`;
   return <section className="record-history" aria-label="Record history">

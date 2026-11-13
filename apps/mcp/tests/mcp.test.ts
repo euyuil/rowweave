@@ -115,6 +115,31 @@ test('MCP and CLI share URL fields and reject unsafe writes atomically', async t
   assert.deepEqual(service.queryRecords(table.id, {}).records, created.records);
 });
 
+test('MCP and CLI create automatic fields without allowing forged numbers', async t => {
+  const { environment, service } = await setup(t);
+  const { json, call } = await connect(t, environment);
+  let table = await json<Table>('tables_create', { name: 'Numbered tickets' });
+  table = await json<Table>('fields_create', { tableId: table.id, input: { expectedVersion: table.version, name: 'Ticket', type: 'autoNumber' } });
+  const number = table.fields[1]!.id;
+  const first = await json<BatchResult>('records_create', { tableId: table.id, records: [{ values: {} }] });
+  assert.equal(first.records[0]!.values[number], 1);
+  const rejected = await call('records_update', { tableId: table.id, records: [{ id: first.records[0]!.id,
+    expectedVersion: 1, values: { [number]: 99 } }] });
+  assert.equal(JSON.parse(text(rejected)).error.code, 'READ_ONLY_FIELD');
+  const directory = await mkdtemp(join(tmpdir(), 'rowweave-numbers-cli-')); t.after(() => rm(directory, { recursive: true, force: true }));
+  const input = join(directory, 'records.json');
+  await writeFile(input, JSON.stringify([{ values: {} }, { values: {} }]));
+  const result = await runFile(process.execPath, [resolve('apps/cli/dist/rowweave.js'), 'records', 'create', table.id, '--input', input],
+    { env: { ...process.env, ...environment } });
+  assert.deepEqual((JSON.parse(result.stdout) as BatchResult).records.map(row => row.values[number]), [2, 3]);
+  await writeFile(input, JSON.stringify([{ values: { [number]: null } }]));
+  await assert.rejects(runFile(process.execPath, [resolve('apps/cli/dist/rowweave.js'), 'records', 'create', table.id, '--input', input],
+    { env: { ...process.env, ...environment } }), error => {
+    assert.equal(JSON.parse((error as { stderr: string }).stderr).error.code, 'READ_ONLY_FIELD'); return true;
+  });
+  assert.deepEqual(service.queryRecords(table.id, {}).records.map(row => row.values[number]), [1, 2, 3]);
+});
+
 test('MCP and CLI preserve relative date rules and reject continuation after calendar rollover', async t => {
   let now = new Date('2026-07-01T23:59:00Z');
   const service = new RecordService(fixture(t, null, () => now).open());

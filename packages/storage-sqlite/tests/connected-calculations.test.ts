@@ -215,7 +215,7 @@ test('connected calculations survive backup restoration and older workspace migr
   const schema = original.getTable(table.id);
   previous.close();
   const db = new DatabaseSync(old.path);
-  db.exec('DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; PRAGMA user_version = 12;');
+  db.exec('DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; PRAGMA user_version = 12;');
   db.close();
   const migrated = new RecordService(old.open());
   assert.deepEqual(migrated.getTable(table.id), schema);

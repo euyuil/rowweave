@@ -1,5 +1,5 @@
 import {
-  maxBatchCells, maxBatchRecords, maxPageSize,
+  isReadOnlyField, maxBatchCells, maxBatchRecords, maxPageSize,
   type CellValue, type Field, type QueryPage, type RecordLink, type RowRecord, type Table,
 } from '../../contracts/src/index.js';
 import { parseTextValue, validateValue } from '../../core/src/field-values.js';
@@ -110,7 +110,7 @@ export class TableModel {
     }
     const values = { ...record.values, ...draft.base.values, ...draft.values };
     for (const field of this.table!.fields) {
-      if ((field.type === 'lookup' || field.type === 'formula') && Object.hasOwn(record.values, field.id)) values[field.id] = record.values[field.id]!;
+      if (isReadOnlyField(field) && Object.hasOwn(record.values, field.id)) values[field.id] = record.values[field.id]!;
     }
     const result = { ...draft.base, ...(Object.keys(links).length ? { links } : {}), values };
     if (record.formulaErrors) result.formulaErrors = record.formulaErrors;

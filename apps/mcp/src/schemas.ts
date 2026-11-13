@@ -15,7 +15,7 @@ export const tableUpdate = z.strictObject({ ...expectedVersion, name: z.string()
 const field = z.strictObject({
   name: z.string(),
   description: z.string().max(2000).describe('Plain-text field guidance. Send empty text to clear it.').exactOptional(),
-  type: z.enum(['text', 'multiline', 'url', 'number', 'checkbox', 'date', 'datetime', 'singleSelect', 'multiSelect', 'relation', 'lookup', 'formula']),
+  type: z.enum(['text', 'multiline', 'url', 'number', 'autoNumber', 'checkbox', 'date', 'datetime', 'singleSelect', 'multiSelect', 'relation', 'lookup', 'formula']),
   required: z.boolean().exactOptional(), defaultValue: value.exactOptional(),
   options: z.array(z.strictObject({ id: id.exactOptional(), name: z.string(), color: z.string().exactOptional() })).exactOptional(),
   numberFormat: z.enum(['decimal', 'currency', 'percent']).exactOptional(), precision: z.number().int().exactOptional(), currency: z.string().exactOptional(),

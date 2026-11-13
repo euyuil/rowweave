@@ -177,7 +177,7 @@ test('version-nine migration preserves board configuration, records and optimist
   const before = service.getTable(table.id), views = service.listViews(table.id);
   store.close();
   const db = new DatabaseSync(data.path);
-  db.exec('DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; ALTER TABLE records DROP COLUMN formula_errors_json; PRAGMA user_version = 9;');
+  db.exec('DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; ALTER TABLE records DROP COLUMN formula_errors_json; PRAGMA user_version = 9;');
   db.close();
   const reopened = new RecordService(data.open());
   assert.deepEqual(reopened.getTable(table.id), before);

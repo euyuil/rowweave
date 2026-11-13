@@ -3,7 +3,7 @@ import { ServiceError } from './errors.js';
 import { webUrl } from './web-url.js';
 
 export function validateValue(field: Field, input: unknown): CellValue {
-  if (field.type === 'lookup' || field.type === 'formula') throw new ServiceError('READ_ONLY_FIELD', `${field.name}: computed values are read-only.`);
+  if (field.type === 'lookup' || field.type === 'formula' || field.type === 'autoNumber') throw new ServiceError('READ_ONLY_FIELD', `${field.name}: service-owned values are read-only.`);
   const invalid = (reason: string): never => { throw new ServiceError('INVALID_VALUE', `${field.name} (${field.id}): ${reason}`); };
   if (input === null) {
     if (field.required) return invalid('a value is required.');

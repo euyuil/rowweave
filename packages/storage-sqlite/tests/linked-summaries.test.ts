@@ -140,7 +140,7 @@ test('version-ten migration preserves stored formulas, existing lookups and view
   const tables = service.listTables(), views = service.listViews(source.id);
   store.close();
   const db = new DatabaseSync(data.path);
-  db.exec('DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; PRAGMA user_version = 10');
+  db.exec('DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; PRAGMA user_version = 10');
   db.close();
   const reopened = new RecordService(data.open());
   assert.deepEqual(reopened.listTables(), tables);

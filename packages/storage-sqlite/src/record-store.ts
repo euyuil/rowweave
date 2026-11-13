@@ -24,6 +24,8 @@ import { csvCell, csvLimit, csvRecord, csvRecordValues, type CheckedCsvImport } 
 import { compileFormulas } from '../../core/src/formulas.js';
 import { ConnectedCalculations, type ChangedRecords } from './connected-calculations.js';
 import { relativeDateRanges } from './relative-date-ranges.js';
+import { AutomaticNumbers } from './automatic-numbers.js';
+import { isReadOnlyField } from '../../contracts/src/index.js';
 
 export interface SeedOptions {
   rows: number;
@@ -58,6 +60,7 @@ export class SqliteRecordStore implements RecordStore {
   private readonly relations: Relations;
   private readonly lookups: Lookups;
   private readonly history: RecordHistory;
+  private readonly automaticNumbers: AutomaticNumbers;
 
   constructor(path: string, seed: SeedOptions | null = null, private readonly clock: () => Date = () => new Date()) {
     if (seed && (!Number.isSafeInteger(seed.rows) || seed.rows < 1 || seed.rows > 100_000 ||
@@ -71,6 +74,7 @@ export class SqliteRecordStore implements RecordStore {
     try {
       this.db.exec('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
       const fresh = migrate(this.db);
+      this.automaticNumbers = new AutomaticNumbers(this.db);
       this.history = new RecordHistory(this.db);
       if (fresh && seed) this.seed(seed);
     } catch (error) {
@@ -201,6 +205,7 @@ export class SqliteRecordStore implements RecordStore {
         .run(`$."${field.id}"`, table.id, `$."${field.id}"`);
     }
     this.insertFields(table);
+    for (const id of this.automaticNumbers.addFields(table, before)) versioned.add(id);
     if (JSON.stringify(before.fields.filter(field => field.type === 'formula')) !== JSON.stringify(table.fields.filter(field => field.type === 'formula'))) {
       for (const id of this.recalculate(table, calculate)) versioned.add(id);
     }
@@ -480,6 +485,7 @@ export class SqliteRecordStore implements RecordStore {
           const values = csvRecordValues(table, plan, row);
           if (apply) {
             const id = randomUUID();
+            this.automaticNumbers.assign(table.fields, values);
             const result = calculate(values);
             insert.run(id, table.id, position++, JSON.stringify(result.values), JSON.stringify(result.formulaErrors ?? {}));
             created.push(id);
@@ -556,6 +562,7 @@ export class SqliteRecordStore implements RecordStore {
     const calculate = compileFormulas(table, { skipLinked: true });
     const insert = this.db.prepare('INSERT INTO records (id, table_id, position, version, values_json, formula_errors_json) VALUES (?, ?, ?, ?, ?, ?)');
     const records = input.map(({ id, version, values }) => {
+      this.automaticNumbers.assign(table.fields, values);
       const result = calculate(values);
       insert.run(id, table.id, position++, version, JSON.stringify(result.values), JSON.stringify(result.formulaErrors ?? {}));
       return { id, version, ...result };
@@ -573,7 +580,14 @@ export class SqliteRecordStore implements RecordStore {
   restoreDeletedRecords(table: Table, records: Array<{ id: string; deletionId: number; version: number; values: Record<string, CellValue> }>): BatchResult {
     return this.transaction(() => {
       this.checkSchema(table.id, table.version);
-      for (const record of records) this.history.checkDeleted(table.id, record.id, record.deletionId);
+      const automatic = table.fields.filter(field => field.type === 'autoNumber');
+      for (const record of records) {
+        this.history.checkDeleted(table.id, record.id, record.deletionId);
+        if (automatic.length) {
+          const previous = this.history.get(table.id, record.id, record.deletionId).before!.values;
+          for (const field of automatic) if (previous[field.id] !== undefined) record.values[field.id] = previous[field.id]!;
+        }
+      }
       const result = this.insertRecords(table, records);
       for (const record of records) this.history.markRestored(record.id, record.deletionId);
       return result;
@@ -625,7 +639,7 @@ export class SqliteRecordStore implements RecordStore {
       const changes = this.history.undoChanges(id, batchId);
       const tables = new Map([...new Set(changes.map(change => change.tableId))].map(id => [id, this.getTable(id)]));
       const fields = new Map([...tables].map(([id, table]) => [id, table.fields.filter(field => field.type !== 'lookup' && field.type !== 'formula')]));
-      const cells = changes.reduce((sum, change) => sum + (change.beforeVersion === null ? 0 : fields.get(change.tableId)!.length), 0);
+      const cells = changes.reduce((sum, change) => sum + (change.beforeVersion === null ? 0 : fields.get(change.tableId)!.filter(field => !isReadOnlyField(field)).length), 0);
       if (cells > maxBatchCells) throw new ServiceError('INVALID_BATCH', `Undo at most ${maxBatchCells} writable cells in one complete batch.`);
       const current = new Map<string, RowRecord>();
       const read = this.db.prepare('SELECT id, version, values_json, formula_errors_json FROM records WHERE id = ? AND table_id = ?');
@@ -648,6 +662,7 @@ export class SqliteRecordStore implements RecordStore {
         const existing = current.get(change.recordId);
         const before = this.history.beforeValues(change.id, fields.get(table.id)!.map(field => field.id));
         const values = restoredBatchValues(table, before, existing?.values);
+        this.automaticNumbers.assign(table.fields, values);
         const calculated = calculations.get(table.id)!({ ...existing?.values, ...values }, existing?.formulaErrors);
         const version = (existing?.version ?? change.beforeVersion!) + 1;
         if (existing) update.run(version, JSON.stringify(calculated.values), JSON.stringify(calculated.formulaErrors ?? {}), change.recordId);

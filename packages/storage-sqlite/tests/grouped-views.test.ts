@@ -100,7 +100,7 @@ test('format thirteen migration retains existing view, schema and record version
   const schema = service.getTable(table.id);
   store.close();
   const db = new DatabaseSync(data.path);
-  db.exec('DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; PRAGMA user_version = 13;');
+  db.exec('DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; PRAGMA user_version = 13;');
   db.close();
   const reopened = new RecordService(data.open());
   assert.deepEqual(reopened.getRecord(table.id, row.id), row);
