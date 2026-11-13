@@ -73,6 +73,7 @@ for (let trial = 0; trial < 3; trial++) {
       result.scrollFramesMs = await page.evaluate(() => { cancelAnimationFrame(window.groupFrameRequest); return window.groupFrames; });
       page.off('request', capture);
       assert.ok(result.groupRequests.every(query => query.limit <= 500));
+      await cell(count * 2 - 1, key(count - 1)); await paint();
       await page.screenshot({ path: join(directory, 'deep.png') });
     }
     await writeFile(join(directory, 'results.json'), JSON.stringify(result, null, 2));

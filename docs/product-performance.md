@@ -6,6 +6,25 @@ The [completion plan](completion-plan.md#performance-gate) defines the acceptanc
 
 ## Reproduce
 
+### Scalar group renderer follow-up
+
+Measured on 2026-11-14 (local time) from clean revision `988ef26448253bdcf54bf502fcc173d18d29cb95`, using the compiled production renderer in source Electron and an isolated local service. This is a 100,000-record, 100,000-distinct-text-group workload with one visible field, separate from the mixed-type packaged runs below. Reproduce with `npm run build`, then `node apps/desktop/tests/grouped-benchmark.mjs`; do not overlap other local tests, downloads or benchmarks.
+
+The machine was Windows 11 x64 10.0.22631, Intel Core i7-8700K with 12 logical processors and 31.95 GiB RAM. Runtime versions were Electron 45.3.0, Chromium 156.0.8078.96 and embedded Node 24.22.2, with Node 24.22.1 for generation. The renderer used an **offscreen** 1220 × 820 window at device-pixel ratio 1. Electron reported the host display as 1728 × 1085, scale 1, 32 Hz; offscreen animation frames ran at a different cadence and do not verify physical display scrolling.
+
+| Measurement | Observed result |
+| --- | ---: |
+| First populated grid, three launches | 1,607.5 / 1,473.3 / 1,430.3 ms |
+| Twenty deep-window jumps, median / p95 / maximum | 767.1 / 833.0 / 851.3 ms |
+| Input-to-frame p95, three 100-input trials after ten warm-ups | 15.9 / 15.7 / 15.9 ms |
+| Maximum input-to-frame delay | 16.8 ms |
+| Offscreen scrolling frame p95 / maximum, 655 frames | 16.7 / 16.8 ms |
+| Frames over 25 / 50 ms | 0 / 0 |
+
+Deep-window timing includes automation IPC, metadata and record reads, and two frames after the expected record appears. It is not the service-only 500 ms query measurement. Rapid traversal visits 100 scroll positions at approximately 100 ms intervals, then returns to the first record and edits it. This initially exposed a request-queue defect: canceling an HTTP wait released backpressure before synchronous SQLite work finished, creating a long backlog. The fixed reader finishes an active service read before starting another and skips obsolete queued windows; the repeated workload recovered and all three input trials passed. A deterministic client regression covers this behavior.
+
+Raw results and per-process snapshots are in `.artifacts/scalar-grid-performance-0cCEWO/results.json`. The snapshots include renderer-debugger and offscreen overhead and are not a separate memory-gate measurement. This evidence establishes bounded requests, recovery and observed offscreen timing for this workload; final packaged, normal-display, native IME and large linked-array acceptance remain required.
+
 Use the pinned toolchain, `npm run package:win`, and `npm run benchmark`. `--timings-only` skips scrolling and forced-GC diagnostics; it still measures input, paste/save, and queries. Run `npm run benchmark:memory -- <results.json>` separately for process working sets without a renderer debugger. See [development commands](development.md#reproducible-pressure-datasets) for mixed-type dataset generation and measurement details.
 
 The datasets have 10,000 × 20 and 100,000 × 100 cells, including nullable/empty text, long Unicode text, numbers with currency/percent presentation, booleans, dates/timestamps, and single/multiple selections. The first ten columns accept a 1,000 × 10 text paste. Stable schema IDs come from normal service operations. Query cases use the primary `Name`, numeric `Amount >= 9900`, `Amount >= 9900 AND Done = true`, ascending `Name`, and descending `Amount`. Views retain all columns. Creation time, first query, and steady-state queries are reported separately.
