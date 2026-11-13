@@ -32,6 +32,7 @@ In the paths below, `:table` and `:field` are stable IDs. Names are trimmed, non
 | `POST /tables/:table/fields` | Field definition plus `expectedVersion` | `201 Table` / `createField(id, input)` |
 | `PATCH /tables/:table/fields/:field` | Changed field properties plus `expectedVersion` | `Table` / `updateField(id, fieldId, input)` |
 | `DELETE /tables/:table/fields/:field` | `{ expectedVersion }` | `Table` / `deleteField(id, fieldId, version)` |
+| `POST /tables/:table/formulas/preview` | `{ expectedVersion, formula: { expression, resultType }, fieldId?, recordId? }` | `FormulaPreview` / `previewFormula(id, input)`; read-only [draft calculation](formulas.md#preview-before-saving) |
 | `POST /tables/:table/fields/:field/conversion/preview` | `{ expectedVersion, field: definition }` | `ConversionPreview` / `previewConversion(id, fieldId, input)` |
 | `POST /tables/:table/fields/:field/conversion/apply` | Same conversion request | `Table` / `applyConversion(id, fieldId, input)` |
 

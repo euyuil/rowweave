@@ -11,6 +11,16 @@ COALESCE(["Quantity"], 0)
 
 The editor displays names; the service stores field UUID references. Renaming or moving a field keeps its formulas connected. Duplicate names are disambiguated in the field picker. Formula results are read-only and recalculate after saving a record or formula. Unsaved input drafts do not change the displayed result. A formula may be the primary display field.
 
+## Preview before saving
+
+Select **Preview formula** in field configuration to validate a draft and calculate it using one saved record. A field name is not required for preview. The first saved record is used by default; **Choose a sample record** provides search and pages of 50 records. The result names its sample and distinguishes an empty value from a calculation error. Changing the expression, result type or sample clears the previous preview.
+
+Preview uses the same expression parser, result validation and dependency checks as saving, including cross-table cycles, linked summary types and saved-view constraints. It does not save fields, values, history or versions. An empty table can validate syntax and dependencies, but shows no fabricated sample. A successful preview is a snapshot of one record, not a guarantee that every record will calculate successfully or that later inputs are unchanged. Saving still validates the current schema and recalculates the complete table.
+
+The shared read-only operation is `POST /tables/:table/formulas/preview`, SDK `previewFormula(tableId, input)`, CLI `rowweave formulas preview <table-id> --input request.json`, or MCP `formulas_preview` with `{ tableId, input }`. The input contains the current table `expectedVersion`, `formula: { expression, resultType }`, optional `fieldId` when editing an existing formula, and optional `recordId`. Use UUID references in API expressions. Supplying `fieldId` is necessary to check dependencies of that existing field; omit it to preview a new field.
+
+The response is `{ tableId, schemaVersion, formula, sample }`. A sample contains its saved record `id`, `version`, primary display `label`, calculated `value` and optional `error`; `sample` is null for an empty table. Syntax/schema failures return ordinary API errors. A calculation failure returns a sample with a null value and an explicit error. A missing/deleted requested record returns `RECORD_NOT_FOUND`; a stale schema returns `SCHEMA_CONFLICT`. Preview never reserves a record or retries a write.
+
 ## Language
 
 Choose a **Number**, **Text**, **Checkbox**, **Date**, or **Date and time (UTC)** result. A non-null result must have that type; there is no implicit text-to-number conversion. Number results use the same decimal, currency, percent and precision settings as ordinary numbers. Date results validate calendar dates; timestamp results validate explicit-zone ISO timestamps and normalize to UTC. They support the same ordered/relative-date filters, sorting, grouping and lookup operations as ordinary date/time values.

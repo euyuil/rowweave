@@ -104,6 +104,10 @@ For date/timestamp fields, use `operator: "relativeDate"` with `relative: { peri
 
 When updating a view, send its current version, not the table's version. A temporary `search` in `views_query` overrides the saved search for that read; use `views_update` to persist a change.
 
+## Formula preview
+
+Before adding or updating a formula, use MCP `formulas_preview` or CLI `rowweave formulas preview <table-id> --input request.json`. Send `{ expectedVersion, formula: { expression, resultType }, fieldId?, recordId? }` as the input. Use current schema UUID references and include `fieldId` when editing an existing formula so dependency checks cover that field. The first saved record is the default sample; choose a specific record ID when useful. Inspect both `sample.value` and `sample.error`; an empty table returns `sample: null`. Preview does not save data, advance versions or reserve the schema. Saving still validates all dependencies and recalculates all records.
+
 ## CSV preview, import and export
 
 For small CSV content use `csv_preview` with `{ tableId, input: { expectedVersion, csv, hasHeader, mapping? } }`. Each mapping entry is a destination field ID or null to skip that source column. Omitted mapping matches header names when headers exist; inspect the returned mapping instead of assuming a duplicate/renamed header resolved correctly.

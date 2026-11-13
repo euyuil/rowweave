@@ -21,7 +21,9 @@ import { Relations } from './relations.js';
 import { Lookups } from './lookups.js';
 import { maxCsvBytes, maxCsvCells, maxCsvRows, type CsvPreview } from '../../contracts/src/index.js';
 import { csvCell, csvLimit, csvRecord, csvRecordValues, type CheckedCsvImport } from '../../core/src/csv.js';
-import { compileFormulas } from '../../core/src/formulas.js';
+import { compileFormula, compileFormulas } from '../../core/src/formulas.js';
+import { fieldText } from '../../core/src/field-display.js';
+import type { FormulaPreview } from '../../contracts/src/index.js';
 import { ConnectedCalculations, type ChangedRecords } from './connected-calculations.js';
 import { relativeDateRanges } from './relative-date-ranges.js';
 import { AutomaticNumbers } from './automatic-numbers.js';
@@ -278,6 +280,32 @@ export class SqliteRecordStore implements RecordStore {
       if (apply) { update.run(JSON.stringify({ ...record.values, [field.id]: after }), record.id); versioned?.add(record.id); }
     }
     return preview;
+  }
+
+  previewFormula(table: Table, expectedVersion: number, field: Field, recordId?: string): FormulaPreview {
+    return this.transaction(() => {
+      this.checkSchema(table.id, expectedVersion);
+      this.checkSchema(table.id, table.version);
+      const before = this.getTable(table.id);
+      this.attachments.validateSchema(table);
+      this.relations.validateSchema(table, before);
+      this.lookups.validateSchema(table, before);
+      compileFormulas(table);
+      new ConnectedCalculations(this.db, table);
+      for (const view of this.listViews(table.id)) reconcileView(view, table);
+      this.syncLookupViews(table, false);
+      const id = recordId ?? this.db.prepare('SELECT id FROM records WHERE table_id = ? ORDER BY position LIMIT 1').get(table.id)?.['id'] as string | undefined;
+      const preview: FormulaPreview = { tableId: table.id, schemaVersion: table.version, formula: field.formula!, sample: null };
+      if (!id) return preview;
+      const record = this.readRecord(table.id, id);
+      const label = record.formulaErrors?.[before.primaryFieldId]
+        ? '#ERROR: ' + record.formulaErrors[before.primaryFieldId]
+        : fieldText(before.fields.find(field => field.id === before.primaryFieldId)!, record.values[before.primaryFieldId]) || '(Untitled)';
+      const formula = compileFormula(field);
+      this.lookups.hydrate(table, [record], [...formula.references]);
+      preview.sample = { id, version: record.version, label, ...formula.calculate(record.values, record.formulaErrors ?? {}) };
+      return preview;
+    }, 'DEFERRED');
   }
 
   previewConversion(id: string, version: number, field: Field, convert: (value: CellValue) => CellValue): ConversionPreview {

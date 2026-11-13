@@ -151,6 +151,11 @@ export async function startServer({ service, token, ...options }: ServerOptions)
       response.end(csv);
       return;
     }
+    const formulaPreview = url.pathname.match(/^\/tables\/([^/]+)\/formulas\/preview$/);
+    if (formulaPreview && request.method === 'POST') {
+      send(response, 200, service.previewFormula(formulaPreview[1]!, await readJson(request)));
+      return;
+    }
     const conversion = url.pathname.match(/^\/tables\/([^/]+)\/fields\/([^/]+)\/conversion\/(preview|apply)$/);
     if (conversion && request.method === 'POST') {
       const operation = conversion[3] === 'preview' ? service.previewConversion.bind(service) : service.applyConversion.bind(service);

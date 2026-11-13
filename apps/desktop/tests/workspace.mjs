@@ -20,6 +20,7 @@ import { verifyBoardWorkflow } from './board-workflow.mjs';
 import { verifyFormulaWorkflow } from './formula-workflow.mjs';
 import { verifyDateFormulaWorkflow } from './date-formula-workflow.mjs';
 import { verifyArrayFormulaWorkflow } from './array-formula-workflow.mjs';
+import { verifyFormulaPreviewWorkflow } from './formula-preview-workflow.mjs';
 import { verifyConnectedFormulaWorkflow } from './connected-formula-workflow.mjs';
 import { verifyGroupedWorkflow } from './grouped-workflow.mjs';
 import { verifyRelativeDateWorkflow } from './relative-date-workflow.mjs';
@@ -284,6 +285,7 @@ try {
   await verifyFormulaWorkflow(page);
   await verifyDateFormulaWorkflow(page);
   await verifyArrayFormulaWorkflow(page);
+  await verifyFormulaPreviewWorkflow(page);
   await verifyConnectedFormulaWorkflow(page);
   await verifyGroupedWorkflow(page, application);
   await verifyRelativeDateWorkflow(page, application);
