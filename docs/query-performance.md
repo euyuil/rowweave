@@ -27,6 +27,17 @@ Raw reports are retained in `.artifacts/group-layout-performance-6E65zS/results.
 
 This verifies the read API's large-group boundary. Broader editable grouping, nested groups, persisted collapse and final renderer/native acceptance remain required.
 
+The expanded-record-window follow-up used the working tree based on `fa4d742d8ac84691830d0241b1561fb669de8823`, with the same machine, versions, dataset and methodology above. The extended script also expands only groups 1 and 99,998 and reads an expanded-record window. Every sample returns exactly those two segments, with checked record offsets, display positions and expanded positions; intervening collapsed headings are omitted.
+
+That case reached p95 **393.4 ms**, range 381.4–395.0 ms. The display-window p95 values remained 394.0 ms (first), 386.0 ms (deep), 383.0 ms (all collapsed) and 469.0 ms (50,000 exceptions); the matching record page reached 306.3 ms. Seeding took 50.7 s outside timed reads. Raw results are in `.artifacts/group-layout-performance-6xuynE/results.json`. The sparse expanded-window samples, in observation order, are:
+
+```text
+382.8140, 384.8174, 386.3624, 386.0679, 382.8636, 386.4991, 381.3900, 390.4371, 395.0068, 387.0375,
+392.4513, 384.4684, 383.3376, 393.3731, 385.8916, 385.7711, 384.9962, 384.0856, 381.5557, 382.5951
+```
+
+This is service evidence for bounded reads across large collapsed gaps. It does not claim that the desktop has adopted the new window mode or completed broader grouping acceptance.
+
 ## Grouped summaries
 
 Grouped summaries previously scanned and filtered records separately for totals, group counts and the requested group page. The query now materializes only the needed scalar values once, aggregates groups once, and reuses them for counts and bounded group pages. Overall averages still use all non-null record values; they are not averages of group averages. Ungrouped summaries retain their direct aggregate query.

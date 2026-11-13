@@ -19,7 +19,7 @@ import type { RecordBatchPage, RecordBatchChanges, RecordBatchUndoResult } from 
 import type { CsvImportResult, CsvPreview } from '../../contracts/src/index.js';
 import type { WorkspaceState, WorkspaceStateRequest } from '../../contracts/src/index.js';
 import type { GroupCollapse, GroupLayout } from '../../contracts/src/index.js';
-import { parseGroupCollapse } from './record-groups.js';
+import { parseGroupCollapse, type CheckedGroupQuery } from './record-groups.js';
 export { ServiceError } from './errors.js';
 
 export interface RecordStore {
@@ -54,7 +54,7 @@ export interface RecordStore {
   applyConversion(tableId: string, version: number, field: Field, convert: (value: CellValue) => CellValue): Table;
   queryRecords(table: Table, query: CheckedQuery, view?: GridView): QueryPage;
   summarizeRecords(table: Table, query: CheckedQuery, summary: CheckedSummary, view?: GridView): RecordSummary;
-  queryGroups(table: Table, query: CheckedQuery, collapse: GroupCollapse, view?: GridView): GroupLayout;
+  queryGroups(table: Table, query: CheckedGroupQuery, collapse: GroupCollapse, view?: GridView): GroupLayout;
   listViews(tableId: string): GridView[];
   getView(tableId: string, viewId: string): GridView;
   saveView(table: Table, view: GridView, expectedVersion?: number): GridView;
@@ -277,6 +277,10 @@ export class RecordService {
   queryGroups(id: string, input: unknown): GroupLayout {
     const table = this.store.getTable(id);
     const item = schemaObject(input);
+    const window = item['window'] === undefined ? 'displayRows' : item['window'];
+    if (window !== 'displayRows' && window !== 'expandedRecords') {
+      throw new ServiceError('INVALID_QUERY', 'Choose a displayRows or expandedRecords window.');
+    }
     if (item['viewId'] !== undefined && (typeof item['viewId'] !== 'string' || !item['viewId'])) {
       throw new ServiceError('INVALID_QUERY', 'viewId must be a non-empty string.');
     }
@@ -293,7 +297,7 @@ export class RecordService {
       offset: item['offset'], limit: item['limit'], expectedRevision: item['expectedRevision'], expectedDateContext: item['expectedDateContext'] });
     if (!query.groupBy) throw new ServiceError('INVALID_QUERY', 'Choose a grouping field or a saved grouped grid.');
     const collapse = parseGroupCollapse(table.fields.find(field => field.id === query.groupBy)!, item['collapse']);
-    return this.store.queryGroups(table, query, collapse, view);
+    return this.store.queryGroups(table, { ...query, window }, collapse, view);
   }
 
   importCsv(id: string, input: unknown): CsvImportResult {

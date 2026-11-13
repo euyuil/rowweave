@@ -88,6 +88,13 @@ test('SDK, MCP and CLI share bounded group positions and matching scalar record 
   const queryCli = await runFile(process.execPath, [resolve('apps/cli/dist/rowweave.js'), 'records', 'query', table.id, '--json', JSON.stringify(query)],
     { env: { ...process.env, ...environment } });
   assert.deepEqual(JSON.parse(queryCli.stdout), page);
+  const expandedInput = { ...input, offset: 0, window: 'expandedRecords' as const };
+  const expanded = await api.queryGroups(table.id, expandedInput);
+  assert.deepEqual(expanded.groups.map(group => [group.key, group.recordOffset, group.expandedOffset]), [['Group 601', 601, 0]]);
+  assert.deepEqual(await json<GroupLayout>('records_groups', { tableId: table.id, input: expandedInput }), expanded);
+  const expandedCli = await runFile(process.execPath, [resolve('apps/cli/dist/rowweave.js'), 'records', 'groups', table.id, '--json', JSON.stringify(expandedInput)],
+    { env: { ...process.env, ...environment } });
+  assert.deepEqual(JSON.parse(expandedCli.stdout), expanded);
   const invalid = await call('records_groups', { tableId: table.id, input: { ...input, collapse: { defaultCollapsed: false, exceptions: [null, null] } } });
   assert.equal(invalid.isError, true); assert.equal(JSON.parse(text(invalid)).error.code, 'INVALID_QUERY');
   service.createRecords(table.id, [{ values: {} }]);

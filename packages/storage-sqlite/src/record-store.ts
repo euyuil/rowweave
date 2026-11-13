@@ -4,6 +4,7 @@ import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { summarize } from './record-summary.js';
 import { groupLayout } from './group-layout.js';
+import type { CheckedGroupQuery } from '../../core/src/record-groups.js';
 import type { GroupCollapse, GroupLayout } from '../../contracts/src/index.js';
 import type { CheckedSummary } from '../../core/src/record-summary.js';
 import type { RecordSummary, RecordHistoryQuery, RecordHistoryPage, RecordChangeDetail, RecordRestore, RecordTrashPage } from '../../contracts/src/index.js';
@@ -439,11 +440,11 @@ export class SqliteRecordStore implements RecordStore {
     }, 'DEFERRED');
   }
 
-  queryGroups(table: Table, query: CheckedQuery, collapse: GroupCollapse, view?: GridView): GroupLayout {
+  queryGroups(table: Table, query: CheckedGroupQuery, collapse: GroupCollapse, view?: GridView): GroupLayout {
     return this.transaction(() => {
       const { current, sql, dateContext } = this.prepareQuery(table, query, view);
       const field = current.fields.find(field => field.id === query.groupBy)!;
-      return { ...groupLayout(this.db, current, field, collapse, sql.where, sql.countParameters, query.offset, query.limit),
+      return { ...groupLayout(this.db, current, field, collapse, sql.where, sql.countParameters, query.offset, query.limit, query.window),
         ...(dateContext ? { dateContext } : {}), ...(view ? { viewId: view.id, viewVersion: view.version } : {}) };
     }, 'DEFERRED');
   }
