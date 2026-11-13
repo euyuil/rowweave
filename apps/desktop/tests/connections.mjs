@@ -60,6 +60,7 @@ async function createRecord(name) {
   await page.getByLabel('Name', { exact: true }).fill(name);
   await page.getByRole('button', { name: 'Create record', exact: true }).click();
   await page.getByRole('dialog').waitFor({ state: 'detached' });
+  await page.waitForFunction(() => document.querySelector('.grid-host')?.getAttribute('aria-busy') === 'false');
 }
 
 try {
@@ -101,7 +102,8 @@ try {
   assert.equal(await localProcesses(), 1);
 
   const canvas = await page.locator('canvas').first().boundingBox();
-  await page.mouse.dblclick(canvas.x + 100, canvas.y + 58);
+  // Let controlled selection commit between the two physical clicks.
+  await page.mouse.dblclick(canvas.x + 100, canvas.y + 58, { delay: 80 });
   await page.getByRole('textbox', { name: 'Cell value', exact: true }).fill('Keep this draft');
   await page.keyboard.press('Enter');
   await page.getByText('1 unsaved cell', { exact: true }).waitFor();
@@ -165,7 +167,7 @@ try {
   assert.equal(await localProcesses(), 0);
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   const remoteCanvas = await page.locator('canvas').first().boundingBox();
-  await page.mouse.dblclick(remoteCanvas.x + 100, remoteCanvas.y + 58);
+  await page.mouse.dblclick(remoteCanvas.x + 100, remoteCanvas.y + 58, { delay: 80 });
   await page.getByRole('textbox', { name: 'Cell value', exact: true }).fill('Retained during outage');
   await page.keyboard.press('Enter');
   await page.getByText('1 unsaved cell', { exact: true }).waitFor();
