@@ -62,6 +62,7 @@ SQLite stores relational table/field/view metadata and JSON record values, with 
 | --- | --- |
 | `text`, `multiline` | String up to 10,000 UTF-16 code units, or null. Empty strings remain distinct from null. |
 | `url` | Absolute HTTP/HTTPS URL or null, up to 2,048 characters including its encoded form. Credentials, whitespace, control characters and backslashes are rejected. Unicode text remains unchanged in storage, CSV and clipboard; opening uses the encoded URL. |
+| `autoNumber` | Read-only positive integer assigned by the service. Each field has its own sequence starting at 1. See [automatic numbering](#automatic-numbering) for recovery and import behavior. |
 | `number` | Finite JSON number. Optional `numberFormat`: `decimal`, `currency`, or `percent`; `precision`: 0–10; currency formatting requires a three-letter uppercase `currency` code. Formatting never rounds stored values. Percent values use fractions: `0.5` displays as 50%. |
 | `checkbox` | Boolean; false is a valid required value. |
 | `date` | Valid `YYYY-MM-DD` calendar date. |
@@ -84,6 +85,16 @@ Writable fields accept `required` and `defaultValue`. Defaults apply only when a
 The desktop's **New record**, **Open record**, and **Duplicate** actions use a right-hand panel with typed fields, defaults, select option labels, multiline text and UTC date-time inputs. Its title uses the saved primary display value and its formatting; the optional Record identity disclosure retains the UUID. The field area scrolls independently while the title and save/cancel actions remain available. Optional values can be cleared to null; an empty text value remains a string. Details load the complete record, including fields outside the visible grid. Save or Ctrl+S explicitly applies changes. Cancel discards the form; closing with the panel's close button or Escape asks whether to keep editing or discard changed values. A failed validation or version conflict retains the form. Save or discard grid drafts before managing records. Select cells or row checkboxes, then **Delete records** to preview and confirm a versioned batch deletion (up to 2,000 records); cancellation leaves data unchanged.
 
 The grid retains its text editor until the dedicated typed-editor workflow is introduced, but renders typed values and parses typed edits/paste. Select clipboard values use option names; multi-select uses a JSON array of names. Number input uses decimal notation, checkboxes use `true`/`false`, and blank non-text input means null. Invalid cells reject the complete pasted rectangle and preserve existing drafts. Service writes always validate again.
+
+### Automatic numbering
+
+Add an **Automatic number** field to identify records with an immutable, readable sequence. The record UUID remains the primary key; you may choose an automatic field as the primary display field. Each field starts at 1, assigns existing records in their stored position order, and then advances for new records. Reordering, renaming, filtering, editing and deleting records do not reset or reuse numbers. Duplicating a record allocates a new number. Field addition preserves UUIDs and advances affected record versions/history as it fills values.
+
+Sequences are allocated in the same SQLite transaction as the records. Concurrent clients receive distinct numbers; a rolled-back batch consumes none. The maximum is JavaScript's safe integer limit, 9,007,199,254,740,991; `SEQUENCE_EXHAUSTED` rejects the entire operation if it would exceed that value. No automatic write retries occur. Format 21 persists counters in workspace backups, and each restored workspace continues independently from its saved counter.
+
+Ordinary HTTP/SDK/CLI/MCP writes cannot supply an automatic value, including null. The grid allows copying but not editing/pasting/clearing automatic cells; record forms display read-only values. Required/default settings and type conversion are unavailable for this field. CSV preview does not consume numbers; import skips matching automatic headers unless explicitly mapped, in which case it rejects the read-only mapping. Successful imported rows receive fresh numbers, and export includes the saved numeric values. Numeric filters, sorting, summaries, formulas and lookups use the same values.
+
+Restoring a saved snapshot of an existing record preserves its current automatic number. Trash restoration, undo of deletion and redo of creation recover the same record UUID and original number from durable history. If an automatic field was added after that record was deleted, restoration assigns a new number for that field. Deleting a field removes its counter; recreating a new field creates a new identity and sequence. Recovery never rolls a counter backwards.
 
 ### Linked records
 

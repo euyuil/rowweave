@@ -1,4 +1,4 @@
-import { maxCsvBytes, maxCsvCells, maxCsvRows, maxFields, type CellValue, type Field, type Table } from '../../contracts/src/index.js';
+import { isReadOnlyField, maxCsvBytes, maxCsvCells, maxCsvRows, maxFields, type CellValue, type Field, type Table } from '../../contracts/src/index.js';
 import { ServiceError } from './errors.js';
 import { parseTextValue, validateValue } from './field-values.js';
 import { fieldText } from './field-display.js';
@@ -75,7 +75,7 @@ export function prepareCsvImport(table: Table, input: unknown): CheckedCsvImport
   const first = rows.next().value as CsvRow | undefined;
   if (!first) invalid('The CSV file is empty.');
   const columns = first.cells.map((cell, index) => item['hasHeader'] ? cell.text : `Column ${index + 1}`);
-  const fields = table.fields.filter(field => field.type !== 'lookup' && field.type !== 'formula');
+  const fields = table.fields.filter(field => !isReadOnlyField(field));
   const mapping = item['mapping'] === undefined ? columns.map(name => {
     const matches = item['hasHeader'] ? fields.filter(field => field.name === name) : [];
     return matches.length === 1 && columns.filter(column => column === name).length === 1 ? matches[0]!.id : null;
@@ -103,7 +103,7 @@ export function csvRecordValues(table: Table, plan: CheckedCsvImport, row: CsvRo
   if (row.cells.length !== plan.columns.length) invalid(`Expected ${plan.columns.length} cells, received ${row.cells.length}.`);
   const values: Record<string, CellValue> = {};
   for (const field of table.fields) {
-    if ((field.type === 'lookup' || field.type === 'formula')) continue;
+    if (isReadOnlyField(field)) continue;
     const index = plan.mapping.indexOf(field.id);
     const cell = index === -1 ? undefined : row.cells[index]!;
     values[field.id] = !cell ? validateValue(field, field.defaultValue ?? null)

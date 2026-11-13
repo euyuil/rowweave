@@ -1,5 +1,5 @@
 import React, { useId } from 'react';
-import { isLookupSummary, maxUrlLength, type Field, type RecordLink } from '../../contracts/src/index.js';
+import { isReadOnlyField, isLookupSummary, maxUrlLength, type Field, type RecordLink } from '../../contracts/src/index.js';
 import type { FormValue } from './field-input-values.js';
 import { RelationInput } from './relation-input.js';
 import { cellDisplay } from '../../client/src/cell-values.js';
@@ -15,6 +15,8 @@ export function FieldInput({ field, value, onChange, disabled = false, calculati
   let input;
   if (calculationError) {
     input = <output id={id} aria-describedby={descriptionId} className="form-error">#ERROR: {calculationError}</output>;
+  } else if (field.type === 'autoNumber') {
+    input = <output id={id} aria-describedby={descriptionId}>{scalar}</output>;
   } else if (field.type === 'formula') {
     input = <output id={id} aria-describedby={descriptionId}>{value === null ? ''
       : cellDisplay(field, field.formula!.resultType === 'number' ? Number(value) : field.formula!.resultType === 'checkbox' ? value === 'true' : scalar)}</output>;
@@ -46,7 +48,7 @@ export function FieldInput({ field, value, onChange, disabled = false, calculati
   }
   return <div className="form-field">
     <div className="field-label"><label htmlFor={id}>{field.name}{field.required ? ' *' : ''}{field.type === 'datetime' ? ' (UTC)' : ''}</label>
-      {!field.required && field.type !== 'lookup' && field.type !== 'formula' && <button type="button" className="clear-value" disabled={disabled || value === null}
+      {!field.required && !isReadOnlyField(field) && <button type="button" className="clear-value" disabled={disabled || value === null}
         aria-label={`Clear ${field.name}`} onClick={() => { onChange(null); document.getElementById(id)!.focus(); }}>Clear</button>}</div>
     {input}
     {field.type === 'url' && <ExternalLink value={value} />}
@@ -54,6 +56,7 @@ export function FieldInput({ field, value, onChange, disabled = false, calculati
     {field.type === 'url' && <small>HTTP and HTTPS links only. Open links in your browser.</small>}
     {field.type === 'lookup' && <small>Updates after saving linked records.</small>}
     {field.type === 'formula' && <small>Updates when changes to its inputs are saved.</small>}
+    {field.type === 'autoNumber' && <small>Assigned automatically when the record is created.</small>}
     {field.type === 'number' && field.numberFormat === 'percent' && <small>Enter a fraction: 0.5 displays as 50%.</small>}
     {value === null && !calculationError && <small>No value</small>}
   </div>;

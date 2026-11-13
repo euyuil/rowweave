@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { maxPageSize, maxBatchRecords, maxBatchCells, maxFields, tableId,
+import { isReadOnlyField, maxPageSize, maxBatchRecords, maxBatchCells, maxFields, tableId,
   type BatchResult, type CellValue, type ConversionPreview, type DeleteResult, type Field, type GridView, type QueryPage, type RecordDelete, type RecordPage, type RecordUpdate, type RowRecord, type Table, type ViewPage } from '../../contracts/src/index.js';
 import { schemaName, schemaObject, schemaVersion } from './schema-validation.js';
 import { parseField } from './field-schema.js';
@@ -163,8 +163,8 @@ export class RecordService {
     const config = schemaObject(item['field']);
     const field = parseField(config, { id: previous.id, name: previous.name, type: previous.type,
       ...(previous.description === undefined ? {} : { description: previous.description }) });
-    if (['relation', 'lookup', 'formula'].includes(previous.type) || ['relation', 'lookup', 'formula'].includes(field.type)) {
-      throw new ServiceError('CONVERSION_REQUIRED', 'Create linked-record and lookup fields explicitly; they cannot be converted to another type.');
+    if (previous.type === 'relation' || field.type === 'relation' || isReadOnlyField(previous) || isReadOnlyField(field)) {
+      throw new ServiceError('CONVERSION_REQUIRED', 'Create linked, calculated and automatic fields explicitly; they cannot be converted to another type.');
     }
     return { version, field, convert: (value: CellValue) => convertValue(previous, field, value) };
   }
@@ -347,7 +347,7 @@ export class RecordService {
     const table = this.store.getTable(id);
     const snapshot = this.store.recordChange(id, recordId, restore.changeId)[restore.snapshot];
     if (!snapshot) throw new ServiceError('INVALID_HISTORY', 'The record does not exist in this snapshot.');
-    const values = Object.fromEntries(table.fields.filter(field => !['lookup', 'formula'].includes(field.type) && Object.hasOwn(snapshot.values, field.id))
+    const values = Object.fromEntries(table.fields.filter(field => !isReadOnlyField(field) && Object.hasOwn(snapshot.values, field.id))
       .map(field => [field.id, validateValue(field, snapshot.values[field.id])]));
     if (!Object.keys(values).length) throw new ServiceError('INVALID_HISTORY', 'This snapshot has no current writable fields to restore.');
     return this.store.restoreRecord({ id: recordId, expectedVersion: restore.expectedVersion, values }, id, table.version, restore);
@@ -389,9 +389,9 @@ export class RecordService {
       for (const key of Object.keys(overrides)) {
         const field = fields.get(key);
         if (!field) throw new ServiceError('INVALID_BATCH', `Unknown field: ${key}.`);
-        if (field.type === 'lookup' || field.type === 'formula') throw new ServiceError('READ_ONLY_FIELD', `${field.name}: computed values are read-only.`);
+        if (isReadOnlyField(field)) throw new ServiceError('READ_ONLY_FIELD', `${field.name}: service-owned values are read-only.`);
       }
-      const values = Object.fromEntries(table.fields.filter(field => !['lookup', 'formula'].includes(field.type)).map(field => {
+      const values = Object.fromEntries(table.fields.filter(field => !isReadOnlyField(field)).map(field => {
         const value = Object.hasOwn(overrides, field.id) ? overrides[field.id]
           : Object.hasOwn(change.before!.values, field.id) ? change.before!.values[field.id] : field.defaultValue ?? null;
         return [field.id, validateValue(field, value)];
@@ -417,8 +417,8 @@ export class RecordService {
       for (const key of Object.keys(values)) if (!fields.has(key)) throw new ServiceError('INVALID_BATCH', `Unknown field: ${key}.`);
       const result: Record<string, CellValue> = {};
       for (const field of table.fields) {
-        if ((field.type === 'lookup' || field.type === 'formula')) {
-          if (Object.hasOwn(values, field.id)) throw new ServiceError('READ_ONLY_FIELD', `${field.name}: computed values are read-only.`);
+        if (isReadOnlyField(field)) {
+          if (Object.hasOwn(values, field.id)) throw new ServiceError('READ_ONLY_FIELD', `${field.name}: service-owned values are read-only.`);
           continue;
         }
         const provided = (values as Record<string, unknown>)[field.id];

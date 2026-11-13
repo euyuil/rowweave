@@ -6,10 +6,10 @@ import { Dialog, type DialogAnchor } from './dialog.js';
 import { FieldInput } from './field-input.js';
 import { fromFormValue, toFormValue, type FormValue } from './field-input-values.js';
 import { rewriteFormulaReferences } from '../../core/src/formulas.js';
-import { isLookupSummary, valueField } from '../../contracts/src/index.js';
+import { isLookupSummary, isReadOnlyField, valueField } from '../../contracts/src/index.js';
 
 export const fieldTypeNames: Record<FieldType, string> = {
-  text: 'Text', multiline: 'Multiline text', url: 'URL', number: 'Number', checkbox: 'Checkbox', date: 'Date',
+  text: 'Text', multiline: 'Multiline text', url: 'URL', number: 'Number', autoNumber: 'Automatic number', checkbox: 'Checkbox', date: 'Date',
   datetime: 'Date and time', singleSelect: 'Single select', multiSelect: 'Multiple select', relation: 'Linked records', lookup: 'Lookup', formula: 'Formula',
 };
 
@@ -79,7 +79,7 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved, ancho
   }, [api, type, relation]);
   const converting = !!field && type !== field.type;
   const selection = type === 'singleSelect' || type === 'multiSelect';
-  const target: Field = { id: field?.id ?? 'new-field', name, description, type, required: type !== 'lookup' && type !== 'formula' && required,
+  const target: Field = { id: field?.id ?? 'new-field', name, description, type, required: !isReadOnlyField({ type }) && required,
     ...(type === 'relation' ? { relation: { tableId: targetId, multiple } } : {}),
     ...(type === 'lookup' ? { lookup: { relationFieldId: lookupRelation, fieldId: lookupField, operation: lookupOperation } } : {}),
     ...(type === 'formula' ? { formula: { expression, resultType } } : {}),
@@ -138,7 +138,7 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved, ancho
         <label className="form-field">Field type<select aria-label="Field type" value={type} onChange={event => {
           setType(event.target.value as FieldType); setHasDefault(false); setDefaultValue(null);
         }}>{Object.entries(fieldTypeNames).map(([value, label]) => <option key={value} value={value}
-          disabled={field ? ['relation', 'lookup', 'formula'].includes(field.type) ? value !== field.type : ['relation', 'lookup', 'formula'].includes(value)
+          disabled={field ? ['relation', 'lookup', 'formula', 'autoNumber'].includes(field.type) ? value !== field.type : ['relation', 'lookup', 'formula', 'autoNumber'].includes(value)
             : value === 'lookup' && !table.fields.some(field => field.type === 'relation')}>{label}</option>)}</select></label>
         {type === 'formula' && <>
           <label className="form-field">Result type<select aria-label="Result type" value={resultType} onChange={event => setResultType(event.target.value as typeof resultType)}>
@@ -214,7 +214,8 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved, ancho
             setOptions(current => [...current, { id: crypto.randomUUID(), name: `Option ${current.length + 1}` }]); changed();
           }}>Add option</button>
         </div>}
-        {type !== 'lookup' && type !== 'formula' && <><label className="check-field"><input type="checkbox" checked={required} onChange={event => setRequired(event.target.checked)} />Require a value</label>
+        {type === 'autoNumber' && <p className="form-note">Assigns a new number from 1 when each record is created. Existing records receive numbers in their current order. Numbers cannot be edited or reused; restoring a deleted record keeps its number.</p>}
+        {!isReadOnlyField({ type }) && <><label className="check-field"><input type="checkbox" checked={required} onChange={event => setRequired(event.target.checked)} />Require a value</label>
         <label className="check-field"><input type="checkbox" checked={hasDefault} onChange={event => setHasDefault(event.target.checked)} />Use a default for new records</label></>}
         {hasDefault && <FieldInput field={{ ...target, name: 'Default value', required: false }} value={defaultValue}
           onChange={value => { setDefaultValue(value); changed(); }} />}

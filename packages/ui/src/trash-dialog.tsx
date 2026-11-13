@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { maxBatchCells, maxBatchRecords, type DeletedRecord, type RecordTrashPage, type RowRecord, type Table } from '../../contracts/src/index.js';
+import { isReadOnlyField, maxBatchCells, maxBatchRecords, type DeletedRecord, type RecordTrashPage, type RowRecord, type Table } from '../../contracts/src/index.js';
 import { validateValue } from '../../core/src/field-values.js';
 import type { WorkspaceApi } from '../../client/src/http-client.js';
 import { sameValue } from '../../client/src/cell-values.js';
@@ -29,7 +29,7 @@ export function TrashDialog({ table: initialTable, api, setDirty, onClose, onRes
   const detailElement = useRef<HTMLElement>(null);
   const confirmation = useRef<HTMLElement>(null);
   const dirty = Object.keys(repairs).length > 0;
-  const fields = table.fields.filter(field => field.type !== 'lookup' && field.type !== 'formula');
+  const fields = table.fields.filter(field => !isReadOnlyField(field));
   const limit = Math.min(maxBatchRecords, Math.floor(maxBatchCells / fields.length));
   const label = (record: DeletedRecord) => historyValue(table.fields.find(field => field.id === table.primaryFieldId), record.displayValue);
   useEffect(() => { setDirty(dirty || busy); return () => setDirty(false); }, [dirty, busy, setDirty]);

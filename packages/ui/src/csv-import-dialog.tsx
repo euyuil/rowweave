@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { maxCsvBytes, type CsvPreview, type Table } from '../../contracts/src/index.js';
+import { isReadOnlyField, maxCsvBytes, type CsvPreview, type Table } from '../../contracts/src/index.js';
 import { ApiFailure, type WorkspaceApi } from '../../client/src/http-client.js';
 import { Dialog } from './dialog.js';
 import { fieldTypeNames } from './field-form.js';
@@ -19,7 +19,7 @@ export function CsvImportDialog({ initial, api, setDirty, onClose, onImported }:
   const [schemaConflict, setSchemaConflict] = useState(false);
   const [uncertain, setUncertain] = useState(false);
   const [columnPage, setColumnPage] = useState(0);
-  const fields = table.fields.filter(field => field.type !== 'lookup' && field.type !== 'formula');
+  const fields = table.fields.filter(field => !isReadOnlyField(field));
   useEffect(() => () => setDirty(false), [setDirty]);
   const resetPreview = () => { setPreview(undefined); setMapping(undefined); setChecked(false); setColumnPage(0); };
   const fail = (error: unknown) => {

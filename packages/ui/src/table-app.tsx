@@ -3,7 +3,7 @@ import DataEditor, {
   CompactSelection, GridCellKind, type DataEditorRef, type GridCell, type GridSelection, type Rectangle,
 } from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
-import { maxBatchCells, maxBatchRecords, type CellValue, type Field, type GridView, type RecordLink, type RowRecord, type Table, type ViewUpdate } from '../../contracts/src/index.js';
+import { isReadOnlyField, maxBatchCells, maxBatchRecords, type CellValue, type Field, type GridView, type RecordLink, type RowRecord, type Table, type ViewUpdate } from '../../contracts/src/index.js';
 import type { TableModel } from '../../client/src/table-model.js';
 import { queryForView, type WorkspaceApi } from '../../client/src/http-client.js';
 import { cellDisplay, cellText } from '../../client/src/cell-values.js';
@@ -36,7 +36,7 @@ export interface TableHost {
 
 function gridCell(record: RowRecord | undefined, field: Field | undefined, readonly: boolean, row: number): GridCell {
   if (!record || !field) return { kind: GridCellKind.Loading, allowOverlay: false };
-  readonly ||= field.type === 'lookup' || field.type === 'formula';
+  readonly ||= isReadOnlyField(field);
   if (record.formulaErrors?.[field.id]) return { kind: GridCellKind.Text, data: '#ERROR: ' + record.formulaErrors[field.id],
     displayData: '#ERROR: ' + record.formulaErrors[field.id], allowOverlay: false, readonly: true };
   const value = record.values[field.id] ?? null;

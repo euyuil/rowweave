@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import type { CellValue, RowRecord, Table } from '../../contracts/src/index.js';
+import { isReadOnlyField, type CellValue, type RowRecord, type Table } from '../../contracts/src/index.js';
 import type { WorkspaceApi } from '../../client/src/http-client.js';
 import { cellDisplay, sameValue } from '../../client/src/cell-values.js';
 import { Dialog } from './dialog.js';
@@ -19,7 +19,7 @@ export function RecordDialog({ action, table, api, setDirty, onClose, onSaved }:
 }) {
   const original = action.records[0];
   const [initialValues] = useState<Record<string, FormValue>>(() => Object.fromEntries(table.fields.map(field =>
-    [field.id, toFormValue(field, original ? original.values[field.id]
+    [field.id, toFormValue(field, field.type === 'autoNumber' && action.kind === 'duplicate' ? null : original ? original.values[field.id]
       : action.initialValues && Object.hasOwn(action.initialValues, field.id) ? action.initialValues[field.id] : field.defaultValue)])));
   const [values, setValues] = useState(initialValues);
   const [confirmClose, setConfirmClose] = useState(false);
@@ -75,7 +75,7 @@ export function RecordDialog({ action, table, api, setDirty, onClose, onSaved }:
         if (deleting) {
           await api.deleteRecords(table.id, action.records.map(record => ({ id: record.id, expectedVersion: record.version })));
         } else {
-          const parsed = Object.fromEntries(table.fields.filter(field => field.type !== 'lookup' && field.type !== 'formula').map(field => [field.id, fromFormValue(field, values[field.id]!)]));
+          const parsed = Object.fromEntries(table.fields.filter(field => !isReadOnlyField(field)).map(field => [field.id, fromFormValue(field, values[field.id]!)]));
           if (action.kind === 'edit') {
             const changed = Object.fromEntries(Object.entries(parsed).filter(([id, value]) => !sameValue(value, original!.values[id] ?? null)));
             if (Object.keys(changed).length) await api.updateRecords(table.id, [{ id: original!.id, expectedVersion: original!.version, values: changed }]);

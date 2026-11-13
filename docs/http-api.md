@@ -33,6 +33,7 @@ Tables support up to 200 fields. Field definitions use `{ name, type, descriptio
 | --- | --- | --- |
 | `text`, `multiline` | String | Up to 10,000 characters; required text must not be blank. |
 | `url` | String or null | Absolute HTTP or HTTPS URL without credentials, whitespace, control characters or backslashes. Both entered and URL-encoded forms must fit 2,048 characters. Valid Unicode text is preserved as entered; empty text is invalid. |
+| `autoNumber` | Read-only integer | Service-assigned per-field sequence starting at 1. Existing records are numbered in position order when the field is added. Ordinary writes, including explicit null, return `READ_ONLY_FIELD`; defaults and required constraints are unavailable. |
 | `number` | Finite number | `numberFormat`: `decimal`, `currency`, or `percent`; optional `precision` 0–10, nullable on update to restore automatic precision; three-letter `currency` for currency presentation. Display formatting never rounds the stored value. |
 | `checkbox` | Boolean | `false` is a value, distinct from null. |
 | `date` | `YYYY-MM-DD` | Must be a valid calendar date. |
