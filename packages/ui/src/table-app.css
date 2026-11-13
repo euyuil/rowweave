@@ -46,7 +46,7 @@
 .rowweave-app .board-lane { flex: 0 0 280px; max-height: 100%; overflow-y: auto; padding: 12px; background: #edf1f7; border-radius: 8px; }
 .rowweave-app .board-lane > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .rowweave-app .board-lane h3 { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
-.rowweave-app .board-lane header span { background: #dfe6f2; padding: 3px 8px; border-radius: 12px; font-size: 12px; }
+.rowweave-app .board-lane > header > span { background: #dfe6f2; padding: 3px 8px; border-radius: 12px; font-size: 12px; }
 .rowweave-app .board-add { width: 100%; margin: 12px 0; padding: 7px; font-size: 12px; }
 .rowweave-app .board-empty { font-size: 12px; color: #738098; text-align: center; }
 .rowweave-app .board-cards { display: flex; flex-direction: column; gap: 10px; }
@@ -243,3 +243,6 @@
 .linked-details { margin-top: 12px; padding: 12px; background: #f0f4fb; max-height: 220px; overflow-y: auto; font-size: 12px; }
 .linked-details dt { color: #69768b; }
 .linked-details dd { margin: 3px 0 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.select-values { display: inline-flex; flex-wrap: wrap; gap: 5px; max-width: 100%; vertical-align: middle; }
+.select-value { display: inline-block; max-width: 100%; border-radius: 5px; padding: 3px 8px; line-height: 1.3; font-size: 12px; font-weight: 500; overflow-wrap: anywhere; }
+.rowweave-app .drawer-dialog .form-field > .select-values { grid-column: 2; }

@@ -9,6 +9,7 @@ import { queryForView, type WorkspaceApi } from '../../client/src/http-client.js
 import { cellDisplay, cellText } from '../../client/src/cell-values.js';
 import { parseTextValue } from '../../core/src/field-values.js';
 import { CellEditor, EditorContext, type EditableCell, type EditorHandle } from './cell-editor.js';
+import { drawSelectCell } from './select-values.js';
 import { parseClipboard, serializeClipboard } from './clipboard.js';
 import { RecordDialog, type RecordAction } from './record-dialog.js';
 import { TrashDialog } from './trash-dialog.js';
@@ -544,6 +545,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
             }
           }}
           getCellContent={getCellContent} getCellsForSelection={getCellsForSelection}
+          drawCell={drawSelectCell}
           provideEditor={cell => cell.kind === GridCellKind.Text ? CellEditor : undefined}
           isOutsideClick={event => {
             const editor = activeEditor.current;

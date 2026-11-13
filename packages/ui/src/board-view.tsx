@@ -2,12 +2,19 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefO
 import type { Field, GridView, RecordSummary, RowRecord, Table, ViewPage } from '../../contracts/src/index.js';
 import type { WorkspaceApi } from '../../client/src/http-client.js';
 import { cellDisplay } from '../../client/src/cell-values.js';
+import { selectedOptions, selectStyle } from './select-colors.js';
+import { SelectValues } from './select-values.js';
 
 function recordText(field: Field, record: RowRecord): string {
   if (record.formulaErrors?.[field.id]) return `#ERROR: ${record.formulaErrors[field.id]}`;
   const value = record.values[field.id] ?? null;
   return field.type === 'relation' ? ((value ?? []) as string[]).map(id => record.links?.[field.id]?.find(link => link.id === id)?.label || id).join(', ')
     : cellDisplay(field, value);
+}
+
+function RecordValue({ field, record }: { field: Field; record: RowRecord }) {
+  const options = record.formulaErrors?.[field.id] ? undefined : selectedOptions(field, record.values[field.id]);
+  return options?.length ? <SelectValues options={options} /> : <>{recordText(field, record) || '—'}</>;
 }
 
 export function BoardView({ table, view, search, generation, api, disabled, onOpen, onCreate, onMove, onRefresh }: {
@@ -101,7 +108,7 @@ function BoardLane({ lane, count, revision, dateContext, root, table, view, sear
   return <section ref={element} className="board-lane" aria-label={`${lane.label} column`}
     onDragOver={event => { if (canDrop() && !(lane.id === null && group.required)) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; } }}
     onDrop={event => { event.preventDefault(); if (!(lane.id === null && group.required)) onDrop(); }}>
-    <header><h3>{lane.label}</h3><span aria-label={`${count} records`}>{count.toLocaleString()}</span></header>
+    <header><h3>{lane.id === null ? lane.label : <SelectValues options={selectedOptions(group, lane.id)!} />}</h3><span aria-label={`${count} records`}>{count.toLocaleString()}</span></header>
     <button className="board-add" disabled={disabled || (lane.id === null && group.required)} onClick={onCreate}>+ New record</button>
     {count === 0 && <p className="board-empty">No matching records</p>}
     {near && count > 0 && !page && !error && <p role="status">Loading records…</p>}
@@ -111,12 +118,12 @@ function BoardLane({ lane, count, revision, dateContext, root, table, view, sear
       return <article className="board-card" key={record.id} draggable={!disabled}
         onDragStart={event => { if (disabled) { event.preventDefault(); return; } onDrag(record); event.dataTransfer.setData('text/plain', record.id); event.dataTransfer.effectAllowed = 'move'; }}
         onDragEnd={() => onDrag(undefined)}>
-        <button className="board-card-title" disabled={disabled} onClick={() => onOpen(record)}>{title}</button>
-        <dl>{fields.map(field => <div key={field.id}><dt>{field.name}</dt><dd>{recordText(field, record) || '—'}</dd></div>)}</dl>
+        <button className="board-card-title" disabled={disabled} onClick={() => onOpen(record)}>{selectedOptions(primary, record.values[primary.id])?.length ? <RecordValue field={primary} record={record} /> : title}</button>
+        <dl>{fields.map(field => <div key={field.id}><dt>{field.name}</dt><dd><RecordValue field={field} record={record} /></dd></div>)}</dl>
         <label className="board-move">Move to<select aria-label={`Move ${title} to`} disabled={disabled} value={lane.id ?? ''}
           onChange={event => void onMove(record, event.target.value || null)}>
           <option value="" disabled={group.required}>No value</option>
-          {group.options!.map(option => <option value={option.id} key={option.id}>{option.name}</option>)}
+          {group.options!.map(option => <option value={option.id} key={option.id} style={selectStyle(option)}>{option.name}</option>)}
         </select></label>
       </article>;
     })}</div>
