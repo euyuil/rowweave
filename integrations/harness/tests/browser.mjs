@@ -220,6 +220,15 @@ app.on('window-all-closed', () => app.quit());`);
   assert.equal(await hostDraft.inputValue(), 'Host draft 中文');
   assert.equal(await hostDraft.evaluate(element => element === document.activeElement), true);
   await page.screenshot({ path: '.artifacts/desktop-harness-scalar-groups.png' });
+  currentGroupedView = service.updateView(table.id, currentGroupedView.id, { expectedVersion: currentGroupedView.version,
+    groupMeasures: [{ fieldId: budgetId, operation: 'sum' }] });
+  const measureHeading = '▾ ' + String(budget) + ' · 1 record · Sum ' + groupedTable.fields.find(field => field.id === budgetId).name + ': ' +
+    budget.toLocaleString(undefined, { maximumSignificantDigits: 15 });
+  await page.waitForFunction(text => document.querySelector('canvas [aria-rowindex="2"] [role="gridcell"][aria-colindex="1"]')?.textContent === text,
+    measureHeading, { polling: 100 });
+  assert.equal(await hostDraft.inputValue(), 'Host draft 中文');
+  assert.equal(await hostDraft.evaluate(element => element === document.activeElement), true);
+  await page.screenshot({ path: '.artifacts/desktop-harness-group-measures.png' });
   service.updateView(table.id, currentGroupedView.id, { expectedVersion: currentGroupedView.version, groupBy: null });
   service.deleteField(table.id, done, { expectedVersion: groupedTable.version });
   await page.getByRole('button', { name: 'Collapse all', exact: true }).waitFor({ state: 'detached' });

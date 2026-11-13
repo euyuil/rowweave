@@ -349,6 +349,7 @@ export interface GridView {
   frozenColumns: number;
   type: 'grid' | 'board';
   groupBy?: string;
+  groupMeasures?: SummaryMeasure[];
 }
 
 export interface ViewCreate {
@@ -359,6 +360,7 @@ export interface ViewCreate {
   frozenColumns?: number;
   type?: 'grid' | 'board';
   groupBy?: string | null;
+  groupMeasures?: SummaryMeasure[];
 }
 
 export interface ViewUpdate extends Partial<ViewCreate> {

@@ -83,6 +83,7 @@ const view = {
   rowHeight: z.union([z.literal(36), z.literal(48), z.literal(64)]).exactOptional(),
   frozenColumns: z.int().min(0).exactOptional(),
   type: z.enum(['grid', 'board']).exactOptional(), groupBy: id.nullable().exactOptional(),
+  groupMeasures: summaryMeasures.exactOptional(),
 };
 export const viewCreate = z.strictObject(view);
 export const viewUpdate = z.strictObject({ ...view, ...expectedVersion, name: z.string().exactOptional() });

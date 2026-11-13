@@ -99,6 +99,22 @@ test('SDK, MCP and CLI share bounded group positions and matching scalar record 
   const expandedCli = await runFile(process.execPath, [resolve('apps/cli/dist/rowweave.js'), 'records', 'groups', table.id, '--json', JSON.stringify(expandedInput)],
     { env: { ...process.env, ...environment } });
   assert.deepEqual(JSON.parse(expandedCli.stdout), expanded);
+  const saved = await json<GridView>('views_create', { tableId: table.id, input: {
+    name: 'Saved totals', groupBy: table.primaryFieldId, groupMeasures: input.measures,
+  } });
+  assert.deepEqual((await api.getView(table.id, saved.id)).groupMeasures, input.measures);
+  const savedInput = { viewId: saved.id, expectedViewVersion: saved.version, offset: 600, limit: 5, collapse: input.collapse };
+  const savedExpected = await api.queryGroups(table.id, savedInput);
+  assert.deepEqual(savedExpected.groups, expected.groups);
+  assert.deepEqual(await json<GroupLayout>('records_groups', { tableId: table.id, input: savedInput }), savedExpected);
+  const savedCli = await runFile(process.execPath, [resolve('apps/cli/dist/rowweave.js'), 'records', 'groups', table.id, '--json', JSON.stringify(savedInput)],
+    { env: { ...process.env, ...environment } });
+  assert.deepEqual(JSON.parse(savedCli.stdout), savedExpected);
+  const cleared = await json<GridView>('views_update', { tableId: table.id, viewId: saved.id,
+    input: { expectedVersion: saved.version, groupMeasures: [] } });
+  assert.equal(cleared.groupMeasures, undefined);
+  const staleView = await call('records_groups', { tableId: table.id, input: savedInput });
+  assert.equal(staleView.isError, true); assert.equal(JSON.parse(text(staleView)).error.code, 'VIEW_CONFLICT');
   const invalid = await call('records_groups', { tableId: table.id, input: { ...input, collapse: { defaultCollapsed: false, exceptions: [null, null] } } });
   assert.equal(invalid.isError, true); assert.equal(JSON.parse(text(invalid)).error.code, 'INVALID_QUERY');
   service.createRecords(table.id, [{ values: {} }]);

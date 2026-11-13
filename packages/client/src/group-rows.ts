@@ -10,6 +10,7 @@ export interface GroupRow {
   start: number;
   expandedOffset: number;
   collapsed: boolean;
+  values?: Array<number | null>;
 }
 
 export class GroupRows {
@@ -23,6 +24,7 @@ export class GroupRows {
     this.groups = [...new Map(segments.map(group => [group.rowStart, group])).values()].sort((a, b) => a.rowStart - b.rowStart).map(group => ({
       key: JSON.stringify(group.key), value: group.key, count: group.count, offset: group.recordOffset,
       start: group.rowStart, expandedOffset: group.expandedOffset, collapsed: group.collapsed,
+      ...(group.values ? { values: group.values } : {}),
       label: group.key === null ? 'No value' : group.key === '' ? 'Empty text' : selected.type === 'checkbox'
         ? group.key ? 'Checked' : 'Unchecked' : cellDisplay(field, group.key),
     }));

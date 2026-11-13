@@ -44,6 +44,7 @@ import { verifyViewportCache } from './viewport-cache-workflow.mjs';
 import { verifyGroupedRefresh } from './grouped-refresh-workflow.mjs';
 import { verifyScalarGroups } from './scalar-groups-workflow.mjs';
 import { verifySaveSelection } from './save-selection-workflow.mjs';
+import { verifyGroupMeasures } from './group-measures-workflow.mjs';
 import { verifyGroupPreferences, verifyGroupPreferencesAfterRestart } from './group-preferences-workflow.mjs';
 
 const dataDirectory = await mkdtemp(join(tmpdir(), 'rowweave-workspace-'));
@@ -305,6 +306,7 @@ try {
   await verifyGroupedRefresh(page);
   await verifyScalarGroups(page);
   await verifySaveSelection(page);
+  await verifyGroupMeasures(page);
   const groupPreferences = await verifyGroupPreferences(page);
   await verifyRelativeDateWorkflow(page, application);
   await verifyExternalRefresh(page, application);

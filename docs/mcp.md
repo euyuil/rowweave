@@ -82,6 +82,8 @@ Successful results contain one text block holding JSON, except `csv_export`, whi
 
 Board views use `views_create` with `input: { name, type: 'board', groupBy: singleSelectFieldId }`. `views_query` accepts `query.lane` as an option ID or null for unset records, preserving the view's filters/search. Move a card with `records_update` using its current record version and a value for the grouping field. `views_update` also accepts row height and frozen columns for grid layouts. These operations share the desktop's validation and conflict handling.
 
+Grouped grid views accept `groupMeasures: [{ fieldId, operation }]` in `views_create` and versioned `views_update`. These numeric measures persist in the view and appear in desktop headings. `records_groups` inherits them when its request omits `measures`; an explicit array overrides only that read. Set saved `groupMeasures: []` to remove them. See [grouped records](grouped-records.md) for complete-group, null, schema-dependency and refresh semantics.
+
 Resources are read on demand:
 
 - `rowweave://workspace`: current tables, schema versions, record counts and complete field definitions.

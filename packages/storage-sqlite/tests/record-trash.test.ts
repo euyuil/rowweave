@@ -155,7 +155,7 @@ test('trash survives restart, workspace backup and migration from format 16', as
   assert.deepEqual(migrated.recordTrash(table.id, {}), expected);
   const backup = join(dirname(data.path), 'backup.sqlite'), restoredPath = join(dirname(data.path), 'restored.sqlite');
   await backupWorkspace(data.path, backup);
-  assert.equal((await restoreWorkspace(backup, restoredPath)).version, 29);
+  assert.equal((await restoreWorkspace(backup, restoredPath)).version, 30);
   const restoredStore = new SqliteRecordStore(restoredPath);
   try {
     const restored = new RecordService(restoredStore);
