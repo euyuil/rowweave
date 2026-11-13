@@ -100,6 +100,15 @@ export interface CalculationRefresh {
   changedTableIds: string[];
 }
 
+export interface CalculationStatus {
+  automatic: boolean;
+  running: boolean;
+  startedAt?: string;
+  completedAt?: string;
+  lastResult?: CalculationRefresh;
+  lastError?: string;
+}
+
 export interface FormulaPreview {
   tableId: string;
   schemaVersion: number;

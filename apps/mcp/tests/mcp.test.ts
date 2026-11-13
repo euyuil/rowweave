@@ -15,7 +15,7 @@ import { RecordService } from '../../../packages/core/src/record-service.js';
 import { parseCsv } from '../../../packages/core/src/csv.js';
 import { startServer } from '../../server/src/http-server.js';
 import type { Attachment } from '../../../packages/contracts/src/index.js';
-import type { CalculationRefresh, FormulaPreview } from '../../../packages/contracts/src/index.js';
+import type { CalculationRefresh, CalculationStatus, FormulaPreview } from '../../../packages/contracts/src/index.js';
 import { createWorkspaceClient } from '../../../packages/client/src/index.js';
 
 const runFile = promisify(execFile);
@@ -68,6 +68,7 @@ test('SDK, MCP and CLI share explicit clock refresh without automatic write retr
   let now = new Date('2024-02-29T23:59:00Z');
   const { service, server, token, environment } = await setup(t, () => now), { json } = await connect(t, environment);
   const api = createWorkspaceClient({ url: server.url, token });
+  assert.deepEqual(await api.calculationStatus(), { automatic: false, running: false });
   let table = await api.createTable({ name: 'Clock calculations' });
   table = await api.createField(table.id, { expectedVersion: table.version, name: 'Today', type: 'formula', formula: { expression: 'TODAY()', resultType: 'date' } });
   const date = table.fields[1]!.id;
@@ -82,6 +83,11 @@ test('SDK, MCP and CLI share explicit clock refresh without automatic write retr
   const result = await runFile(process.execPath, [resolve('apps/cli/dist/rowweave.js'), 'calculations', 'refresh'], { env: { ...process.env, ...environment } });
   assert.deepEqual(JSON.parse(result.stdout), { evaluatedAt: '2024-03-02T00:00:00.000Z', changedRecords: 1, changedTableIds: [table.id] });
   assert.equal((await api.getRecord(table.id, record.id)).version, 3);
+  const status = await api.calculationStatus();
+  assert.equal(status.running, false); assert.equal(status.lastResult!.evaluatedAt, '2024-03-02T00:00:00.000Z');
+  assert.deepEqual(await json<CalculationStatus>('calculations_status'), status);
+  const statusCli = await runFile(process.execPath, [resolve('apps/cli/dist/rowweave.js'), 'calculations', 'status'], { env: { ...process.env, ...environment } });
+  assert.deepEqual(JSON.parse(statusCli.stdout), status);
   assert.deepEqual(service.recordBatches(table.id, {}), history);
 });
 
@@ -425,7 +431,7 @@ test('MCP discovers all operations and runs versioned schema, records, views and
   const { service, environment } = await setup(t);
   const { client, call, json, used, stderr } = await connect(t, environment);
   const tools = (await client.listTools()).tools;
-  assert.equal(tools.length, 40);
+  assert.equal(tools.length, 41);
   assert.equal(tools.find(tool => tool.name === 'formulas_preview')!.annotations!.readOnlyHint, true);
   assert.ok(tools.every(tool => tool.inputSchema.type === 'object' && tool.inputSchema.additionalProperties === false));
   assert.equal(tools.find(tool => tool.name === 'records_query')!.annotations!.readOnlyHint, true);
@@ -437,6 +443,8 @@ test('MCP discovers all operations and runs versioned schema, records, views and
   assert.match((usage.contents[0] as { text: string }).text, /Writes are never retried/);
   assert.deepEqual(await json('tables_list'), []);
   assert.equal((await json<CalculationRefresh>('calculations_refresh')).changedRecords, 0);
+  assert.equal((await json<CalculationStatus>('calculations_status')).running, false);
+  assert.equal(tools.find(tool => tool.name === 'calculations_status')!.annotations!.readOnlyHint, true);
   let table = await json<Table>('tables_create', { name: 'MCP projects' });
   assert.equal((await json<FormulaPreview>('formulas_preview', { tableId: table.id, input: { expectedVersion: table.version,
     formula: { expression: '1', resultType: 'number' } } })).sample, null);

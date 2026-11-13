@@ -3,19 +3,22 @@ import { timingSafeEqual } from 'node:crypto';
 import { RecordService, ServiceError } from '../../../packages/core/src/record-service.js';
 import { networkPolicy, type NetworkOptions } from './network.js';
 import { maxAttachmentBytes } from '../../../packages/contracts/src/index.js';
+import { Calculations } from './calculations.js';
 
 export interface ServerOptions extends NetworkOptions {
   service: RecordService;
   token: string;
+  calculations?: Calculations;
 }
 
-export async function startServer({ service, token, ...options }: ServerOptions) {
+export async function startServer({ service, token, calculations: suppliedCalculations, ...options }: ServerOptions) {
   if (!/^[\x21-\x7e]{32,}$/.test(token)) throw new Error('Use an access token of at least 32 printable ASCII characters without spaces.');
   const policy = networkPolicy(options);
   const hosts = policy.hosts ?? new Set<string>();
   const methods = ['GET', 'POST', 'PATCH', 'DELETE'];
   const headers = ['authorization', 'content-type'];
   const expectedAuth = Buffer.from(`Bearer ${token}`);
+  const calculations = suppliedCalculations ?? new Calculations({ refresh: async () => service.refreshCalculations(), close: async () => {} }, false);
   const server = createServer((request, response) => {
     void handle(request, response).catch(error => {
       if (!response.headersSent) {
@@ -31,6 +34,11 @@ export async function startServer({ service, token, ...options }: ServerOptions)
   function send(response: ServerResponse, status: number, body: unknown): void {
     response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     response.end(JSON.stringify(body));
+  }
+
+  async function writeJson<T>(request: IncomingMessage, operation: (input: unknown) => T, maxBytes?: number): Promise<T> {
+    const input = await readJson(request, maxBytes);
+    return calculations.write(() => operation(input));
   }
 
   async function handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
@@ -64,14 +72,18 @@ export async function startServer({ service, token, ...options }: ServerOptions)
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
     if (url.pathname === '/calculations/refresh' && request.method === 'POST') {
       await readJson(request);
-      send(response, 200, service.refreshCalculations());
+      send(response, 200, await calculations.refresh());
+      return;
+    }
+    if (url.pathname === '/calculations/status' && request.method === 'GET') {
+      send(response, 200, calculations.status());
       return;
     }
     const attachment = url.pathname.match(/^\/tables\/([^/]+)\/attachments(?:\/([^/]+)(?:\/(content))?)?$/);
     if (attachment) {
       const [, tableId, id, content] = attachment;
       if (!id && request.method === 'POST') {
-        send(response, 201, service.uploadAttachment(tableId!, await readJson(request, Math.ceil(maxAttachmentBytes / 3) * 4 + 4096)));
+        send(response, 201, await writeJson(request, input => service.uploadAttachment(tableId!, input), Math.ceil(maxAttachmentBytes / 3) * 4 + 4096));
       } else if (id === 'query' && request.method === 'POST' && !content) {
         send(response, 200, service.listAttachments(tableId!, await readJson(request)));
       } else if (id && request.method === 'GET' && content) {
@@ -82,14 +94,14 @@ export async function startServer({ service, token, ...options }: ServerOptions)
           'Content-Disposition': `attachment; filename="download"; filename*=UTF-8''${filename}` });
         response.end(file.bytes);
       } else if (id && request.method === 'GET' && !content) send(response, 200, service.getAttachment(tableId!, id));
-      else if (id && request.method === 'DELETE' && !content) { service.deleteAttachment(tableId!, id); send(response, 200, { deleted: id }); }
+      else if (id && request.method === 'DELETE' && !content) { await calculations.write(() => service.deleteAttachment(tableId!, id)); send(response, 200, { deleted: id }); }
       else throw new ServiceError('NOT_FOUND', 'This endpoint does not exist.', 404);
       return;
     }
     const undo = url.pathname.match(/^\/tables\/([^/]+)\/batches\/([^/]+)\/undo$/);
     if (undo && request.method === 'POST') {
       await readJson(request);
-      send(response, 200, service.undoRecordBatch(undo[1]!, undo[2]!));
+      send(response, 200, await calculations.write(() => service.undoRecordBatch(undo[1]!, undo[2]!)));
       return;
     }
     const batches = url.pathname.match(/^\/tables\/([^/]+)\/batches\/([^/]+)$/);
@@ -101,7 +113,7 @@ export async function startServer({ service, token, ...options }: ServerOptions)
     const trash = url.pathname.match(/^\/tables\/([^/]+)\/trash\/(query|restore)$/);
     if (trash && request.method === 'POST') {
       const input = await readJson(request);
-      send(response, 200, trash[2] === 'query' ? service.recordTrash(trash[1]!, input) : service.restoreDeletedRecords(trash[1]!, input));
+      send(response, 200, trash[2] === 'query' ? service.recordTrash(trash[1]!, input) : await calculations.write(() => service.restoreDeletedRecords(trash[1]!, input)));
       return;
     }
     const history = url.pathname.match(/^\/tables\/([^/]+)\/records\/([^/]+)\/(history|restore)(?:\/([^/]+))?$/);
@@ -112,7 +124,7 @@ export async function startServer({ service, token, ...options }: ServerOptions)
       } else if (action === 'history' && !changeId && request.method === 'POST') {
         send(response, 200, service.recordHistory(tableId!, recordId!, await readJson(request)));
       } else if (action === 'restore' && !changeId && request.method === 'POST') {
-        send(response, 200, service.restoreRecord(tableId!, recordId!, await readJson(request)));
+        send(response, 200, await writeJson(request, input => service.restoreRecord(tableId!, recordId!, input)));
       } else throw new ServiceError('NOT_FOUND', 'This endpoint does not exist.', 404);
       return;
     }
@@ -121,12 +133,12 @@ export async function startServer({ service, token, ...options }: ServerOptions)
       const id = view[1]!;
       const viewId = view[2];
       if (!viewId && request.method === 'GET') send(response, 200, service.listViews(id));
-      else if (!viewId && request.method === 'POST') send(response, 201, service.createView(id, await readJson(request)));
+      else if (!viewId && request.method === 'POST') send(response, 201, await writeJson(request, input => service.createView(id, input)));
       else if (viewId && view[3] && request.method === 'POST') send(response, 200, service.queryView(id, viewId, await readJson(request)));
       else if (viewId && !view[3] && request.method === 'GET') send(response, 200, service.getView(id, viewId));
-      else if (viewId && !view[3] && request.method === 'PATCH') send(response, 200, service.updateView(id, viewId, await readJson(request)));
+      else if (viewId && !view[3] && request.method === 'PATCH') send(response, 200, await writeJson(request, input => service.updateView(id, viewId, input)));
       else if (viewId && !view[3] && request.method === 'DELETE') {
-        service.deleteView(id, viewId, await readJson(request));
+        await writeJson(request, input => service.deleteView(id, viewId, input));
         send(response, 200, { deleted: viewId });
       } else throw new ServiceError('NOT_FOUND', 'This endpoint does not exist.', 404);
       return;
@@ -145,7 +157,7 @@ export async function startServer({ service, token, ...options }: ServerOptions)
     if (csvImport && request.method === 'POST') {
       const body = await readJson(request, 64 * 1024 * 1024);
       send(response, csvImport[2] ? 200 : 201, csvImport[2]
-        ? service.previewCsv(csvImport[1]!, body) : service.importCsv(csvImport[1]!, body));
+        ? service.previewCsv(csvImport[1]!, body) : await calculations.write(() => service.importCsv(csvImport[1]!, body)));
       return;
     }
     const csvExport = url.pathname.match(/^\/tables\/([^/]+)\/export$/);
@@ -163,8 +175,9 @@ export async function startServer({ service, token, ...options }: ServerOptions)
     }
     const conversion = url.pathname.match(/^\/tables\/([^/]+)\/fields\/([^/]+)\/conversion\/(preview|apply)$/);
     if (conversion && request.method === 'POST') {
-      const operation = conversion[3] === 'preview' ? service.previewConversion.bind(service) : service.applyConversion.bind(service);
-      send(response, 200, operation(conversion[1]!, conversion[2]!, await readJson(request)));
+      const input = await readJson(request);
+      send(response, 200, conversion[3] === 'preview' ? service.previewConversion(conversion[1]!, conversion[2]!, input)
+        : await calculations.write(() => service.applyConversion(conversion[1]!, conversion[2]!, input)));
       return;
     }
     const match = url.pathname.match(/^\/tables\/([^/]+)(?:\/(records|fields)(?:\/([^/]+))?)?$/);
@@ -174,30 +187,30 @@ export async function startServer({ service, token, ...options }: ServerOptions)
     if (url.pathname === '/tables' && request.method === 'GET') {
       send(response, 200, service.listTables());
     } else if (url.pathname === '/tables' && request.method === 'POST') {
-      send(response, 201, service.createTable(await readJson(request)));
+      send(response, 201, await writeJson(request, input => service.createTable(input)));
     } else if (id && !resource && request.method === 'GET') {
       send(response, 200, service.getTable(id));
     } else if (id && !resource && request.method === 'PATCH') {
-      send(response, 200, service.updateTable(id, await readJson(request)));
+      send(response, 200, await writeJson(request, input => service.updateTable(id, input)));
     } else if (id && !resource && request.method === 'DELETE') {
-      service.deleteTable(id, await readJson(request));
+      await writeJson(request, input => service.deleteTable(id, input));
       send(response, 200, { deleted: id });
     } else if (id && resource === 'fields' && !fieldId && request.method === 'POST') {
-      send(response, 201, service.createField(id, await readJson(request)));
+      send(response, 201, await writeJson(request, input => service.createField(id, input)));
     } else if (id && resource === 'fields' && fieldId && request.method === 'PATCH') {
-      send(response, 200, service.updateField(id, fieldId, await readJson(request)));
+      send(response, 200, await writeJson(request, input => service.updateField(id, fieldId, input)));
     } else if (id && resource === 'fields' && fieldId && request.method === 'DELETE') {
-      send(response, 200, service.deleteField(id, fieldId, await readJson(request)));
+      send(response, 200, await writeJson(request, input => service.deleteField(id, fieldId, input)));
     } else if (id && resource === 'records' && !fieldId && request.method === 'GET') {
       const offset = Number(url.searchParams.get('offset') ?? '0');
       const limit = Number(url.searchParams.get('limit') ?? '100');
       send(response, 200, service.readPage(offset, limit, id));
     } else if (id && resource === 'records' && !fieldId && request.method === 'PATCH') {
-      send(response, 200, service.updateBatch(await readJson(request), id));
+      send(response, 200, await writeJson(request, input => service.updateBatch(input, id)));
     } else if (id && resource === 'records' && !fieldId && request.method === 'POST') {
-      send(response, 201, service.createRecords(id, await readJson(request)));
+      send(response, 201, await writeJson(request, input => service.createRecords(id, input)));
     } else if (id && resource === 'records' && !fieldId && request.method === 'DELETE') {
-      send(response, 200, service.deleteRecords(id, await readJson(request)));
+      send(response, 200, await writeJson(request, input => service.deleteRecords(id, input)));
     } else if (id && resource === 'records' && fieldId && request.method === 'GET') {
       send(response, 200, service.getRecord(id, fieldId));
     } else {
@@ -214,11 +227,14 @@ export async function startServer({ service, token, ...options }: ServerOptions)
   if (!address || typeof address === 'string') throw new Error('Could not determine the listening address.');
   const authority = `${address.family === 'IPv6' ? `[${address.address}]` : address.address}:${address.port}`;
   if (!policy.hosts) hosts.add(authority);
+  calculations.start();
   return {
     url: `http://${authority}`,
     close: async () => {
+      calculations.stop();
       server.closeIdleConnections();
       await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+      await calculations.close();
     },
   };
 }
