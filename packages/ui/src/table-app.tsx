@@ -3,7 +3,8 @@ import DataEditor, {
   CompactSelection, GridCellKind, type DataEditorRef, type GridCell, type GridSelection, type Rectangle,
 } from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
-import { isReadOnlyField, maxBatchCells, maxBatchRecords, type CellValue, type Field, type GridView, type RecordLink, type RowRecord, type Table, type ViewUpdate } from '../../contracts/src/index.js';
+import { flushSync } from 'react-dom';
+import { isReadOnlyField, maxBatchCells, maxBatchRecords, type CellValue, type Field, type GridView, type QueryPage, type RecordLink, type RowRecord, type Table, type ViewUpdate } from '../../contracts/src/index.js';
 import type { TableModel } from '../../client/src/table-model.js';
 import { ApiFailure, queryForView, type WorkspaceApi } from '../../client/src/http-client.js';
 import { cellDisplay, cellText } from '../../client/src/cell-values.js';
@@ -217,26 +218,36 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       state.table.view?.dateContext !== model.dateContext;
     if (!changed) { setExternalUpdate(undefined); return; }
     setExternalUpdate('pending');
-    if (previousView.type !== 'grid' || previousView.groupBy || !canRefresh.current()) return;
+    if (previousView.type !== 'grid' || !canRefresh.current()) return;
     const loaded = state.table.viewsRevision === knownViewsRevision.current ? views : await api.listViews(tableId, signal);
     const selected = loaded.find(view => view.id === previousView.id) ?? loaded[0]!;
-    if (selected.type !== 'grid' || selected.groupBy) return;
+    if (selected.type !== 'grid') return;
     const text = selected.id === previousView.id && appliedSearch.current !== (previousView.query.search ?? '')
       ? appliedSearch.current : selected.query.search ?? '';
     if (generation !== model.queryVersion || activity !== interaction.current || !canRefresh.current()) return;
-    const snapshot = await model.prepareRefresh(queryForView(selected, text), { start: visible.y, count: visible.height + 5, signal });
+    let groupRefresh: Awaited<ReturnType<typeof grouping.prepareRefresh>> | undefined;
+    const snapshot = await model.prepareRefresh(queryForView(selected, text), { start: visible.y, count: visible.height + 5, signal,
+      ...(selected.groupBy ? { selectRows: async (table: Table, first: QueryPage, signal: AbortSignal) => {
+        groupRefresh = await grouping.prepareRefresh(table, selected, first, text, signal);
+        return groupRefresh.rows.indices(visible.y, Math.min(visible.height + 5, maxBatchRecords));
+      } } : {}),
+    });
     if (signal.aborted || generation !== model.queryVersion || activity !== interaction.current || previousView !== currentView.current || !canRefresh.current()) return;
-    const retained = refreshSelection(selection, model, snapshot);
+    const retained = refreshSelection(selection, model, snapshot, grouping.rows, groupRefresh?.rows);
     const wasStale = model.stale;
-    if (!model.commitRefresh(snapshot)) return;
-    currentView.current = selected;
-    appliedSearch.current = text;
-    knownViewsRevision.current = state.table.viewsRevision;
-    setViews(loaded); setView(selected); setSearch(text); setSelection(retained.selection);
-    setExternalUpdate(undefined);
-    if (wasStale) setError(undefined);
-    if (retained.cleared) setNotice('Changes were loaded. The previous selection was cleared; select records again before editing.');
-    localStorage.setItem(`rowweave.view.${tableId}`, selected.id);
+    // External-store notifications and group state must render together to keep the grid mounted.
+    flushSync(() => {
+      if (!model.commitRefresh(snapshot)) return;
+      if (groupRefresh) grouping.commitRefresh(groupRefresh.summary, selected, text);
+      currentView.current = selected;
+      appliedSearch.current = text;
+      knownViewsRevision.current = state.table!.viewsRevision;
+      setViews(loaded); setView(selected); setSearch(text); setSelection(retained.selection);
+      setExternalUpdate(undefined);
+      if (wasStale) setError(undefined);
+      if (retained.cleared) setNotice('Changes were loaded. The previous selection was cleared; select records again before editing.');
+      localStorage.setItem(`rowweave.view.${tableId}`, selected.id);
+    });
   };
 
   useEffect(() => {
@@ -493,7 +504,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     if (mapped?.kind === 'group') {
       const end = (view!.frozenColumns || fields.length) - 1;
       const label = `${mapped.group.collapsed ? '▸' : '▾'} ${mapped.group.label} · ${mapped.group.count.toLocaleString()} ${mapped.group.count === 1 ? 'record' : 'records'}`;
-      return { kind: GridCellKind.Text, data: '', displayData: column <= end ? label : '', allowOverlay: false, readonly: true,
+      return { kind: GridCellKind.Text, data: column <= end ? label : '', copyData: '', displayData: column <= end ? label : '', allowOverlay: false, readonly: true,
         ...(column <= end ? { span: [0, end] as const } : {}) };
     }
     const index = recordIndex(row);
@@ -566,7 +577,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     {notice && <div role="status" className="notice-banner"><span>{notice}</span><button onClick={() => setNotice(undefined)}>Dismiss</button></div>}
     {externalUpdate && <div role="status" className="notice-banner">{externalUpdate === 'missing'
       ? 'This table was deleted elsewhere. Visible edits are retained. Choose another table when ready.'
-      : view?.type !== 'grid' || view.groupBy ? 'Updates are available. Use Refresh view to load them.'
+      : view?.type !== 'grid' ? 'Updates are available. Use Refresh view to load them.'
         : 'Updates are available. Finish editing to load them automatically, or use Refresh view to keep cell drafts. Reload resets local undo history.'}</div>}
     {!offline && refreshFailure && <div role="status" className="notice-banner">Could not check for updates: {refreshFailure}</div>}
     <ViewTabs views={views} selected={view?.id} disabled={!ready || locked} panelId={`table-view-${tableId}`}

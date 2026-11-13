@@ -73,6 +73,12 @@ export async function verifyViewportCache(page, application) {
     await page.getByRole('button', { name: 'Save changes', exact: true }).click();
     await page.getByText('All changes saved', { exact: true }).waitFor(); await ready();
     assert.equal((await call(root + '/records/' + records[100].id)).values[name], '保留可见草稿');
+    const last = await call(root + '/records/' + records.at(-1).id);
+    await call(root + '/records', 'PATCH', [{ id: last.id, expectedVersion: last.version, values: { [name]: 'Remote visible record' } }]);
+    await page.waitForFunction(() => Array.from({ length: 14 }, (_, index) =>
+      document.querySelector(`canvas [aria-rowindex="${index * 3 + 4}"] [role="gridcell"][aria-colindex="1"]`)?.textContent ===
+        (index === 0 ? '保留可见草稿' : index === 13 ? 'Remote visible record' : `Visible ${index} record 0`)).every(Boolean), undefined, { polling: 100 });
+    await page.screenshot({ path: '.artifacts/desktop-group-refresh-fragmented.png' });
     await page.getByRole('button', { name: 'Delete table', exact: true }).click();
     await dialog.getByRole('button', { name: 'Delete table', exact: true }).click(); await dialog.waitFor({ state: 'detached' });
   } finally {

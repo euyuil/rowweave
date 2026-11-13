@@ -149,3 +149,38 @@ test('relative-date refresh applies a new date context without a data write and 
   assert.equal(model.getRecord(0)!.id, rows[2]!.id); assert.equal(model.getRecord(1)!.id, rows[3]!.id);
   assert.equal(model.dateContext, snapshot.first.dateContext);
 });
+
+test('refresh prepares noncontiguous visible rows after a guarded auxiliary read and retains the old snapshot until commit', async t => {
+  const { service, api } = setup(t), reads: number[] = [];
+  const model = new TableModel({ ...api, readPage: async (...args) => { reads.push(args[0]); return api.readPage(...args); } }, 5, 2);
+  await model.initialize(); reads.length = 0;
+  const previous = model.getRecord(0)!, oldRevision = model.dataRevision;
+  service.updateBatch([{ id: previous.id, expectedVersion: previous.version, values: { field_1: 'New snapshot' } }]);
+  const snapshot = await model.prepareRefresh({}, { selectRows: async (table, first, signal) => {
+    assert.equal(signal.aborted, false); assert.equal(table.version, first.schemaVersion);
+    assert.notEqual(first.revision, oldRevision); assert.equal(model.getRecord(0)!.values['field_1'], previous.values['field_1']);
+    return [20, 21, 5, 6, 15];
+  } });
+  assert.deepEqual(reads, [0, 20, 5, 15], 'Every visible page is fetched once even when the LRU is smaller.');
+  assert.equal(model.getRecord(0)!.values['field_1'], previous.values['field_1']);
+  assert.equal(model.commitRefresh(snapshot), true);
+  assert.equal(model.cacheStats.pages, 2); assert.equal(model.cacheStats.visibleRows, 5);
+  assert.equal(model.getRecord(20)!.id, 'record_21'); assert.equal(model.getRecord(15)!.id, 'record_16'); assert.equal(model.getRecord(5)!.id, 'record_6');
+  reads.length = 0;
+  await model.readViewport([20, 21, 5, 6, 15]);
+  assert.deepEqual(reads, [], 'The grid reuses the committed visible window without refetching evicted pages.');
+});
+
+test('auxiliary refresh failures and query changes preserve visible rows and cancel preparation', async t => {
+  const { api } = setup(t), model = new TableModel(api);
+  await model.initialize(); const original = model.getRecord(0), generation = model.queryVersion;
+  await assert.rejects(model.prepareRefresh({}, { selectRows: async () => { throw new ApiFailure('DATA_CHANGED', 'Groups changed.', 409); } }), { code: 'DATA_CHANGED' });
+  assert.equal(model.queryVersion, generation); assert.equal(model.getRecord(0), original); assert.equal(model.error, undefined);
+  let started!: () => void;
+  const ready = new Promise<void>(resolve => { started = resolve; });
+  const rejected = assert.rejects(model.prepareRefresh({}, { selectRows: async (_table, _first, signal) =>
+    new Promise<number[]>((_resolve, reject) => { signal.addEventListener('abort', () => reject(signal.reason), { once: true }); started(); }),
+  }), { name: 'AbortError' });
+  await ready; await model.setQuery({ search: 'absent' }); await rejected;
+  assert.equal(model.rowCount, 0); assert.equal(model.cacheStats.inFlight, 0);
+});

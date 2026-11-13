@@ -40,6 +40,11 @@ export class GroupedRows {
     return row === group.start ? { kind: 'group', group } : { kind: 'record', index: group.offset + row - group.start - 1 };
   }
 
+  position(index: number): number | undefined {
+    const group = this.groups.find(group => index >= group.offset && index < group.offset + group.count);
+    return group && !group.collapsed ? group.start + 1 + index - group.offset : undefined;
+  }
+
   count(start: number, length: number): number {
     return this.groups.reduce((count, group) => count + (group.collapsed ? 0
       : Math.max(0, Math.min(start + length, group.start + 1 + group.count) - Math.max(start, group.start + 1))), 0);
