@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import type { FieldCreate } from '../../contracts/src/index.js';
 import { RecordService, ServiceError } from '../../core/src/record-service.js';
-import { fixture } from './helpers.js';
+import { fixture, removeWorkspaceState } from './helpers.js';
 import { startServer } from '../../../apps/server/src/http-server.js';
 import { createWorkspaceClient } from '../../client/src/http-client.js';
 import { TableModel } from '../../client/src/table-model.js';
@@ -140,7 +140,7 @@ test('version-five migration preserves existing linked records and views', t => 
   const views = service.listViews(table.id);
   store.close();
   const db = new DatabaseSync(data.path);
-  db.exec('DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; DROP TABLE field_lookups; ALTER TABLE records DROP COLUMN formula_errors_json; PRAGMA user_version = 5;');
+  removeWorkspaceState(db); db.exec('DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; DROP TABLE field_lookups; ALTER TABLE records DROP COLUMN formula_errors_json; PRAGMA user_version = 5;');
   db.close();
   const migrated = new RecordService(data.open());
   assert.deepEqual(migrated.getRecord(table.id, record.id), before);

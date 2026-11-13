@@ -47,6 +47,8 @@ export function createMcpServer(api: WorkspaceApi): McpServer {
   const field = z.strictObject(schemas.fieldId);
   const view = z.strictObject(schemas.viewId);
   const attachment = table.extend({ attachmentId: z.string() });
+  tool('workspace_state', 'Read bounded catalog and selected table/view revisions without loading records. A missing requested table or view is null. dateContext tracks relative-filter time boundaries even when no data was written. Compare revisions before fetching changed data; retain local drafts.',
+    z.strictObject({ tableId: z.string().min(1).max(200).exactOptional(), viewId: z.string().min(1).max(200).exactOptional() }), 'read', input => api.workspaceState(input));
   tool('calculations_refresh', 'Recalculate saved NOW/TODAY formulas and their dependents using one service clock. Returns the evaluation time and changed counts; advances record versions and table revisions but preserves user edit times and history. Writes are not retried.',
     z.strictObject({}), 'change', () => api.refreshCalculations());
   tool('calculations_status', 'Read automatic calculation availability, current progress, last evaluation result and any failure. Use after an uncertain refresh response before requesting another calculation.',

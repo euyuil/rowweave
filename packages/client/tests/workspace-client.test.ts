@@ -54,3 +54,30 @@ test('the workspace client completes a schema, view, conversion and record lifec
   await api.deleteTable(table.id, table.version);
   assert.deepEqual(await api.listTables(), []);
 });
+
+test('workspace state is authenticated, bounded, cancellable and shared with saved view versions', async t => {
+  const service = new RecordService(fixture(t, null).open()), token = randomBytes(32).toString('hex');
+  const server = await startServer({ service, token });
+  t.after(() => server.close());
+  const api = createWorkspaceClient({ url: server.url, token });
+  assert.deepEqual(await api.workspaceState(), service.workspaceState({}));
+  const table = await api.createTable({ name: 'State client' }), view = (await api.listViews(table.id))[0]!;
+  const request = { tableId: table.id, viewId: view.id };
+  const state = await api.workspaceState(request);
+  assert.deepEqual(state, service.workspaceState(request));
+  const updated = await api.updateView(table.id, view.id, { expectedVersion: view.version, name: 'Updated view' });
+  const after = await api.workspaceState(request);
+  assert.equal(after.table!.view!.version, updated.version);
+  assert.ok(after.table!.viewsRevision > state.table!.viewsRevision);
+  assert.equal(after.catalogRevision, state.catalogRevision);
+  assert.equal(after.table!.dataRevision, state.table!.dataRevision);
+  assert.deepEqual(await api.workspaceState({ tableId: 'deleted', viewId: 'missing' }), { catalogRevision: after.catalogRevision, table: null });
+  await assert.rejects(createWorkspaceClient({ url: server.url, token: 'invalid' }).workspaceState(), { status: 401 });
+  for (const input of [null, [], { tableId: '' }, { tableId: 1 }, { tableId: 'x'.repeat(201) }, { viewId: view.id }, { tableId: table.id, viewId: false }]) {
+    const response = await fetch(server.url + '/workspace/state', { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
+    assert.equal(response.status, 400);
+  }
+  assert.deepEqual(await api.workspaceState(request), after);
+  const controller = new AbortController(); controller.abort();
+  await assert.rejects(api.workspaceState(request, controller.signal), { name: 'AbortError' });
+});

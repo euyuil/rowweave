@@ -41,7 +41,7 @@ function lookupErrorSql(field: Field): string {
 export class Lookups {
   constructor(private readonly db: DatabaseSync) {}
 
-  resolve(table: Table): Table {
+  resolve<T extends Pick<Table, 'fields'>>(table: T): T {
     const ids = table.fields.filter(field => field.type === 'lookup').map(field => field.id);
     if (!ids.length) return table;
     const definitions = new Map(this.db.prepare(`SELECT l.field_id, f.definition_json FROM field_lookups l

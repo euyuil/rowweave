@@ -5,7 +5,12 @@ import { queryValueField } from '../../core/src/record-query.js';
 
 export type DateRange = readonly [start: string, end: string];
 
-export function relativeDateRanges(table: Table, filter: FilterGroup | undefined, now: Date) {
+export function hasRelativeDateFilter(filter: FilterGroup | undefined): boolean {
+  return filter?.conditions.some(condition => 'conjunction' in condition
+    ? hasRelativeDateFilter(condition) : condition.operator === 'relativeDate') ?? false;
+}
+
+export function relativeDateRanges(table: Pick<Table, 'fields'>, filter: FilterGroup | undefined, now: Date) {
   const ranges = new Map<FieldFilter, DateRange>();
   const visit = (group: FilterGroup) => {
     for (const condition of group.conditions) {

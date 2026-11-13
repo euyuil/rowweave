@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { dirname, join } from 'node:path';
-import { fixture } from './helpers.js';
+import { fixture, removeWorkspaceState } from './helpers.js';
 import { RecordService } from '../../core/src/record-service.js';
 import { SqliteRecordStore } from '../src/record-store.js';
 import { backupWorkspace, restoreWorkspace } from '../src/backup.js';
@@ -173,10 +173,10 @@ test('clock semantics migration preserves deterministic formulas, values and sav
   service.createRecords(table.id, [{ values: {} }]);
   const schema = service.getTable(table.id), records = service.queryRecords(table.id, {}), views = service.listViews(table.id);
   store.close();
-  const db = new DatabaseSync(data.path); db.exec('PRAGMA user_version = 26;'); db.close();
+  const db = new DatabaseSync(data.path); removeWorkspaceState(db); db.exec('PRAGMA user_version = 26;'); db.close();
   const reopened = new RecordService(data.open());
   assert.deepEqual(reopened.getTable(table.id), schema); assert.deepEqual(reopened.queryRecords(table.id, {}), records); assert.deepEqual(reopened.listViews(table.id), views);
   assert.equal(reopened.refreshCalculations().changedRecords, 0);
   const check = new DatabaseSync(data.path);
-  try { assert.equal(check.prepare('PRAGMA user_version').get()!['user_version'], 27); } finally { check.close(); }
+  try { assert.equal(check.prepare('PRAGMA user_version').get()!['user_version'], 28); } finally { check.close(); }
 });

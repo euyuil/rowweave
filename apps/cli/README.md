@@ -54,6 +54,8 @@ History queries accept `{ limit?, before? }`; use returned `nextBefore` for cont
 
 ## Commands
 
+`rowweave workspace state` reads catalog change state. Add `--input state-request.json` with `{ "tableId": "...", "viewId": "..." }` to inspect one table/view without loading records. See [workspace change state](../../docs/workspace-state.md) for revision and missing-object semantics.
+
 | Command | ID arguments | JSON body |
 | --- | --- | --- |
 | `tables list` | None | None |

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { dirname, join } from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { fixture } from './helpers.js';
+import { fixture, removeWorkspaceState } from './helpers.js';
 import { RecordService } from '../../core/src/record-service.js';
 import { SqliteRecordStore } from '../src/record-store.js';
 import { backupWorkspace, restoreWorkspace } from '../src/backup.js';
@@ -82,7 +82,7 @@ test('format-17 migration preserves history without inventing old receipts and n
   const row = service.createRecords(table.id, [{ values: {} }]).records[0]!, history = service.recordHistory(table.id, row.id, {});
   store.close();
   const db = new DatabaseSync(data.path);
-  db.exec('DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; PRAGMA user_version = 17;'); db.close();
+  removeWorkspaceState(db); db.exec('DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; PRAGMA user_version = 17;'); db.close();
   const migrated = new RecordService(data.open());
   assert.deepEqual(migrated.recordHistory(table.id, row.id, {}), history);
   assert.deepEqual(migrated.recordBatches(table.id, {}), { batches: [] });
@@ -90,7 +90,7 @@ test('format-17 migration preserves history without inventing old receipts and n
   migrated.updateBatch([{ id: row.id, expectedVersion: 1, values: { [table.primaryFieldId]: 'New value' } }], table.id);
   const batch = migrated.recordBatches(table.id, {}).batches[0]!;
   const backup = join(dirname(data.path), 'backup.sqlite'), restoredPath = join(dirname(data.path), 'restored.sqlite');
-  await backupWorkspace(data.path, backup); assert.equal((await restoreWorkspace(backup, restoredPath)).version, 27);
+  await backupWorkspace(data.path, backup); assert.equal((await restoreWorkspace(backup, restoredPath)).version, 28);
   const restoredStore = new SqliteRecordStore(restoredPath);
   try {
     const restored = new RecordService(restoredStore);

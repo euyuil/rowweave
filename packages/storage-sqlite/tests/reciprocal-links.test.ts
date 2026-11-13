@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { randomBytes } from 'node:crypto';
 import { dirname, join } from 'node:path';
-import { fixture } from './helpers.js';
+import { fixture, removeWorkspaceState } from './helpers.js';
 import { RecordService, ServiceError } from '../../core/src/record-service.js';
 import { startServer } from '../../../apps/server/src/http-server.js';
 import { createWorkspaceClient } from '../../client/src/http-client.js';
@@ -179,13 +179,13 @@ test('format eleven migration keeps existing values and schemas while protecting
   const schema = service.getTable(table.id);
   store.close();
   const previous = new DatabaseSync(data.path);
-  previous.exec('DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; PRAGMA user_version = 11;');
+  removeWorkspaceState(previous); previous.exec('DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; PRAGMA user_version = 11;');
   previous.close();
   const reopened = new RecordService(data.open());
   assert.deepEqual(reopened.getTable(table.id), schema);
   assert.deepEqual(reopened.getRecord(table.id, record.id), record);
   const current = new DatabaseSync(data.path);
-  assert.equal(current.prepare('PRAGMA user_version').get()!['user_version'], 27);
+  assert.equal(current.prepare('PRAGMA user_version').get()!['user_version'], 28);
   current.close();
 });
 

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { dirname, join } from 'node:path';
-import { fixture } from './helpers.js';
+import { fixture, removeWorkspaceState } from './helpers.js';
 import { RecordService } from '../../core/src/record-service.js';
 import { SqliteRecordStore } from '../src/record-store.js';
 import { backupWorkspace, restoreWorkspace } from '../src/backup.js';
@@ -131,7 +131,7 @@ test('format 25 migration preserves existing date formulas, values, versions and
   table = service.createField(table.id, { expectedVersion: table.version, name: 'Date', type: 'formula',
     formula: { expression: 'DATE(2024, 2, 29)', resultType: 'date' } });
   const row = service.createRecords(table.id, [{ values: {} }]).records[0]!, schema = service.getTable(table.id), views = service.listViews(table.id);
-  store.close(); const db = new DatabaseSync(data.path); db.exec('PRAGMA user_version = 25;'); db.close();
+  store.close(); const db = new DatabaseSync(data.path); removeWorkspaceState(db); db.exec('PRAGMA user_version = 25;'); db.close();
   const reopened = new RecordService(data.open());
   assert.deepEqual(reopened.getTable(table.id), schema); assert.deepEqual(reopened.getRecord(table.id, row.id), row);
   assert.deepEqual(reopened.listViews(table.id), views);

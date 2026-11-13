@@ -1,4 +1,5 @@
 import type { CalculationRefresh, CalculationStatus, FormulaPreview, FormulaPreviewRequest } from '../../contracts/src/index.js';
+import type { WorkspaceState, WorkspaceStateRequest } from '../../contracts/src/index.js';
 import {
   tableId, type BatchResult, type ConversionPreview, type DeleteResult, type FieldConversion,
   type FieldCreate, type FieldUpdate, type GridView, type QueryPage, type RecordCreate, type RecordDelete,
@@ -60,6 +61,7 @@ export function createWorkspaceClient(connection: Connection, request: typeof fe
   const write = <T>(path: string, method: string, body: unknown, signal?: AbortSignal) =>
     call<T>(path, { method, body: JSON.stringify(body), ...(signal ? { signal } : {}) });
   const api = {
+    workspaceState: (input: WorkspaceStateRequest = {}, signal?: AbortSignal) => write<WorkspaceState>('/workspace/state', 'POST', input, signal),
     uploadAttachment: (id: string, input: AttachmentUpload) => write<Attachment>(`${root(id)}/attachments`, 'POST', input),
     listAttachments: (id: string, input: AttachmentQuery = {}, signal?: AbortSignal) => write<AttachmentPage>(`${root(id)}/attachments/query`, 'POST', input, signal),
     getAttachment: (id: string, attachmentId: string) => call<Attachment>(`${root(id)}/attachments/${encodeURIComponent(attachmentId)}`),

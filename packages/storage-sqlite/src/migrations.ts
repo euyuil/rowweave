@@ -5,8 +5,8 @@ import { syncQueryIndexes } from './query-indexes.js';
 
 export function migrate(db: DatabaseSync): boolean {
   const version = db.prepare('PRAGMA user_version').get()!['user_version'] as number;
-  if (version === 27) return false;
-  if (version < 0 || version > 27) throw new Error(`Unsupported database version: ${version}.`);
+  if (version === 28) return false;
+  if (version < 0 || version > 28) throw new Error(`Unsupported database version: ${version}.`);
   db.exec('BEGIN IMMEDIATE');
   try {
     if (version < 2) {
@@ -114,7 +114,30 @@ export function migrate(db: DatabaseSync): boolean {
       sha256 TEXT NOT NULL, created_at TEXT NOT NULL, content BLOB NOT NULL
     ); CREATE INDEX attachments_by_table ON attachments(table_id, sequence DESC);`);
     if (version < 24) db.exec('ALTER TABLE attachments ADD COLUMN retained INTEGER NOT NULL DEFAULT 0;');
-    db.exec('PRAGMA user_version = 27; COMMIT;');
+    if (version < 28) db.exec(`
+      ALTER TABLE tables ADD COLUMN views_revision INTEGER NOT NULL DEFAULT 1;
+      CREATE TABLE workspace_state (id INTEGER PRIMARY KEY CHECK(id = 1), catalog_revision INTEGER NOT NULL);
+      INSERT INTO workspace_state VALUES (1, 1);
+      CREATE TRIGGER catalog_insert AFTER INSERT ON tables BEGIN
+        UPDATE workspace_state SET catalog_revision = catalog_revision + 1 WHERE id = 1;
+      END;
+      CREATE TRIGGER catalog_delete AFTER DELETE ON tables BEGIN
+        UPDATE workspace_state SET catalog_revision = catalog_revision + 1 WHERE id = 1;
+      END;
+      CREATE TRIGGER catalog_rename AFTER UPDATE OF name ON tables WHEN old.name <> new.name BEGIN
+        UPDATE workspace_state SET catalog_revision = catalog_revision + 1 WHERE id = 1;
+      END;
+      CREATE TRIGGER views_insert AFTER INSERT ON views BEGIN
+        UPDATE tables SET views_revision = views_revision + 1 WHERE id = new.table_id;
+      END;
+      CREATE TRIGGER views_update AFTER UPDATE ON views BEGIN
+        UPDATE tables SET views_revision = views_revision + 1 WHERE id = new.table_id;
+      END;
+      CREATE TRIGGER views_delete AFTER DELETE ON views BEGIN
+        UPDATE tables SET views_revision = views_revision + 1 WHERE id = old.table_id;
+      END;
+    `);
+    db.exec('PRAGMA user_version = 28; COMMIT;');
     return version === 0;
   } catch (error) {
     db.exec('ROLLBACK');

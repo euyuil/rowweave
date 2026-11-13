@@ -6,6 +6,10 @@ Send `Authorization: Bearer <token>` on every operation, and `Content-Type: appl
 
 Successful JSON responses contain the resource/result directly. Errors use a non-success status and `{ "error": { "code": "VERSION_CONFLICT", "message": "..." } }`. CSV export returns text; attachment downloads return binary bytes. Writes are not idempotent unless the operation itself makes them so; clients must not automatically retry creates/imports/uploads after an uncertain response.
 
+## Workspace change state
+
+For lightweight change detection, `POST /workspace/state` accepts `{ tableId?, viewId? }` and returns a catalog revision plus optional selected table/view state. This authenticated read does not load records or initiate calculations. Missing requested objects are null. Relative-date filters include their current date context. See [workspace state](workspace-state.md) for the response and draft-safe client rules.
+
 ## Attachment storage
 
 The authenticated file API stores immutable, table-scoped files up to 8 MiB inside the workspace database. Save uploaded IDs in attachment fields to associate them with records. See [file limits, retention and interface examples](attachments.md). Only never-attached uploads can be deleted individually; used files return `ATTACHMENT_RETAINED` so history remains restorable.
