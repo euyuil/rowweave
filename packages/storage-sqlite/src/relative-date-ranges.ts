@@ -2,8 +2,10 @@ import { createHash } from 'node:crypto';
 import { Temporal } from '../../core/src/temporal.js';
 import type { FieldFilter, FilterGroup, Table } from '../../contracts/src/index.js';
 import { queryValueField } from '../../core/src/record-query.js';
+import { businessDateRange } from './business-day-ranges.js';
 
-export type DateRange = readonly [start: string, end: string];
+export interface WeekdayRange { start: string; end: string; offsetSeconds: number }
+export type DateRange = readonly [start: string, end: string, weekdays?: readonly WeekdayRange[]];
 
 export function hasRelativeDateFilter(filter: FilterGroup | undefined): boolean {
   return filter?.conditions.some(condition => 'conjunction' in condition
@@ -31,6 +33,11 @@ export function relativeDateRanges(table: Pick<Table, 'fields'>, filter: FilterG
         continue;
       }
       const today = Temporal.Instant.fromEpochMilliseconds(currentTime).toZonedDateTimeISO(timeZone).toPlainDate();
+      if (period === 'pastBusinessDays' || period === 'nextBusinessDays') {
+        const field = queryValueField(table.fields.find(field => field.id === condition.fieldId)!);
+        ranges.set(condition, businessDateRange(today, days!, period === 'pastBusinessDays' ? -1 : 1, timeZone, field.type === 'date'));
+        continue;
+      }
       let start = today;
       let end = today.add({ days: 1 });
       switch (period) {

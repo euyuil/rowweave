@@ -19,7 +19,7 @@ export function groupOrder(field: Field, value: string): string[] {
 
 export function querySql(table: Pick<Table, 'id' | 'fields'>, query: CheckedQuery, targets: Map<string, Table>,
   options: { forIndex?: boolean; dateRanges?: ReadonlyMap<FieldFilter, DateRange>; materializeLookups?: boolean } = {}) {
-  const { forIndex = false, dateRanges = new Map(), materializeLookups = false } = options;
+  const { forIndex = false, dateRanges = new Map<FieldFilter, DateRange>(), materializeLookups = false } = options;
   const fields = new Map(table.fields.map(field => [field.id, field]));
   const computed = new Map<string, { name: string; expression: string }>();
   const parameters: Record<string, SQLInputValue> = forIndex ? {} : { ':table': table.id };
@@ -82,8 +82,16 @@ export function querySql(table: Pick<Table, 'id' | 'fields'>, query: CheckedQuer
     const field = fields.get(filter.fieldId)!;
     const value = raw(field);
     if (filter.operator === 'relativeDate') {
-      const [start, end] = dateRanges.get(filter)!;
-      const range = (expression: string) => `(${expression} >= ${bind(start)} AND ${expression} < ${bind(end)})`;
+      const [start, end, weekdays] = dateRanges.get(filter)!;
+      const range = (expression: string) => {
+        const bounds = (start: string, end: string) => `(${expression} >= ${bind(start)} AND ${expression} < ${bind(end)})`;
+        const coarse = bounds(start, end);
+        if (!weekdays) return coarse;
+        const weekday = (seconds: number) => `strftime('%w', ${expression}, ${bind(`${seconds} seconds`)}) NOT IN ('0', '6')`;
+        const matching = weekdays.length === 1 ? weekday(weekdays[0]!.offsetSeconds)
+          : weekdays.map(interval => `(${bounds(interval.start, interval.end)} AND ${weekday(interval.offsetSeconds)})`).join(' OR ') || '0';
+        return `(${coarse} AND (${matching}))`;
+      };
       return field.type === 'lookup' && !isLookupSummary(field)
         ? `EXISTS (SELECT 1 FROM json_each(${value}) entry WHERE ${range('entry.value')})` : range(value);
     }

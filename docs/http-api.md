@@ -114,7 +114,7 @@ Saved batch undo validates every original final version, restores the complete r
 
 ## Queries
 
-Date and timestamp fields support [relative filters](relative-date-filters.md), including saved time zones and dynamic year/month/week/day ranges; timestamps also support exact past/next elapsed hours. Query and summary responses containing these filters return opaque `dateContext` strings. Reuse them as `expectedDateContext` on continuation pages and paired summary/board-lane requests. `DATA_CHANGED` requires restarting pagination when a calendar boundary changes or an hourly context reaches 60 seconds, even if the data revision is unchanged.
+Date and timestamp fields support [relative filters](relative-date-filters.md), including saved time zones and dynamic year/month/week/day and business-day ranges; timestamps also support exact past/next elapsed hours. Query and summary responses containing these filters return opaque `dateContext` strings. Reuse them as `expectedDateContext` on continuation pages and paired summary/board-lane requests. `DATA_CHANGED` requires restarting pagination when a calendar boundary changes or an hourly context reaches 60 seconds, even if the data revision is unchanged.
 
 ### Summaries
 
@@ -188,7 +188,7 @@ Filters combine `and`/`or` groups with at most 100 conditions and four nested le
 - `eq`, `neq`: scalar equality/inequality, including null. For multiple-select/relation fields, use these only with null; use `hasAny` to match IDs.
 - `contains`: literal, case-insensitive substring matching for text, multiline and URL fields.
 - `gt`, `gte`, `lt`, `lte`: typed number/date/timestamp comparisons.
-- `relativeDate`: date/timestamp period with `relative: { period, timeZone, days?, hours? }` instead of `value`. Use `days` only for past/next calendar days and `hours` only for past/next elapsed hours on timestamps; see the [periods and time-zone contract](relative-date-filters.md).
+- `relativeDate`: date/timestamp period with `relative: { period, timeZone, days?, hours? }` instead of `value`. Use `days` only for past/next calendar or business days and `hours` only for past/next elapsed hours on timestamps; see the [periods and time-zone contract](relative-date-filters.md).
 - `hasAny`: one or more existing option IDs or linked-record IDs (an empty list matches none).
 - `isEmpty`, `isNotEmpty`: null, empty text, and empty arrays count as empty; zero and false do not.
 

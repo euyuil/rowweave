@@ -26,6 +26,7 @@ import { verifyConnectedFormulaWorkflow } from './connected-formula-workflow.mjs
 import { verifyGroupedWorkflow } from './grouped-workflow.mjs';
 import { verifyRelativeDateWorkflow } from './relative-date-workflow.mjs';
 import { verifyRelativeHourWorkflow } from './relative-hour-workflow.mjs';
+import { verifyBusinessDayWorkflow } from './business-day-workflow.mjs';
 import { verifyNavigationWorkflow } from './navigation-workflow.mjs';
 import { verifyRecordPanelWorkflow } from './record-panel-workflow.mjs';
 import { verifyHistoryWorkflow } from './history-workflow.mjs';
@@ -313,6 +314,7 @@ try {
   const groupPreferences = await verifyGroupPreferences(page);
   await verifyRelativeDateWorkflow(page, application);
   await verifyRelativeHourWorkflow(page, application);
+  await verifyBusinessDayWorkflow(page, application);
   await verifyExternalRefresh(page, application);
   await verifyCatalogRefresh(page, application);
   console.log('External refresh acceptance passed; restarting the workspace.');

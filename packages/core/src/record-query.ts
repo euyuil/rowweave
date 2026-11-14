@@ -72,14 +72,15 @@ export function parseQuery(table: Table, input: unknown): CheckedQuery {
         try { new Intl.DateTimeFormat('en', { timeZone }); }
         catch { return invalid('Use a valid named time zone, such as Asia/Shanghai or UTC.'); }
         const period = relative['period'] as RelativeDateFilter['period'];
-        const counted = period === 'pastDays' || period === 'nextDays';
+        const business = period === 'pastBusinessDays' || period === 'nextBusinessDays';
+        const counted = period === 'pastDays' || period === 'nextDays' || business;
         const rolling = period === 'pastHours' || period === 'nextHours';
         if (rolling && selected.type !== 'datetime') return invalid('Rolling hours require a timestamp field.');
         const days = relative['days'];
         if (counted && (!Number.isSafeInteger(days) || (days as number) < 1 || (days as number) > maxRelativeDays)) {
-          return invalid(`Use between 1 and ${maxRelativeDays} calendar days.`);
+          return invalid(`Use between 1 and ${maxRelativeDays} ${business ? 'business' : 'calendar'} days.`);
         }
-        if (!counted && days !== undefined) return invalid('Only pastDays and nextDays accept a day count.');
+        if (!counted && days !== undefined) return invalid('Only pastDays, nextDays, pastBusinessDays and nextBusinessDays accept a day count.');
         const hours = relative['hours'];
         if (rolling && (!Number.isSafeInteger(hours) || (hours as number) < 1 || (hours as number) > maxRelativeHours)) {
           return invalid(`Use between 1 and ${maxRelativeHours} elapsed hours.`);

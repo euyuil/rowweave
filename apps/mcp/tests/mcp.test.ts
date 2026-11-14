@@ -463,6 +463,46 @@ test('MCP, SDK and CLI share exact rolling-hour boundaries and opaque continuati
   }
 });
 
+test('MCP, SDK and CLI preserve business-day rules and share weekend continuation boundaries', async t => {
+  let now = new Date('2026-11-14T12:00:00Z');
+  const service = new RecordService(fixture(t, null, () => now).open()), token = randomBytes(32).toString('hex');
+  const server = await startServer({ service, token }); t.after(() => server.close());
+  const environment = { ROWWEAVE_URL: server.url, ROWWEAVE_TOKEN: token }, { json, call } = await connect(t, environment);
+  const sdk = createWorkspaceClient({ url: server.url, token });
+  let table = await json<Table>('tables_create', { name: 'Business interfaces' });
+  table = await json<Table>('fields_create', { tableId: table.id, input: { expectedVersion: table.version, name: 'Day', type: 'date' } });
+  const day = table.fields[1]!.id;
+  const rows = (await sdk.createRecords(table.id, ['2026-11-12', '2026-11-13', '2026-11-14', '2026-11-15', '2026-11-16', '2026-11-17', '2026-11-18']
+    .map(value => ({ values: { [day]: value } })))).records;
+  const directory = await mkdtemp(join(tmpdir(), 'rowweave-business-cli-')); t.after(() => rm(directory, { recursive: true, force: true }));
+  const input = join(directory, 'query.json'), args = [resolve('apps/cli/dist/rowweave.js'), 'records', 'query', table.id, '--input', input];
+  for (const [period, indices] of [['pastBusinessDays', [0, 1]], ['nextBusinessDays', [4, 5]]] as const) {
+    now = new Date('2026-11-14T12:00:00Z');
+    const query = { filter: { conjunction: 'and' as const, conditions: [{ fieldId: day, operator: 'relativeDate' as const,
+      relative: { period, days: 2, timeZone: 'America/New_York' } }] } };
+    const view = await json<GridView>('views_create', { tableId: table.id, input: { name: period, query } });
+    const first = await json<QueryPage>('views_query', { tableId: table.id, viewId: view.id, query: { limit: 1 } });
+    assert.equal(first.total, 2); assert.equal(first.records[0]!.id, rows[indices[0]]!.id);
+    now = new Date('2026-11-15T12:00:00Z');
+    const guard = { expectedRevision: first.revision, expectedDateContext: first.dateContext! };
+    const stateRequest = { tableId: table.id, viewId: view.id, dateContext: first.dateContext! };
+    const state = await sdk.workspaceState(stateRequest);
+    assert.equal(state.table!.view!.dateContext, first.dateContext);
+    assert.deepEqual(await json('workspace_state', stateRequest), state);
+    const page = await json<QueryPage>('views_query', { tableId: table.id, viewId: view.id, query: { ...guard, offset: 1 } });
+    assert.equal(page.records[0]!.id, rows[indices[1]]!.id);
+    assert.deepEqual(await sdk.queryView(table.id, view.id, { ...guard, offset: 1 }), page);
+    await writeFile(input, JSON.stringify({ ...query, ...guard, offset: 1 }));
+    const cli = JSON.parse((await runFile(process.execPath, args, { env: { ...process.env, ...environment } })).stdout) as QueryPage;
+    assert.equal(cli.dateContext, first.dateContext); assert.deepEqual(cli.records, page.records);
+    now = new Date('2026-11-17T12:00:00Z');
+    const stale = await call('views_query', { tableId: table.id, viewId: view.id, query: guard });
+    assert.equal(stale.isError, true); assert.match(text(stale), /DATA_CHANGED/);
+    await assert.rejects(sdk.queryView(table.id, view.id, guard), { code: 'DATA_CHANGED' });
+    await assert.rejects(runFile(process.execPath, args, { env: { ...process.env, ...environment } }), error => /DATA_CHANGED/.test(String((error as { stderr: string }).stderr)));
+  }
+});
+
 test('MCP and CLI create paired fields and update the same relationship from either side', async t => {
   const { environment, service } = await setup(t);
   const { json, call } = await connect(t, environment);
