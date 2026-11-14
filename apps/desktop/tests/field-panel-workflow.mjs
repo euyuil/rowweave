@@ -117,7 +117,15 @@ export async function verifyFieldPanelWorkflow(page, application) {
   assert.equal((await readTable()).fields[0].type, 'number');
   assert.equal((await readTable()).fields[0].description, description);
   assert.deepEqual((await readRecords()).records.map(record => record.values[table.primaryFieldId]), [10, 20]);
-  await page.waitForFunction(() => document.activeElement?.tagName === 'CANVAS');
+  await page.waitForFunction(() => document.querySelector('canvas')?.contains(document.activeElement));
+  await page.keyboard.press('Enter');
+  const convertedEditor = page.getByRole('textbox', { name: 'Cell value', exact: true });
+  await convertedEditor.waitFor();
+  assert.equal(await convertedEditor.inputValue(), '10');
+  assert.equal(await convertedEditor.getAttribute('inputmode'), 'decimal');
+  await convertedEditor.fill('99');
+  await convertedEditor.press('Escape');
+  assert.deepEqual((await readRecords()).records.map(record => record.values[table.primaryFieldId]), [10, 20]);
   await configure();
   assert.equal(await page.getByLabel('Field description', { exact: true }).inputValue(), description);
   await page.getByLabel('Field description', { exact: true }).fill('');
