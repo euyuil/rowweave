@@ -100,7 +100,7 @@ Renaming a target changes displayed link labels without changing IDs. Altering o
 
 ## Saved views
 
-For date/timestamp fields, use `operator: "relativeDate"` with `relative: { period: "today", timeZone: "Asia/Shanghai" }`. Periods also include yesterday/tomorrow, this/last/next week or month, and `pastDays`/`nextDays` with `days` from 1 to 3,660, including today. Weeks start Monday. Supply an explicit named zone and do not convert a relative request to a fixed date. Reuse returned `dateContext` as `expectedDateContext` on continuation and summary/lane requests; refresh after `DATA_CHANGED`. See `docs/relative-date-filters.md` for semantics.
+For date/timestamp fields, use `operator: "relativeDate"` with `relative: { period: "today", timeZone: "Asia/Shanghai" }`. Periods also include yesterday/tomorrow, this/last/next week, month or year, and `pastDays`/`nextDays` with `days` from 1 to 3,660, including today. Weeks start Monday. Supply an explicit named zone and do not convert a relative request to a fixed date. Reuse returned `dateContext` as `expectedDateContext` on continuation and summary/lane requests; refresh after `DATA_CHANGED`. See `docs/relative-date-filters.md` for semantics.
 
 `views_create` takes `{ tableId, input: { name, query, columns } }`. Its `query` includes filters, sort and search; each column is `{ fieldId, width, hidden }`. Query the resulting view using `views_query`, retaining both data revision and view version for pagination. Changing the view does not modify records. The last remaining view cannot be deleted.
 

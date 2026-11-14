@@ -29,6 +29,9 @@ export function relativeDateRanges(table: Pick<Table, 'fields'>, filter: FilterG
         case 'thisMonth': case 'lastMonth': case 'nextMonth':
           start = today.with({ day: 1 }).add({ months: period === 'lastMonth' ? -1 : period === 'nextMonth' ? 1 : 0 });
           end = start.add({ months: 1 }); break;
+        case 'thisYear': case 'lastYear': case 'nextYear':
+          start = today.with({ month: 1, day: 1 }).add({ years: period === 'lastYear' ? -1 : period === 'nextYear' ? 1 : 0 });
+          end = start.add({ years: 1 }); break;
         case 'pastDays': start = today.subtract({ days: days! - 1 }); break;
         case 'nextDays': end = today.add({ days: days! }); break;
       }

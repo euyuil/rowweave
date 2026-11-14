@@ -13,6 +13,7 @@ const operatorNames: Record<FilterOperator, string> = {
 const periodNames: Record<RelativeDateFilter['period'], string> = {
   today: 'Today', yesterday: 'Yesterday', tomorrow: 'Tomorrow', thisWeek: 'This week', lastWeek: 'Last week', nextWeek: 'Next week',
   thisMonth: 'This month', lastMonth: 'Last month', nextMonth: 'Next month', pastDays: 'Past N days', nextDays: 'Next N days',
+  thisYear: 'This year', lastYear: 'Last year', nextYear: 'Next year',
 };
 const timeZones = ['UTC', ...Intl.supportedValuesOf('timeZone')];
 
@@ -107,7 +108,7 @@ function FilterRule({ fields, rule, onChange, path }: { fields: Field[]; rule: R
         onChange={event => onChange({ ...rule, relative: { ...rule.relative!, timeZone: event.target.value } })} /></label>
       <datalist id={timeZoneList}>{timeZones.map(zone => <option value={zone} key={zone} />)}</datalist>
       <small>{rule.relative!.period === 'pastDays' || rule.relative!.period === 'nextDays' ? 'The day count includes today. ' : ''}
-        Calendar periods use this time zone; weeks start Monday. Refresh to use the latest period.</small>
+        Calendar periods use this time zone; weeks start Monday. Updates automatically while editing is idle.</small>
     </div>}
     {!empty && !nullOnly && rule.operator !== 'relativeDate' && <FieldInput allowUploads={false} field={{ ...field, name: 'Value', required: ordered,
       ...(field.relation ? { relation: { ...field.relation, multiple: true } } : {}) }} value={rule.value} onChange={value => onChange({ ...rule, value })} />}

@@ -49,6 +49,9 @@ const groups: Promise<GroupLayout> = api.queryGroups('table', { groupBy: 'amount
 void api.createView('table', { name: 'Saved measures', groupBy: 'amount', groupMeasures: [{ fieldId: 'amount', operation: 'sum' }] });
 void api.queryGroups('table', { groupBy: ['done', 'amount'], collapse: { defaultCollapsed: true, exceptions: [[false], [false, 0]] } });
 void api.createView('table', { name: 'Nested', groupBy: ['done', 'amount'] });
+void api.createView('table', { name: 'Annual', query: { filter: { conjunction: 'or', conditions:
+  (['thisYear', 'lastYear', 'nextYear'] as const).map(period => ({ fieldId: 'due', operator: 'relativeDate' as const,
+    relative: { period, timeZone: 'UTC' } })) } } });
 void api.exportCsv('table', { viewId: 'view', expectedViewVersion: 1 });
 // @ts-expect-error Record writes require numeric versions.
 void api.updateRecords('table', [{ id: 'record', expectedVersion: 'stale', values: {} }]);
