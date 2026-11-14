@@ -421,6 +421,48 @@ test('MCP, SDK and CLI preserve annual filters and share year-boundary continuat
   await assert.rejects(runFile(process.execPath, args, { env: { ...process.env, ...environment } }), error => /DATA_CHANGED/.test(String((error as { stderr: string }).stderr)));
 });
 
+test('MCP, SDK and CLI share exact rolling-hour boundaries and opaque continuation contexts', async t => {
+  let now = new Date('2026-03-08T07:30:42.123Z');
+  const origin = now.getTime(), service = new RecordService(fixture(t, null, () => now).open()), token = randomBytes(32).toString('hex');
+  const server = await startServer({ service, token }); t.after(() => server.close());
+  const environment = { ROWWEAVE_URL: server.url, ROWWEAVE_TOKEN: token }, { json, call } = await connect(t, environment);
+  const sdk = createWorkspaceClient({ url: server.url, token });
+  let table = await json<Table>('tables_create', { name: 'Hourly interfaces' });
+  table = await json<Table>('fields_create', { tableId: table.id, input: { expectedVersion: table.version, name: 'At', type: 'datetime' } });
+  const at = table.fields[1]!.id;
+  const rows = (await sdk.createRecords(table.id, [-3, -1, 0, 1, 3].map(hours => ({ values: { [at]: new Date(origin + hours * 3_600_000).toISOString() } })))).records;
+  const directory = await mkdtemp(join(tmpdir(), 'rowweave-hours-cli-')); t.after(() => rm(directory, { recursive: true, force: true }));
+  const input = join(directory, 'query.json'), args = [resolve('apps/cli/dist/rowweave.js'), 'records', 'query', table.id, '--input', input];
+  for (const [period, indices] of [['pastHours', [1, 2]], ['nextHours', [2, 3]]] as const) {
+    now = new Date(origin);
+    const query = { filter: { conjunction: 'and' as const, conditions: [{ fieldId: at, operator: 'relativeDate' as const,
+      relative: { period, hours: 2, timeZone: 'America/New_York' } }] } };
+    const view = await json<GridView>('views_create', { tableId: table.id, input: { name: period, query } });
+    const first = await json<QueryPage>('views_query', { tableId: table.id, viewId: view.id, query: { limit: 1 } });
+    assert.equal(first.total, 2);
+    assert.equal(first.records[0]!.id, rows[indices[0]]!.id);
+    assert.match(first.dateContext!, /^h:-?\d+:[a-f0-9]{64}$/);
+    now = new Date(origin + 30_000);
+    const guard = { expectedRevision: first.revision, expectedDateContext: first.dateContext! };
+    const stateRequest = { tableId: table.id, viewId: view.id, dateContext: first.dateContext! };
+    const state = await sdk.workspaceState(stateRequest);
+    assert.equal(state.table!.view!.dateContext, first.dateContext);
+    assert.deepEqual(await json('workspace_state', stateRequest), state);
+    const page = await json<QueryPage>('views_query', { tableId: table.id, viewId: view.id, query: { ...guard, offset: 1 } });
+    assert.equal(page.records[0]!.id, rows[indices[1]]!.id);
+    assert.deepEqual(await sdk.queryView(table.id, view.id, { ...guard, offset: 1 }), page);
+    await writeFile(input, JSON.stringify({ ...query, ...guard, offset: 1 }));
+    const cli = JSON.parse((await runFile(process.execPath, args, { env: { ...process.env, ...environment } })).stdout) as QueryPage;
+    assert.equal(cli.dateContext, first.dateContext); assert.deepEqual(cli.records, page.records);
+    now = new Date(origin + 60_000);
+    const stale = await call('views_query', { tableId: table.id, viewId: view.id, query: guard });
+    assert.equal(stale.isError, true); assert.match(text(stale), /DATA_CHANGED/);
+    await assert.rejects(sdk.queryView(table.id, view.id, guard), { code: 'DATA_CHANGED' });
+    await assert.rejects(runFile(process.execPath, args, { env: { ...process.env, ...environment } }), error => /DATA_CHANGED/.test(String((error as { stderr: string }).stderr)));
+    assert.notEqual((await sdk.workspaceState(stateRequest)).table!.view!.dateContext, first.dateContext);
+  }
+});
+
 test('MCP and CLI create paired fields and update the same relationship from either side', async t => {
   const { environment, service } = await setup(t);
   const { json, call } = await connect(t, environment);

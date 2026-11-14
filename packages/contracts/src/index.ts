@@ -56,7 +56,7 @@ export interface TableCreate {
   name: string;
 }
 
-export interface WorkspaceStateRequest { tableId?: string; viewId?: string }
+export interface WorkspaceStateRequest { tableId?: string; viewId?: string; dateContext?: string }
 export interface WorkspaceState {
   catalogRevision: number;
   table?: null | {
@@ -225,12 +225,15 @@ export interface RecordPage {
 }
 
 export const relativeDatePeriods = ['today', 'yesterday', 'tomorrow', 'thisWeek', 'lastWeek', 'nextWeek', 'thisMonth', 'lastMonth', 'nextMonth',
-  'thisYear', 'lastYear', 'nextYear', 'pastDays', 'nextDays'] as const;
+  'thisYear', 'lastYear', 'nextYear', 'pastDays', 'nextDays', 'pastHours', 'nextHours'] as const;
 export const maxRelativeDays = 3660;
+export const maxRelativeHours = 24 * maxRelativeDays;
+export const dateContextPattern = /^(?:h:-?\d{1,16}:)?[a-f0-9]{64}$/;
 export interface RelativeDateFilter {
   period: typeof relativeDatePeriods[number];
   timeZone: string;
   days?: number;
+  hours?: number;
 }
 
 export type FilterOperator = 'eq' | 'neq' | 'contains' | 'gt' | 'gte' | 'lt' | 'lte' | 'isEmpty' | 'isNotEmpty' | 'hasAny' | 'relativeDate';

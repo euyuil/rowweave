@@ -53,6 +53,10 @@ void api.createView('table', { name: 'Annual', query: { filter: { conjunction: '
   (['thisYear', 'lastYear', 'nextYear'] as const).map(period => ({ fieldId: 'due', operator: 'relativeDate' as const,
     relative: { period, timeZone: 'UTC' } })) } } });
 void api.exportCsv('table', { viewId: 'view', expectedViewVersion: 1 });
+void api.createView('table', { name: 'Hourly', query: { filter: { conjunction: 'or', conditions:
+  (['pastHours', 'nextHours'] as const).map(period => ({ fieldId: 'at', operator: 'relativeDate' as const,
+    relative: { period, hours: 2, timeZone: 'UTC' } })) } } });
+void api.workspaceState({ tableId: 'table', viewId: 'view', dateContext: 'opaque-context-from-query' });
 // @ts-expect-error Record writes require numeric versions.
 void api.updateRecords('table', [{ id: 'record', expectedVersion: 'stale', values: {} }]);
 // @ts-expect-error Field types are a closed set.

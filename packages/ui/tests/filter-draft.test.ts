@@ -31,6 +31,8 @@ test('relative filter drafts round-trip dynamic settings without converting them
     { fieldId: 'due', operator: 'relativeDate', relative: { period: 'thisYear', timeZone: 'UTC' } },
     { fieldId: 'at', operator: 'relativeDate', relative: { period: 'lastYear', timeZone: 'Asia/Kathmandu' } },
     { fieldId: 'due', operator: 'relativeDate', relative: { period: 'nextYear', timeZone: 'Pacific/Kiritimati' } },
+    { fieldId: 'at', operator: 'relativeDate', relative: { period: 'pastHours', hours: 2, timeZone: 'UTC' } },
+    { fieldId: 'at', operator: 'relativeDate', relative: { period: 'nextHours', hours: 24, timeZone: 'America/New_York' } },
   ] };
   assert.deepEqual(filterValue(filterDraft(filter, fields), fields), filter);
 });

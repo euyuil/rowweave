@@ -1,4 +1,4 @@
-import { maxPageSize, maxTextLength, maxGroupLevels, valueField, isLookupSummary, supportsScalarGrouping, relativeDatePeriods, maxRelativeDays,
+import { maxPageSize, maxTextLength, maxGroupLevels, valueField, isLookupSummary, supportsScalarGrouping, relativeDatePeriods, maxRelativeDays, maxRelativeHours, dateContextPattern,
   type Field, type FieldFilter, type FilterGroup, type RecordQuery, type RelativeDateFilter, type Table } from '../../contracts/src/index.js';
 import { ServiceError } from './errors.js';
 import { validateValue } from './field-values.js';
@@ -73,13 +73,21 @@ export function parseQuery(table: Table, input: unknown): CheckedQuery {
         catch { return invalid('Use a valid named time zone, such as Asia/Shanghai or UTC.'); }
         const period = relative['period'] as RelativeDateFilter['period'];
         const counted = period === 'pastDays' || period === 'nextDays';
+        const rolling = period === 'pastHours' || period === 'nextHours';
+        if (rolling && selected.type !== 'datetime') return invalid('Rolling hours require a timestamp field.');
         const days = relative['days'];
         if (counted && (!Number.isSafeInteger(days) || (days as number) < 1 || (days as number) > maxRelativeDays)) {
           return invalid(`Use between 1 and ${maxRelativeDays} calendar days.`);
         }
         if (!counted && days !== undefined) return invalid('Only pastDays and nextDays accept a day count.');
+        const hours = relative['hours'];
+        if (rolling && (!Number.isSafeInteger(hours) || (hours as number) < 1 || (hours as number) > maxRelativeHours)) {
+          return invalid(`Use between 1 and ${maxRelativeHours} elapsed hours.`);
+        }
+        if (!rolling && hours !== undefined) return invalid('Only pastHours and nextHours accept an hour count.');
         if (item['value'] !== undefined) return invalid('Relative dates use relative settings instead of a fixed value.');
-        return { fieldId: selected.id, operator, relative: { period, timeZone, ...(counted ? { days: days as number } : {}) } };
+        return { fieldId: selected.id, operator, relative: { period, timeZone,
+          ...(counted ? { days: days as number } : {}), ...(rolling ? { hours: hours as number } : {}) } };
       }
       if (operator === 'contains') {
         if (!['text', 'multiline', 'url'].includes(selected.type) || typeof item['value'] !== 'string' || item['value'].length > maxTextLength) {
@@ -133,7 +141,7 @@ export function parseQuery(table: Table, input: unknown): CheckedQuery {
     query.expectedRevision = source['expectedRevision'] as number;
   }
   if (source['expectedDateContext'] !== undefined) {
-    if (typeof source['expectedDateContext'] !== 'string' || !/^[a-f0-9]{64}$/.test(source['expectedDateContext'])) {
+    if (typeof source['expectedDateContext'] !== 'string' || !dateContextPattern.test(source['expectedDateContext'])) {
       return invalid('expectedDateContext must be the dateContext returned by the first page or summary.');
     }
     query.expectedDateContext = source['expectedDateContext'];

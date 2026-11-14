@@ -10,14 +10,27 @@ export function hasRelativeDateFilter(filter: FilterGroup | undefined): boolean 
     ? hasRelativeDateFilter(condition) : condition.operator === 'relativeDate') ?? false;
 }
 
-export function relativeDateRanges(table: Pick<Table, 'fields'>, filter: FilterGroup | undefined, now: Date) {
-  const ranges = new Map<FieldFilter, DateRange>();
+export function relativeDateRanges(table: Pick<Table, 'fields'>, filter: FilterGroup | undefined, now: Date, previousContext?: string) {
+  const ranges = new Map<FieldFilter, DateRange>(), currentTime = now.getTime();
+  const previousTime = previousContext?.startsWith('h:') ? Number(previousContext.split(':')[1]) : NaN;
+  // Reuse precise rolling boundaries briefly, without rounding away records created in the current minute.
+  const anchor = currentTime >= previousTime && currentTime - previousTime < 60_000 ? previousTime : currentTime;
+  let rolling = false;
   const visit = (group: FilterGroup) => {
     for (const condition of group.conditions) {
       if ('conjunction' in condition) { visit(condition); continue; }
       if (condition.operator !== 'relativeDate') continue;
-      const { period, timeZone, days } = condition.relative!;
-      const today = Temporal.Instant.fromEpochMilliseconds(now.getTime()).toZonedDateTimeISO(timeZone).toPlainDate();
+      const { period, timeZone, days, hours } = condition.relative!;
+      if (period === 'pastHours' || period === 'nextHours') {
+        rolling = true;
+        const duration = hours! * 3_600_000;
+        const start = period === 'pastHours' ? anchor - duration : anchor;
+        const end = period === 'pastHours' ? anchor : anchor + duration;
+        // Timestamp values have millisecond precision; include both human-facing endpoints.
+        ranges.set(condition, [new Date(start).toISOString(), new Date(end + 1).toISOString()]);
+        continue;
+      }
+      const today = Temporal.Instant.fromEpochMilliseconds(currentTime).toZonedDateTimeISO(timeZone).toPlainDate();
       let start = today;
       let end = today.add({ days: 1 });
       switch (period) {
@@ -44,5 +57,6 @@ export function relativeDateRanges(table: Pick<Table, 'fields'>, filter: FilterG
   };
   if (filter) visit(filter);
   const context = [...ranges].map(([condition, range]) => [condition.fieldId, ...range]);
-  return { ranges, ...(context.length ? { dateContext: createHash('sha256').update(JSON.stringify(context)).digest('hex') } : {}) };
+  const hash = context.length ? createHash('sha256').update(JSON.stringify(context)).digest('hex') : undefined;
+  return { ranges, ...(hash ? { dateContext: rolling ? `h:${anchor}:${hash}` : hash } : {}) };
 }
