@@ -101,8 +101,12 @@ export async function verifyGridWorkflow(page) {
   await page.getByText('All changes saved', { exact: true }).waitFor();
   assert.equal(await value('Time'), '2026-12-31T23:59:12.123Z');
   await open('Status');
-  await page.getByLabel('Cell value', { exact: true }).selectOption({ label: 'Complete' });
-  await page.keyboard.press('Enter');
+  const statusEditor = page.getByLabel('Cell value', { exact: true });
+  await statusEditor.selectOption({ label: 'Complete' });
+  assert.equal(await statusEditor.inputValue(), field('Status').options[1].id);
+  await page.getByText('Editing cell…', { exact: true }).waitFor();
+  await statusEditor.press('Enter');
+  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
   await save();
   assert.equal(await value('Status'), field('Status').options[1].id);
   await open('Tags');
