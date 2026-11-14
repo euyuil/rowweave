@@ -84,6 +84,7 @@ Records have `{ id, version, values }`, with values keyed by field ID. Relation 
 | Method and path | Request body | Result / SDK method |
 | --- | --- | --- |
 | `GET /tables/:table/records/:record` | None | `RowRecord` / `getRecord(tableId, recordId)` |
+| `POST /tables/:table/views/:view/records/:record/schedule` | `{ expectedVersion, expectedViewVersion, action, days }`; [move/resize semantics](record-scheduling.md) | `BatchResult` / `rescheduleRecord(tableId, viewId, recordId, input)` |
 | `POST /tables/:table/records/:record/history` | `{ limit?, before? }` | `RecordHistoryPage` / `recordHistory(tableId, recordId, query)` |
 | `GET /tables/:table/records/:record/history/:change` | None | `RecordChangeDetail` / `recordChange(tableId, recordId, changeId)` |
 | `POST /tables/:table/records/:record/restore` | `{ changeId, snapshot: 'before' \| 'after', expectedVersion }` | `RowRecord` / `restoreRecord(tableId, recordId, input)` |

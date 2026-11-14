@@ -6,7 +6,9 @@ import { summarize } from './record-summary.js';
 import { groupLayout } from './group-layout.js';
 import { nestedGroupLayout } from './nested-group-layout.js';
 import type { CheckedGroupQuery } from '../../core/src/record-groups.js';
-import type { CheckedCalendar, CheckedCalendarWindow } from '../../core/src/calendar-query.js';
+import { parseCalendar, type CheckedCalendar, type CheckedCalendarWindow } from '../../core/src/calendar-query.js';
+import type { RecordSchedule } from '../../contracts/src/index.js';
+import { rescheduledValues } from '../../core/src/record-scheduling.js';
 import type { CalendarBucket, CalendarLayout, CalendarPage } from '../../contracts/src/index.js';
 import { calendarLayout, calendarPage } from './calendar-query.js';
 import { groupFieldIds, type GroupCollapse, type GroupPathCollapse, type GroupLayout } from '../../contracts/src/index.js';
@@ -767,6 +769,19 @@ export class SqliteRecordStore implements RecordStore {
 
   updateBatch(updates: RecordUpdate[], id: string, schemaVersion: number): BatchResult {
     return this.transaction(() => this.writeBatch(updates, id, schemaVersion), 'IMMEDIATE', { recordWrite: true });
+  }
+
+  rescheduleRecord(table: Table, view: Extract<GridView, { type: 'calendar' }>, recordId: string, change: RecordSchedule): BatchResult {
+    return this.transaction(() => {
+      this.checkSchema(table.id, table.version);
+      if (this.getView(table.id, view.id).version !== change.expectedViewVersion) {
+        throw new ServiceError('VIEW_CONFLICT', 'This view changed. Reload before rescheduling.', 409);
+      }
+      const record = this.readRecord(table.id, recordId);
+      if (record.version !== change.expectedVersion) throw new ServiceError('VERSION_CONFLICT', 'This record changed. Reload before rescheduling.', 409);
+      const values = rescheduledValues(parseCalendar(table, view.calendar), record, change);
+      return this.writeBatch([{ id: recordId, expectedVersion: change.expectedVersion, values }], table.id, table.version);
+    }, 'IMMEDIATE', { recordWrite: true });
   }
 
   recordHistory(id: string, recordId: string, query: RecordHistoryQuery): RecordHistoryPage {

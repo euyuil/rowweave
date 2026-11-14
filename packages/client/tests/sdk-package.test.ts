@@ -41,6 +41,7 @@ import { createWorkspaceClient, ApiFailure, type RecordQuery, type CsvPreview, t
 const api = createWorkspaceClient({ url: 'http://127.0.0.1:4317', token: 'provided-at-runtime' });
 const calendar = { startFieldId: 'start', endFieldId: 'end', timeZone: 'Asia/Shanghai' };
 void api.createView('table', { name: 'Schedule', type: 'calendar', calendar });
+void api.rescheduleRecord('table', 'calendar-view', 'record', { expectedVersion: 1, expectedViewVersion: 1, action: 'move', days: 2 });
 void api.queryCalendar('table', { viewId: 'calendar-view', from: '2026-11-01', toExclusive: '2026-12-01' });
 void api.queryCalendarRecords('table', { viewId: 'calendar-view', bucket: { kind: 'unscheduled' } });
 void api.queryCalendar('table', { calendar, from: '2026-11-01', toExclusive: '2026-12-01', previewLimit: 3,

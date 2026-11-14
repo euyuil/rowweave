@@ -10,6 +10,8 @@ export const tableId = { tableId: id };
 export const fieldId = { ...tableId, fieldId: id };
 export const viewId = { ...tableId, viewId: id };
 export const expectedVersion = { expectedVersion: version };
+export const recordSchedule = z.strictObject({ ...expectedVersion, expectedViewVersion: version,
+  action: z.enum(['move', 'resizeStart', 'resizeEnd']), days: z.int().refine(value => value !== 0).describe('Signed calendar days; zero is not a write.') });
 export const tableCreate = z.strictObject({ name: z.string() });
 export const tableUpdate = z.strictObject({ ...expectedVersion, name: z.string().exactOptional(), primaryFieldId: id.exactOptional(), fieldOrder: z.array(id).exactOptional() });
 const formula = z.strictObject({ expression: z.string().min(1).max(4096), resultType: z.enum(['number', 'text', 'checkbox', 'date', 'datetime']) });

@@ -58,6 +58,7 @@ Tools have discoverable strict JSON schemas. Read descriptions and use stable ID
 | `fields_delete` | `{ tableId, fieldId, expectedVersion }` |
 | `fields_preview_conversion`, `fields_apply_conversion` | `{ tableId, fieldId, input: FieldConversion }` |
 | `records_get` | `{ tableId, recordId }` |
+| `records_reschedule` | `{ tableId, viewId, recordId, input: { expectedVersion, expectedViewVersion, action, days } }`; versioned [date-range moves and resizing](record-scheduling.md) |
 | `records_history` | `{ tableId, recordId, query: { limit?, before? } }` for bounded metadata pages |
 | `records_change` | `{ tableId, recordId, changeId }` to inspect a before/after snapshot |
 | `records_restore` | `{ tableId, recordId, input: { changeId, snapshot: 'before' \| 'after', expectedVersion } }` |

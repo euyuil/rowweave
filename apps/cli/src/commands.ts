@@ -1,7 +1,7 @@
 import type { WorkspaceApi, TableCreate, TableUpdate, FieldCreate, FieldUpdate, FieldConversion, RecordCreate,
   RecordUpdate, RecordDelete, RecordQuery, ViewCreate, ViewUpdate, ViewPageRequest, SummaryRequest, GroupQuery,
   RecordHistoryQuery, RecordRestore, DeletedRecordRestore, AttachmentQuery, FormulaPreviewRequest, WorkspaceStateRequest,
-  CalendarLayoutRequest, CalendarRecordsRequest } from '../../../packages/client/src/index.js';
+  CalendarLayoutRequest, CalendarRecordsRequest, RecordSchedule } from '../../../packages/client/src/index.js';
 
 export class UsageError extends Error {}
 
@@ -35,6 +35,7 @@ export const commands: Record<string, Command> = {
   'fields preview-conversion': { ids: 2, input: 'required', run: (api, [id, field], input) => api.previewConversion(id!, field!, input as FieldConversion) },
   'fields apply-conversion': { ids: 2, input: 'required', run: (api, [id, field], input) => api.applyConversion(id!, field!, input as FieldConversion) },
   'records get': { ids: 2, input: 'none', run: (api, [id, record]) => api.getRecord(id!, record!) },
+  'records reschedule': { ids: 3, input: 'required', run: (api, [id, view, record], input) => api.rescheduleRecord(id!, view!, record!, input as RecordSchedule) },
   'records history': { ids: 2, input: 'optional', run: (api, [id, record], input) => api.recordHistory(id!, record!, input as RecordHistoryQuery) },
   'records batches': { ids: 1, input: 'optional', run: (api, [id], input) => api.recordBatches(id!, input as RecordHistoryQuery) },
   'records batch-changes': { ids: 2, input: 'optional', run: (api, [id, batch], input) => api.recordBatchChanges(id!, batch!, input as RecordHistoryQuery) },
@@ -69,7 +70,7 @@ Usage: rowweave <resource> <action> [table-id] [field/record/view-id] [options]
   formulas preview
   calculations refresh
   calculations status
-  records  get | query | groups | summarize | create | update | delete | history | change | restore | trash | restore-deleted | batches | batch-changes | undo-batch
+  records  get | query | groups | calendar | calendar-records | summarize | create | update | delete | reschedule | history | change | restore | trash | restore-deleted | batches | batch-changes | undo-batch
   views    list | get | create | update | delete | query
   csv      preview | import | export
   attachments upload | list | get | download | delete
@@ -85,6 +86,8 @@ Options:
 Set ROWWEAVE_TOKEN in the environment. Never put tokens in command arguments.
 Writes require JSON; queries/export default to {}. Metadata deletion JSON is
 { "expectedVersion": 1 }. Record writes/deletions use arrays of record objects.
+Reschedule takes table-id, view-id, record-id and an object with expectedVersion,
+expectedViewVersion, action (move/resizeStart/resizeEnd) and non-zero whole days.
 CSV options require expectedVersion and hasHeader; mapping is optional.
 Attachment upload accepts optional filename/mediaType JSON; stdin requires a filename.
 Files are limited to 8 MiB. Attachment download requires --output and never executes the file.

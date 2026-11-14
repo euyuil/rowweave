@@ -22,6 +22,8 @@ import type { GroupCollapse, GroupPathCollapse, GroupLayout } from '../../contra
 import { parseGroupCollapse, parseGroupPaths, type CheckedGroupQuery } from './record-groups.js';
 import type { CalendarBucket, CalendarLayout, CalendarPage } from '../../contracts/src/index.js';
 import { parseCalendar, parseCalendarWindow, parseCalendarBucket, type CheckedCalendar, type CheckedCalendarWindow } from './calendar-query.js';
+import type { RecordSchedule } from '../../contracts/src/index.js';
+import { parseRecordSchedule } from './record-scheduling.js';
 export { ServiceError } from './errors.js';
 
 export interface RecordStore {
@@ -41,6 +43,7 @@ export interface RecordStore {
   deleteTable(id: string, expectedVersion: number): void;
   readPage(offset: number, limit: number, id?: string): RecordPage;
   updateBatch(updates: RecordUpdate[], id: string, schemaVersion: number): BatchResult;
+  rescheduleRecord(table: Table, view: Extract<GridView, { type: 'calendar' }>, recordId: string, change: RecordSchedule): BatchResult;
   getRecord(tableId: string, recordId: string): RowRecord;
   createRecords(table: Table, values: Array<Record<string, CellValue>>): BatchResult;
   deleteRecords(tableId: string, records: RecordDelete[]): DeleteResult;
@@ -420,6 +423,13 @@ export class RecordService {
         { fieldId: group.id, operator: 'eq', value: lane as string | null }] };
     }
     return { ...this.store.queryRecords(table, query, view), viewId, viewVersion: view.version };
+  }
+
+  rescheduleRecord(id: string, viewId: string, recordId: string, input: unknown): BatchResult {
+    const change = parseRecordSchedule(input), table = this.store.getTable(id), view = this.store.getView(id, viewId);
+    if (view.version !== change.expectedViewVersion) throw new ServiceError('VIEW_CONFLICT', 'This view changed. Reload before rescheduling.', 409);
+    if (view.type !== 'calendar') throw new ServiceError('INVALID_SCHEDULE', 'Choose a saved calendar view with configured date fields.');
+    return this.store.rescheduleRecord(table, view, recordId, change);
   }
 
   updateBatch(input: unknown, id = tableId): BatchResult {
