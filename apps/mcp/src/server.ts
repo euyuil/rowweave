@@ -46,6 +46,7 @@ export function createMcpServer(api: WorkspaceApi): McpServer {
   const table = z.strictObject(schemas.tableId);
   const field = z.strictObject(schemas.fieldId);
   const view = z.strictObject(schemas.viewId);
+  tool('records_reschedule', 'Move or resize a record through a saved calendar. Requires current record and view versions. Date moves preserve calendar-day spans; timestamp moves shift the start by local days and preserve elapsed duration. Resizing changes one boundary. Read-only dates, missing starts, reversed results and skipped whole dates are rejected. Never retry an uncertain write.', view.extend({ recordId: z.string(), input: schemas.recordSchedule }), 'change', a => api.rescheduleRecord(a.tableId, a.viewId, a.recordId, a.input));
   const attachment = table.extend({ attachmentId: z.string() });
   tool('workspace_state', 'Read bounded catalog and selected table/view revisions without loading records. A missing requested table or view is null. dateContext tracks relative-filter time boundaries even when no data was written. Compare revisions before fetching changed data; retain local drafts.',
     z.strictObject({ tableId: z.string().min(1).max(200).exactOptional(), viewId: z.string().min(1).max(200).exactOptional(),

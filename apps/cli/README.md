@@ -68,6 +68,7 @@ History queries accept `{ limit?, before? }`; use returned `nextBefore` for cont
 | `fields delete` | Table ID, field ID | `{ expectedVersion }` |
 | `fields preview-conversion`, `fields apply-conversion` | Table ID, field ID | `{ expectedVersion, field: definition }` |
 | `records get` | Table ID, record ID | None |
+| `records reschedule` | Table ID, view ID, record ID | `{ expectedVersion, expectedViewVersion, action, days }`; [date-range moves and resizing](../../docs/record-scheduling.md) |
 | `records history` | Table ID, record ID | `{ limit?, before? }`; defaults to `{}` |
 | `records change` | Table ID, record ID | `{ changeId }` |
 | `records restore` | Table ID, record ID | `{ changeId, snapshot: 'before' \| 'after', expectedVersion }` |

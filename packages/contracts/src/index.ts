@@ -430,6 +430,13 @@ export interface RecordUpdate {
   values: Record<string, CellValue>;
 }
 
+export interface RecordSchedule {
+  expectedVersion: number;
+  expectedViewVersion: number;
+  action: 'move' | 'resizeStart' | 'resizeEnd';
+  days: number;
+}
+
 export interface RecordCreate {
   values: Record<string, CellValue>;
 }

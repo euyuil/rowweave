@@ -133,6 +133,11 @@ export async function startServer({ service, token, calculations: suppliedCalcul
       } else throw new ServiceError('NOT_FOUND', 'This endpoint does not exist.', 404);
       return;
     }
+    const schedule = url.pathname.match(/^\/tables\/([^/]+)\/views\/([^/]+)\/records\/([^/]+)\/schedule$/);
+    if (schedule && request.method === 'POST') {
+      send(response, 200, await writeJson(request, input => service.rescheduleRecord(schedule[1]!, schedule[2]!, schedule[3]!, input)));
+      return;
+    }
     const view = url.pathname.match(/^\/tables\/([^/]+)\/views(?:\/([^/]+)(?:\/(query))?)?$/);
     if (view) {
       const id = view[1]!;

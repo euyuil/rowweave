@@ -687,11 +687,53 @@ test('SDK, CLI and MCP share bounded calendar layout, bucket paging and stale-wr
   } })), /VIEW_CONFLICT/);
 });
 
+test('SDK, CLI and MCP share atomic schedule writes, history and conflict errors', async t => {
+  const { service, server, token, environment } = await setup(t), { json, call } = await connect(t, environment);
+  const sdk = createWorkspaceClient({ url: server.url, token });
+  let table = await sdk.createTable({ name: 'Scheduling interfaces' });
+  for (const name of ['Start', 'End']) table = await sdk.createField(table.id, { expectedVersion: table.version, name, type: 'date' });
+  const start = table.fields[1]!.id, end = table.fields[2]!.id;
+  const view = await sdk.createView(table.id, { name: 'Plan', type: 'calendar',
+    calendar: { startFieldId: start, endFieldId: end, timeZone: 'UTC' } });
+  const rows = (await sdk.createRecords(table.id, Array.from({ length: 3 }, () => ({ values: { [start]: '2024-02-28', [end]: '2024-03-02' } })))).records;
+  const input = { expectedVersion: 1, expectedViewVersion: view.version, action: 'move' as const, days: 1 };
+  const directory = await mkdtemp(join(tmpdir(), 'rowweave-scheduling-cli-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const file = join(directory, 'schedule.json');
+  await writeFile(file, JSON.stringify(input));
+  const args = [resolve('apps/cli/dist/rowweave.js'), 'records', 'reschedule', table.id, view.id, rows[2]!.id, '--input', file];
+  const results = [await sdk.rescheduleRecord(table.id, view.id, rows[0]!.id, input),
+    await json<BatchResult>('records_reschedule', { tableId: table.id, viewId: view.id, recordId: rows[1]!.id, input }),
+    JSON.parse((await runFile(process.execPath, args, { env: { ...process.env, ...environment } })).stdout) as BatchResult];
+  for (let index = 0; index < results.length; index++) {
+    const result = results[index]!;
+    assert.equal(result.records[0]!.id, rows[index]!.id); assert.equal(result.records[0]!.version, 2);
+    assert.equal(result.records[0]!.values[start], '2024-02-29'); assert.equal(result.records[0]!.values[end], '2024-03-03');
+    assert.ok(result.batchId); assert.deepEqual(await sdk.getRecord(table.id, rows[index]!.id), result.records[0]);
+  }
+  const state = service.workspaceState({ tableId: table.id });
+  await assert.rejects(sdk.rescheduleRecord(table.id, view.id, rows[0]!.id, input), { code: 'VERSION_CONFLICT' });
+  assert.match(text(await call('records_reschedule', { tableId: table.id, viewId: view.id, recordId: rows[1]!.id, input })), /VERSION_CONFLICT/);
+  await assert.rejects(runFile(process.execPath, args, { env: { ...process.env, ...environment } }),
+    error => /VERSION_CONFLICT/.test(String((error as { stderr: string }).stderr)));
+  assert.deepEqual(service.workspaceState({ tableId: table.id }), state);
+  const path = '/tables/' + table.id + '/views/' + view.id + '/records/' + rows[0]!.id + '/schedule';
+  assert.equal((await fetch(server.url + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) })).status, 401);
+  await sdk.undoRecordBatch(table.id, results[0]!.batchId!);
+  assert.equal((await sdk.getRecord(table.id, rows[0]!.id)).values[start], '2024-02-28');
+  const resized = await sdk.rescheduleRecord(table.id, view.id, rows[1]!.id, { ...input, expectedVersion: 2, action: 'resizeEnd', days: -1 });
+  assert.equal(resized.records[0]!.values[end], '2024-03-02');
+  await sdk.updateView(table.id, view.id, { expectedVersion: view.version, name: 'Changed plan' });
+  await assert.rejects(sdk.rescheduleRecord(table.id, view.id, rows[1]!.id, { ...input, expectedVersion: 3 }), { code: 'VIEW_CONFLICT' });
+  assert.match(text(await call('records_reschedule', { tableId: table.id, viewId: view.id, recordId: rows[1]!.id,
+    input: { ...input, expectedVersion: 3 } })), /VIEW_CONFLICT/);
+});
+
 test('MCP discovers all operations and runs versioned schema, records, views and CSV workflows over stdio', async t => {
   const { service, environment } = await setup(t);
   const { client, call, json, used, stderr } = await connect(t, environment);
   const tools = (await client.listTools()).tools;
-  assert.equal(tools.length, 45);
+  assert.equal(tools.length, 46);
   assert.equal(tools.find(tool => tool.name === 'workspace_state')!.annotations!.readOnlyHint, true);
   assert.deepEqual(await json('workspace_state'), service.workspaceState({}));
   assert.equal(tools.find(tool => tool.name === 'formulas_preview')!.annotations!.readOnlyHint, true);
@@ -700,6 +742,8 @@ test('MCP discovers all operations and runs versioned schema, records, views and
   assert.equal(tools.find(tool => tool.name === 'records_groups')!.annotations!.readOnlyHint, true);
   for (const name of ['records_calendar', 'records_calendar_records']) assert.equal(tools.find(tool => tool.name === name)!.annotations!.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === 'records_update')!.annotations!.destructiveHint, true);
+  assert.equal(tools.find(tool => tool.name === 'records_reschedule')!.annotations!.readOnlyHint, false);
+  assert.equal(tools.find(tool => tool.name === 'records_reschedule')!.annotations!.idempotentHint, false);
   assert.equal(tools.find(tool => tool.name === 'records_create')!.annotations!.idempotentHint, false);
   assert.equal((await client.listResourceTemplates()).resourceTemplates.length, 2);
   assert.equal((await client.listResources()).resources.length, 2);
@@ -715,6 +759,12 @@ test('MCP discovers all operations and runs versioned schema, records, views and
   const calendar = { startFieldId: calendarTable.fields[1]!.id, timeZone: 'UTC' };
   assert.equal((await json<CalendarLayout>('records_calendar', { tableId: calendarTable.id, input: { calendar, from: '2026-11-01', toExclusive: '2026-11-02' } })).totalRecords, 0);
   assert.equal((await json<QueryPage>('records_calendar_records', { tableId: calendarTable.id, input: { calendar, bucket: { kind: 'unscheduled' } } })).total, 0);
+  const scheduleView = await json<GridView>('views_create', { tableId: calendarTable.id, input: { name: 'Schedule', type: 'calendar', calendar } });
+  const scheduledRecord = (await json<BatchResult>('records_create', { tableId: calendarTable.id,
+    records: [{ values: { [calendar.startFieldId]: '2026-11-01' } }] })).records[0]!;
+  assert.equal((await json<BatchResult>('records_reschedule', { tableId: calendarTable.id, viewId: scheduleView.id,
+    recordId: scheduledRecord.id, input: { expectedVersion: scheduledRecord.version, expectedViewVersion: scheduleView.version, action: 'move', days: 1 } }))
+    .records[0]!.values[calendar.startFieldId], '2026-11-02');
   await json('tables_delete', { tableId: calendarTable.id, expectedVersion: calendarTable.version });
   const stateRequest = { tableId: table.id, viewId: service.listViews(table.id)[0]!.id };
   assert.deepEqual(await json('workspace_state', stateRequest), service.workspaceState(stateRequest));

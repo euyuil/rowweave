@@ -2,6 +2,7 @@ import type { CalculationRefresh, CalculationStatus, FormulaPreview, FormulaPrev
 import type { WorkspaceState, WorkspaceStateRequest } from '../../contracts/src/index.js';
 import type { GroupQuery, GroupLayout } from '../../contracts/src/index.js';
 import type { CalendarLayoutRequest, CalendarRecordsRequest, CalendarLayout, CalendarPage } from '../../contracts/src/index.js';
+import type { RecordSchedule } from '../../contracts/src/index.js';
 import {
   tableId, type BatchResult, type ConversionPreview, type DeleteResult, type FieldConversion,
   type FieldCreate, type FieldUpdate, type GridView, type QueryPage, type RecordCreate, type RecordDelete,
@@ -107,6 +108,8 @@ export function createWorkspaceClient(connection: Connection, request: typeof fe
     deleteRecords: (id: string, input: RecordDelete[]) => write<DeleteResult>(`${root(id)}/records`, 'DELETE', input),
     listViews: (id: string, signal?: AbortSignal) => call<GridView[]>(`${root(id)}/views`, signal ? { signal } : {}),
     getView: (id: string, viewId: string) => call<GridView>(view(id, viewId)),
+    rescheduleRecord: (id: string, viewId: string, recordId: string, input: RecordSchedule) =>
+      write<BatchResult>(`${view(id, viewId)}/records/${encodeURIComponent(recordId)}/schedule`, 'POST', input),
     createView: (id: string, input: ViewCreate) => write<GridView>(`${root(id)}/views`, 'POST', input),
     updateView: (id: string, viewId: string, input: ViewUpdate) => write<GridView>(view(id, viewId), 'PATCH', input),
     deleteView: (id: string, viewId: string, expectedVersion: number) => write<{ deleted: string }>(view(id, viewId), 'DELETE', { expectedVersion }),
