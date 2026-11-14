@@ -165,7 +165,7 @@ test('format 34 preserves prior views and business-day settings survive restart,
   const view = upgraded.createView(table.id, { name: 'Workdays', query: { filter: relative(day, 'pastBusinessDays') } });
   assert.deepEqual(new RecordService(data.open()).getView(table.id, view.id), view);
   const backup = join(dirname(data.path), 'business.sqlite'), restoredPath = join(dirname(data.path), 'business-restored.sqlite');
-  assert.equal((await backupWorkspace(data.path, backup)).version, 34);
+  assert.equal((await backupWorkspace(data.path, backup)).version, 35);
   await restoreWorkspace(backup, restoredPath);
   const restoredStore = new SqliteRecordStore(restoredPath, null, () => now);
   try {

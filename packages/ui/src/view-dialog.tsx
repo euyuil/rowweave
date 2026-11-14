@@ -16,6 +16,12 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
   const [rowHeight, setRowHeight] = useState<RowHeight>(view.rowHeight);
   const [frozenColumns, setFrozenColumns] = useState(view.frozenColumns);
   const [type, setType] = useState(view.type);
+  const calendarFields = table.fields.filter(field => ['date', 'datetime'].includes(valueField(field).type));
+  const [calendarStart, setCalendarStart] = useState(view.calendar?.startFieldId ?? calendarFields[0]?.id ?? '');
+  const [calendarEnd, setCalendarEnd] = useState(view.calendar?.endFieldId ?? '');
+  const [calendarZone, setCalendarZone] = useState(view.calendar?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
+  const startType = calendarFields.find(field => field.id === calendarStart);
+  const endFields = calendarFields.filter(field => startType && valueField(field).type === valueField(startType).type);
   const [groupBy, setGroupBy] = useState([...groupFieldIds(view.groupBy)]);
   const [groupMeasures, setGroupMeasures] = useState<SummaryMeasure[]>(view.groupMeasures ?? []);
   const [filter, setFilter] = useState(() => filterDraft(view.query.filter, table.fields));
@@ -55,7 +61,9 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
         const display = { columns, rowHeight, frozenColumns: Math.min(frozenColumns, visibleCount) };
         const groups = { groupBy: groupBy.length > 1 ? groupBy : groupBy[0] ?? null,
           groupMeasures: type === 'grid' && groupBy.length ? groupMeasures : [] };
-        const config = { name, ...display, type, ...groups, query: { filter: filterValue(filter, table.fields), sort, search: savedSearch } };
+        const config = { name, ...display, type, ...groups,
+          ...(type === 'calendar' ? { calendar: { startFieldId: calendarStart, ...(calendarEnd ? { endFieldId: calendarEnd } : {}), timeZone: calendarZone } } : {}),
+          query: { filter: filterValue(filter, table.fields), sort, search: savedSearch } };
         if (deleting) await api.deleteView(table.id, view.id, view.version);
         else if (kind === 'create') result = await api.createView(table.id, config);
         else result = await api.updateView(table.id, view.id, { ...(queryOnly ? { query: { ...view.query,
@@ -71,12 +79,23 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
             const boardGroup = table.fields.find(field => field.type === 'singleSelect');
             setGroupBy(event.target.value === 'board' && boardGroup ? [boardGroup.id] : []);
           }}>
-            <option value="grid">Grid</option><option value="board">Board</option>
+            <option value="grid">Grid</option><option value="board">Board</option><option value="calendar">Calendar</option>
           </select></label>
           {type === 'board' && <label className="form-field">Group by<select aria-label="Board group field" required value={groupBy[0] ?? ''} onChange={event => setGroupBy([event.target.value])}>
             <option value="" disabled>Choose a single-select field</option>{table.fields.filter(field => field.type === 'singleSelect').map(field => <option key={field.id} value={field.id}>{field.name}</option>)}
           </select></label>}</div>
           {type === 'board' && !groupBy.length && <p className="form-note">Add a single-select field to use a board view.</p>}
+          {type === 'calendar' && <><h3>Calendar dates</h3><div className="form-row">
+            <label className="form-field">Start field<select aria-label="Calendar start field" required value={calendarStart} onChange={event => {
+              const next = calendarFields.find(field => field.id === event.target.value)!;
+              setCalendarStart(next.id);
+              if (calendarEnd && valueField(calendarFields.find(field => field.id === calendarEnd)!).type !== valueField(next).type) setCalendarEnd('');
+            }}><option value="" disabled>Choose a date or timestamp field</option>{calendarFields.map(field => <option key={field.id} value={field.id}>{field.name}</option>)}</select></label>
+            <label className="form-field">End field<select aria-label="Calendar end field" value={calendarEnd} onChange={event => setCalendarEnd(event.target.value)}>
+              <option value="">No end field</option>{endFields.map(field => <option key={field.id} value={field.id}>{field.name}</option>)}</select></label>
+          </div><label className="form-field">Time zone<input aria-label="Calendar time zone" required value={calendarZone} onChange={event => setCalendarZone(event.target.value)} placeholder="Asia/Shanghai" /></label>
+          <p className="form-note">Dates include the end day. Timestamp ranges exclude the end instant; empty or equal ends are points. Records without a start date or with invalid ranges have separate lists.</p>
+          {!calendarFields.length && <p className="form-note">Add a date or timestamp field in Manage fields before creating a calendar.</p>}</>}
         </>}
         {type === 'grid' && (groupOnly || (!queryOnly && !displayOnly)) && <>
           {(groupBy.length ? groupBy : ['']).map((id, index) => <div className="form-row group-level-row" key={index}>
@@ -132,16 +151,17 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
           </select></label>
         </div>
         <p className="form-note">Keep leading columns visible while you scroll horizontally. These settings apply only to this view.</p></>}
-        <h3>Columns</h3>
-        <p className="form-note">{type === 'board' ? 'Cards show the first three visible fields besides their title and grouping field. Open a card to see every field.'
+        <h3>{type === 'grid' ? 'Columns' : 'Card fields'}</h3>
+        <p className="form-note">{type === 'calendar' ? 'Calendar previews use the primary display field as their title. The record list shows the first three visible fields besides the title and calendar dates. Open a record to see every field.'
+          : type === 'board' ? 'Cards show the first three visible fields besides their title and grouping field. Open a card to see every field.'
           : 'Choose the fields and their order in this view. Hidden fields remain in each record.'}</p>
         <div>{columns.map((column, index) => {
           const field = fields.get(column.fieldId)!;
           return <div className="view-column" role="group" aria-label={field.name} key={field.id}>
             <label className="check-field"><input type="checkbox" checked={!column.hidden} aria-label={`Show ${field.name}`}
               onChange={event => setColumns(current => current.map(item => item.fieldId === field.id ? { ...item, hidden: !event.target.checked } : item))} />{field.name}</label>
-            <label className="column-width">Width<input type="number" min={50} max={1000} step={1} required value={column.width} aria-label={`${field.name} width`}
-              onChange={event => setColumns(current => current.map(item => item.fieldId === field.id ? { ...item, width: Number(event.target.value) } : item))} /></label>
+            {type === 'grid' && <label className="column-width">Width<input type="number" min={50} max={1000} step={1} required value={column.width} aria-label={`${field.name} width`}
+              onChange={event => setColumns(current => current.map(item => item.fieldId === field.id ? { ...item, width: Number(event.target.value) } : item))} /></label>}
             <button type="button" disabled={index === 0} aria-label={`Move ${field.name} up`} onClick={event => { move(index, -1); event.currentTarget.parentElement!.querySelector('input')!.focus(); }}>↑</button>
             <button type="button" disabled={index === columns.length - 1} aria-label={`Move ${field.name} down`} onClick={event => { move(index, 1); event.currentTarget.parentElement!.querySelector('input')!.focus(); }}>↓</button>
           </div>;
@@ -150,7 +170,7 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
       </fieldset>}
       {error && <p className="form-error" role="alert">{error}</p>}
       <div className="dialog-actions"><button type="button" disabled={busy} onClick={onClose}>Cancel</button>
-        <button className={deleting ? 'danger' : 'primary'} disabled={busy || (!deleting && (columns.every(column => column.hidden) || (type === 'board' && !groupBy.length)))}>
+        <button className={deleting ? 'danger' : 'primary'} disabled={busy || (!deleting && (columns.every(column => column.hidden) || (type === 'board' && !groupBy.length) || (type === 'calendar' && !calendarStart)))}>
           {busy ? 'Working…' : deleting ? 'Delete view' : kind === 'create' ? 'Create view' : 'Save view'}</button></div>
     </form>
   </Dialog>;

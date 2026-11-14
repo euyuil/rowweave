@@ -178,5 +178,5 @@ test('clock semantics migration preserves deterministic formulas, values and sav
   assert.deepEqual(reopened.getTable(table.id), schema); assert.deepEqual(reopened.queryRecords(table.id, {}), records); assert.deepEqual(reopened.listViews(table.id), views);
   assert.equal(reopened.refreshCalculations().changedRecords, 0);
   const check = new DatabaseSync(data.path);
-  try { assert.equal(check.prepare('PRAGMA user_version').get()!['user_version'], 34); } finally { check.close(); }
+  try { assert.equal(check.prepare('PRAGMA user_version').get()!['user_version'], 35); } finally { check.close(); }
 });

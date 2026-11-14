@@ -2,22 +2,9 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefO
 import type { Field, GridView, RecordSummary, RowRecord, Table, ViewPage } from '../../contracts/src/index.js';
 import type { WorkspaceApi } from '../../client/src/http-client.js';
 import { boardCardFields, boardPageSize, prepareBoardSnapshot, type BoardSnapshot, type BoardWindow } from '../../client/src/board-refresh.js';
-import { cellDisplay } from '../../client/src/cell-values.js';
+import { RecordValue, recordText } from './record-value.js';
 import { selectedOptions, selectStyle } from './select-colors.js';
 import { SelectValues } from './select-values.js';
-
-function recordText(field: Field, record: RowRecord): string {
-  if (record.formulaErrors?.[field.id]) return `#ERROR: ${record.formulaErrors[field.id]}`;
-  const value = record.values[field.id] ?? null;
-  if (record.attachments?.[field.id]) return record.attachments[field.id]!.map(file => file.filename).join(', ');
-  return field.type === 'relation' ? ((value ?? []) as string[]).map(id => record.links?.[field.id]?.find(link => link.id === id)?.label || id).join(', ')
-    : cellDisplay(field, value);
-}
-
-function RecordValue({ field, record }: { field: Field; record: RowRecord }) {
-  const options = record.formulaErrors?.[field.id] ? undefined : selectedOptions(field, record.values[field.id]);
-  return options?.length ? <SelectValues options={options} /> : <>{recordText(field, record) || '—'}</>;
-}
 
 export function BoardView({ table, view, search, generation, revision, dateContext, prepared, api, disabled, onWindow, onDragChange, onOpen, onCreate, onMove, onRefresh }: {
   table: Table; view: Extract<GridView, { type: 'board' }>; search: string; generation: number; revision: number; dateContext: string | undefined;

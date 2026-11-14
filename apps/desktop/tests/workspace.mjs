@@ -5,6 +5,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { _electron as electron } from 'playwright';
 import electronPath from 'electron';
 import extract from '@electron-internal/extract-zip';
+import { closeApplication } from './close-application.mjs';
 import { verifySchemaWorkflow } from './schema-workflow.mjs';
 import { verifyViewWorkflow } from './view-workflow.mjs';
 import { verifyQueryWorkflow } from './query-workflow.mjs';
@@ -18,6 +19,8 @@ import { verifyColumnWorkflow } from './column-workflow.mjs';
 import { verifyDisplayWorkflow } from './display-workflow.mjs';
 import { verifyBoardWorkflow } from './board-workflow.mjs';
 import { verifyBoardRefresh } from './board-refresh-workflow.mjs';
+import { verifyCalendarWorkflow, verifyCalendarAfterRestart } from './calendar-workflow.mjs';
+import { verifyCalendarRefresh } from './calendar-refresh-workflow.mjs';
 import { verifyFormulaWorkflow } from './formula-workflow.mjs';
 import { verifyDateFormulaWorkflow } from './date-formula-workflow.mjs';
 import { verifyArrayFormulaWorkflow } from './array-formula-workflow.mjs';
@@ -298,6 +301,7 @@ try {
   await verifyDisplayWorkflow(page);
   await verifyBoardWorkflow(page);
   await verifyBoardRefresh(page);
+  const calendar = await verifyCalendarRefresh(page, await verifyCalendarWorkflow(page, application));
   await verifyFormulaWorkflow(page);
   await verifyDateFormulaWorkflow(page);
   await verifyArrayFormulaWorkflow(page);
@@ -318,7 +322,7 @@ try {
   await verifyExternalRefresh(page, application);
   await verifyCatalogRefresh(page, application);
   console.log('External refresh acceptance passed; restarting the workspace.');
-  await application.close();
+  await closeApplication(application);
   application = undefined;
   console.log('Workspace process exited; checking saved tables after restart.');
   application = await electron.launch({ executablePath, args: packaged ? [] : ['.'],
@@ -332,6 +336,7 @@ try {
   assert.equal((await tables()).find(table => table.id === original.id).name, 'Projects 项目');
   await verifyGroupPreferencesAfterRestart(page, groupPreferences);
   await verifyNestedGroupsAfterRestart(page, nestedGroups);
+  await verifyCalendarAfterRestart(page, calendar);
   for (const name of ['Projects 项目', 'Tasks']) {
     await choose(name);
     await page.getByRole('heading', { name, exact: true }).waitFor();
@@ -341,7 +346,7 @@ try {
   }
   await page.getByRole('heading', { name: 'Make room for your ideas' }).waitFor();
   assert.deepEqual(await tables(), []);
-  await application.close();
+  await closeApplication(application);
   application = undefined;
   await launch();
   assert.deepEqual(await tables(), []);
@@ -349,6 +354,7 @@ try {
   console.log('Workspace lifecycle passed: tables, typed records/grid editors, linked records/lookups, atomic clearing, schema configuration/conversion, views/queries, CSV import/export, conflicts, draft/form guards, confirmations, and persistence.');
 } catch (error) {
   console.error('Renderer errors:', errors);
+  console.error('Workspace acceptance failed:', error);
   if (page && !page.isClosed()) await page.screenshot({ path: '.artifacts/desktop-workspace-failure.png' });
   throw error;
 } finally {
@@ -356,7 +362,7 @@ try {
     await application.evaluate(({ dialog }) => {
       dialog.showMessageBox = async () => ({ response: 1, checkboxChecked: false });
     });
-    await application.close();
+    await closeApplication(application);
   }
   assert.equal(dirname(resolve(dataDirectory)), resolve(tmpdir()));
   assert.ok(basename(dataDirectory).startsWith('rowweave-workspace-'));

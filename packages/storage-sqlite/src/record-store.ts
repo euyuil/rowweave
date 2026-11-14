@@ -500,7 +500,8 @@ export class SqliteRecordStore implements RecordStore {
     this.db.prepare(`INSERT INTO views VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET
       name = excluded.name, version = excluded.version, config_json = excluded.config_json`)
       .run(view.id, view.tableId, view.name, view.version, JSON.stringify({ query: view.query, columns: view.columns,
-        rowHeight: view.rowHeight, frozenColumns: view.frozenColumns, type: view.type, groupBy: view.groupBy, groupMeasures: view.groupMeasures }));
+        rowHeight: view.rowHeight, frozenColumns: view.frozenColumns, type: view.type, groupBy: view.groupBy, groupMeasures: view.groupMeasures,
+        calendar: view.calendar }));
   }
 
   private syncViews(table: Table): void {

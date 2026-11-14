@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { type FieldFilter, type FilterGroup, type GridView, type RecordQuery, type RowHeight, type Table, type ViewQuery } from '../../contracts/src/index.js';
 import { parseQuery } from './record-query.js';
 import { parseSummary } from './record-summary.js';
+import { parseCalendar } from './calendar-query.js';
 import { schemaName, schemaObject } from './schema-validation.js';
 import { ServiceError } from './errors.js';
 
@@ -13,8 +14,19 @@ export function defaultView(table: Pick<Table, 'id' | 'fields'>): GridView {
 export function parseView(table: Table, input: unknown, previous = defaultView(table)): GridView {
   const item = schemaObject(input);
   const type = item['type'] === undefined ? previous.type : item['type'];
-  if (type !== 'grid' && type !== 'board') throw new ServiceError('INVALID_VIEW', 'Choose a grid or board view.');
+  if (type !== 'grid' && type !== 'board' && type !== 'calendar') throw new ServiceError('INVALID_VIEW', 'Choose a grid, board or calendar view.');
+  let calendar: GridView['calendar'];
+  if (type === 'calendar') {
+    try {
+      const checked = parseCalendar(table, item['calendar'] === undefined ? previous.calendar : item['calendar']);
+      calendar = { startFieldId: checked.startField.id, ...(checked.endField ? { endFieldId: checked.endField.id } : {}), timeZone: checked.timeZone };
+    } catch (error) {
+      if (error instanceof ServiceError) throw new ServiceError('INVALID_VIEW', error.message);
+      throw error;
+    }
+  } else if (item['calendar'] !== undefined) throw new ServiceError('INVALID_VIEW', 'Calendar settings require a calendar view.');
   const grouping = item['groupBy'] === undefined ? (type === previous.type ? previous.groupBy : undefined) : item['groupBy'];
+  if (type === 'calendar' && grouping != null) throw new ServiceError('INVALID_VIEW', 'Calendar views do not use record grouping.');
   if (type === 'board' && (typeof grouping !== 'string' || !table.fields.some(field => field.id === grouping && field.type === 'singleSelect'))) {
     throw new ServiceError('INVALID_VIEW', 'A board needs a single-select grouping field. Choose another field or change the view to a grid.');
   }
@@ -58,10 +70,11 @@ export function parseView(table: Table, input: unknown, previous = defaultView(t
   if (!Number.isInteger(frozenColumns) || (frozenColumns as number) < 0 || (frozenColumns as number) > visible) {
     throw new ServiceError('INVALID_VIEW', 'Freeze a whole number of leading columns, up to the number of visible fields.');
   }
-  const { groupBy: _previousGroup, groupMeasures: _previousMeasures, ...base } = previous;
+  const { groupBy: _previousGroup, groupMeasures: _previousMeasures, calendar: _previousCalendar, ...base } = previous;
   return { ...base, name: item['name'] === undefined ? previous.name : schemaName(item['name']), query: saved, columns,
     rowHeight: rowHeight as RowHeight, frozenColumns: frozenColumns as number,
-    ...(type === 'board' ? { type, groupBy: groupBy as string } : { type, ...(groupBy === undefined ? {} : { groupBy }) }),
+    ...(type === 'board' ? { type, groupBy: groupBy as string } : type === 'calendar' ? { type, calendar: calendar! }
+      : { type, ...(groupBy === undefined ? {} : { groupBy }) }),
     ...(measures.length ? { groupMeasures: measures } : {}) };
 }
 

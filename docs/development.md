@@ -36,7 +36,7 @@ Use `npm run workspace:file -- backup SOURCE NEW_DESTINATION` for a consistent o
 
 ### Dynamic tables and schema
 
-Shared [calendar queries](calendar-queries.md) provide complete day counts with bounded previews and bucket pages over configurable date/timestamp intervals. SDK `queryCalendar`/`queryCalendarRecords`, CLI `records calendar`/`records calendar-records` and MCP `records_calendar`/`records_calendar_records` share filters, projection and continuation guards. Saved calendar presentation remains in the active delivery plan.
+Saved [calendar views and queries](calendar-queries.md) provide configurable date/timestamp intervals, a month overview and paged day/unscheduled/invalid lists in desktop and Harness. SDK `queryCalendar`/`queryCalendarRecords`, CLI `records calendar`/`records calendar-records` and MCP `records_calendar`/`records_calendar_records` share filters, projection and continuation guards. Pass a saved calendar's `viewId` to reuse its date fields and time zone. Format 35 persists calendar settings. Automated calendar acceptance covers editing, keyboard navigation, protected external refresh, schema replacement during reload and restart; native input methods remain final-candidate checks.
 
 **Filters** supports [relative calendar periods, business days and rolling hours](relative-date-filters.md) for date and timestamp fields, with saved time zones and cross-page date-context checks. Desktop packaging bundles the pinned Temporal date resolver and its license notices; source service execution uses the lockfile-installed dependency. After building, run `node scripts/benchmark-business-days.mjs` for the reproducible 100,000-record saved-view workload; see [results and raw samples](business-day-performance.md).
 

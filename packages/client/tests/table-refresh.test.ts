@@ -34,6 +34,48 @@ test('a prepared refresh keeps the current rows visible until one atomic commit'
   assert.equal(model.commitRefresh(snapshot), false, 'A committed candidate cannot be applied twice.');
 });
 
+test('manual refresh publishes schema and data together while preserving or explicitly discarding drafts', async t => {
+  const { service, api } = setup(t), model = new TableModel(api);
+  await model.initialize();
+  const oldTable = model.table, before = model.getRecord(0)!;
+  model.applyEdits([{ row: 0, fieldId: 'field_1', value: 'Local draft' }]);
+  service.updateBatch([{ id: before.id, expectedVersion: before.version, values: { field_1: 'Remote change' } }]);
+  service.createField('prototype', { expectedVersion: oldTable!.version, name: 'Added externally', type: 'text' });
+  const snapshot = await model.prepareRefresh({});
+  assert.equal(model.table, oldTable); assert.equal(model.getRecord(0)!.values['field_1'], 'Local draft');
+  assert.equal(model.commitRefresh(snapshot), false, 'Automatic refresh cannot discard local intent.');
+  let notifications = 0;
+  model.subscribe(() => { notifications++; assert.equal(model.table!.version, snapshot.table.version); });
+  assert.equal(model.commitRefresh(snapshot, { drafts: 'preserve' }), true);
+  assert.equal(notifications, 1); assert.equal(model.pendingCells, 1); assert.equal(model.conflicted, true);
+  assert.equal(model.getRecord(0)!.values['field_1'], 'Local draft'); assert.equal(model.getRecord(0)!.version, before.version);
+  assert.equal(model.canUndo, false); assert.equal(model.canRedo, false);
+  await assert.rejects(model.save(), { code: 'VERSION_CONFLICT' });
+  const discard = await model.prepareRefresh({});
+  assert.equal(model.pendingCells, 1);
+  assert.equal(model.commitRefresh(discard, { drafts: 'discard' }), true);
+  assert.equal(model.pendingCells, 0); assert.equal(model.conflicted, false);
+  assert.equal(model.getRecord(0)!.values['field_1'], 'Remote change');
+});
+
+test('failed manual reload and stale prepared discard leave drafts and local history intact', async t => {
+  const { api } = setup(t);
+  let fail = false;
+  const model = new TableModel({ ...api, getTable: async signal => {
+    if (fail) throw new Error('Service unavailable');
+    return api.getTable(signal);
+  } });
+  await model.initialize(); model.applyEdits([{ row: 0, fieldId: 'field_1', value: 'Keep me' }]);
+  fail = true;
+  await assert.rejects(model.prepareRefresh({}), /Service unavailable/);
+  assert.equal(model.pendingCells, 1); assert.equal(model.canUndo, true);
+  fail = false;
+  const old = await model.prepareRefresh({});
+  model.applyEdits([{ row: 0, fieldId: 'field_1', value: 'Newer local draft' }]);
+  assert.equal(model.commitRefresh(old, { drafts: 'discard' }), false);
+  assert.equal(model.getRecord(0)!.values['field_1'], 'Newer local draft'); assert.equal(model.canUndo, true);
+});
+
 test('editing while a refresh response is pending preserves the draft and its undo history', async t => {
   const { service, api } = setup(t);
   let held = false, release!: () => void, started!: () => void;

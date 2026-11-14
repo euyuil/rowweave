@@ -58,10 +58,11 @@ const page = {
 const groupFields = z.union([id, z.array(id).min(1).max(maxGroupLevels)]);
 export const recordQuery = z.strictObject({ ...page, ...query, recordIds: z.array(id).exactOptional(), groupBy: groupFields.exactOptional() });
 const summaryMeasures = z.array(z.strictObject({ fieldId: id, operation: z.enum(['sum', 'average', 'min', 'max']) })).max(12);
+const calendarConfig = z.strictObject({ startFieldId: id, endFieldId: id.exactOptional(),
+  timeZone: z.string().describe('Explicit time zone used to place timestamps on calendar dates.') });
 const calendarQuery = {
   ...query,
-  calendar: z.strictObject({ startFieldId: id, endFieldId: id.exactOptional(),
-    timeZone: z.string().describe('Explicit time zone used to place timestamps on calendar dates.') }),
+  calendar: calendarConfig.exactOptional(),
   viewId: id.exactOptional(), expectedViewVersion: version.exactOptional(),
   fields: page.fields, expectedRevision: page.expectedRevision, expectedDateContext: page.expectedDateContext,
 };
@@ -103,7 +104,7 @@ const view = {
   columns: z.array(z.strictObject({ fieldId: id, width: z.number(), hidden: z.boolean() })).exactOptional(),
   rowHeight: z.union([z.literal(36), z.literal(48), z.literal(64)]).exactOptional(),
   frozenColumns: z.int().min(0).exactOptional(),
-  type: z.enum(['grid', 'board']).exactOptional(), groupBy: groupFields.nullable().exactOptional(),
+  type: z.enum(['grid', 'board', 'calendar']).exactOptional(), calendar: calendarConfig.exactOptional(), groupBy: groupFields.nullable().exactOptional(),
   groupMeasures: summaryMeasures.exactOptional(),
 };
 export const viewCreate = z.strictObject(view);

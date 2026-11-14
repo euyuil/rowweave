@@ -480,10 +480,11 @@ export class TableModel {
     } finally { if (this.refreshRequest === controller) this.refreshRequest = undefined; }
   }
 
-  commitRefresh(snapshot: TableRefresh): boolean {
-    if (this.disposed || this.saving || this.edits.drafts.size || this.undoStack.length || this.redoStack.length || snapshot.signal.aborted ||
+  commitRefresh(snapshot: TableRefresh, manual?: { drafts: 'preserve' | 'discard' }): boolean {
+    if (this.disposed || this.saving || (!manual && (this.edits.drafts.size || this.undoStack.length || this.redoStack.length)) || snapshot.signal.aborted ||
         snapshot.generation !== this.generation || snapshot.sourceRevision !== this.revision) return false;
     this.resetPages();
+    if (manual?.drafts === 'discard') this.edits = { drafts: new Map(), rows: new Map() };
     this.table = snapshot.table;
     this.query = snapshot.query;
     this.queryRevision = snapshot.first.revision;
@@ -494,6 +495,17 @@ export class TableModel {
     this.updateFields();
     this.error = undefined;
     this.conflicted = false;
+    if (this.edits.drafts.size) {
+      const rows = new Map<number, string>();
+      for (const page of snapshot.pages.values()) for (const [offset, record] of page.records.entries()) {
+        const draft = this.edits.drafts.get(record.id);
+        if (draft) {
+          rows.set(page.offset + offset, record.id);
+          if (draft.base.version !== record.version) this.conflicted = true;
+        }
+      }
+      this.edits = { ...this.edits, rows };
+    }
     this.emit();
     return true;
   }
