@@ -45,7 +45,7 @@ test('saved nested views align bounded groups, record order, CSV, restart and ba
   assert.deepEqual(reopened.queryGroups(table.id, query), layout);
   const backup = data.path + '.backup', restored = data.path + '.restored';
   t.after(async () => { await Promise.all([backup, restored].map(path => rm(path, { force: true }))); });
-  assert.equal((await backupWorkspace(data.path, backup)).version, 31);
+  assert.equal((await backupWorkspace(data.path, backup)).version, 32);
   await restoreWorkspace(backup, restored);
   const db = new DatabaseSync(restored);
   try {

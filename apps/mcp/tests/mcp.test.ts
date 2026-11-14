@@ -386,6 +386,41 @@ test('MCP and CLI preserve relative date rules and reject continuation after cal
   ] } } })).isError, true);
 });
 
+test('MCP, SDK and CLI preserve annual filters and share year-boundary continuation checks', async t => {
+  let now = new Date('2024-12-31T23:59:59.999Z');
+  const service = new RecordService(fixture(t, null, () => now).open()), token = randomBytes(32).toString('hex');
+  const server = await startServer({ service, token }); t.after(() => server.close());
+  const environment = { ROWWEAVE_URL: server.url, ROWWEAVE_TOKEN: token }, { json, call } = await connect(t, environment);
+  const sdk = createWorkspaceClient({ url: server.url, token });
+  let table = await json<Table>('tables_create', { name: 'Annual interfaces' });
+  table = await json<Table>('fields_create', { tableId: table.id, input: { expectedVersion: table.version, name: 'Due', type: 'date' } });
+  const due = table.fields[1]!.id;
+  const rows = (await sdk.createRecords(table.id, ['2023-12-31', '2024-02-29', '2025-01-01'].map(value => ({ values: { [due]: value } })))).records;
+  const directory = await mkdtemp(join(tmpdir(), 'rowweave-years-cli-')); t.after(() => rm(directory, { recursive: true, force: true }));
+  const input = join(directory, 'query.json'), args = [resolve('apps/cli/dist/rowweave.js'), 'records', 'query', table.id, '--input', input];
+  let current: QueryPage | undefined;
+  for (const [period, index] of [['lastYear', 0], ['thisYear', 1], ['nextYear', 2]] as const) {
+    const query = { filter: { conjunction: 'and' as const, conditions: [{ fieldId: due, operator: 'relativeDate' as const, relative: { period, timeZone: 'UTC' } }] } };
+    const view = await json<GridView>('views_create', { tableId: table.id, input: { name: period, query } });
+    const page = await json<QueryPage>('views_query', { tableId: table.id, viewId: view.id, query: {} });
+    assert.deepEqual(page.records.map(row => row.id), [rows[index]!.id]);
+    const shared = await sdk.queryView(table.id, view.id, {});
+    assert.equal(shared.dateContext, page.dateContext); assert.deepEqual(shared.records, page.records);
+    await writeFile(input, JSON.stringify({ ...query, expectedDateContext: page.dateContext }));
+    const cli = JSON.parse((await runFile(process.execPath, args, { env: { ...process.env, ...environment } })).stdout) as QueryPage;
+    assert.equal(cli.dateContext, page.dateContext); assert.deepEqual(cli.records, page.records);
+    if (period === 'thisYear') current = page;
+  }
+  now = new Date('2025-01-01T00:00:00Z');
+  const query = { expectedDateContext: current!.dateContext!, filter: { conjunction: 'and' as const, conditions: [
+    { fieldId: due, operator: 'relativeDate' as const, relative: { period: 'thisYear' as const, timeZone: 'UTC' } },
+  ] } };
+  assert.match(text(await call('records_query', { tableId: table.id, query })), /DATA_CHANGED/);
+  await assert.rejects(sdk.queryRecords(table.id, query), { code: 'DATA_CHANGED' });
+  await writeFile(input, JSON.stringify(query));
+  await assert.rejects(runFile(process.execPath, args, { env: { ...process.env, ...environment } }), error => /DATA_CHANGED/.test(String((error as { stderr: string }).stderr)));
+});
+
 test('MCP and CLI create paired fields and update the same relationship from either side', async t => {
   const { environment, service } = await setup(t);
   const { json, call } = await connect(t, environment);

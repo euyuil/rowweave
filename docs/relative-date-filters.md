@@ -1,12 +1,13 @@
 # Relative date filters
 
-Use **Filters** on a date or timestamp field, choose **is in a relative period**, then choose a period and time zone. The saved rule follows the calendar when you refresh; it does not store the dates from the day you configured it. Named zones such as `Asia/Shanghai`, `America/New_York` and `UTC` are supported. The editor initially uses your device's zone, which is then saved explicitly.
+Use **Filters** on a date or timestamp field, choose **is in a relative period**, then choose a period and time zone. The saved rule follows the calendar; it does not store the dates from the day you configured it. Named zones such as `Asia/Shanghai`, `America/New_York` and `UTC` are supported. The editor initially uses your device's zone, which is then saved explicitly.
 
 | Period | Matching calendar dates |
 | --- | --- |
 | Today, yesterday, tomorrow | One local calendar date |
 | This, last, next week | Monday through Sunday |
 | This, last, next month | The complete calendar month |
+| This, last, next year | January 1 through December 31, including February 29 in leap years |
 | Past N days | Today and the preceding N−1 dates |
 | Next N days | Today and the following N−1 dates |
 
@@ -26,9 +27,9 @@ HTTP, SDK, CLI and MCP use the same filter condition:
 }
 ```
 
-Supported period identifiers are `today`, `yesterday`, `tomorrow`, `thisWeek`, `lastWeek`, `nextWeek`, `thisMonth`, `lastMonth`, `nextMonth`, `pastDays` and `nextDays`. Only the last two accept `days`. Relative conditions use `relative` instead of a fixed `value` and can appear in nested AND/OR groups. Save them in a view's `query.filter` or supply them to record queries and summaries.
+Supported period identifiers are `today`, `yesterday`, `tomorrow`, `thisWeek`, `lastWeek`, `nextWeek`, `thisMonth`, `lastMonth`, `nextMonth`, `thisYear`, `lastYear`, `nextYear`, `pastDays` and `nextDays`. Only the last two accept `days`. Relative conditions use `relative` instead of a fixed `value` and can appear in nested AND/OR groups. Save them in a view's `query.filter` or supply them to record queries and summaries. Years are full calendar years in the chosen zone, not rolling 365-day windows or fiscal years.
 
-Queries and summaries return an optional `dateContext` when they contain relative filters. Pass it as `expectedDateContext` on continuation pages, paired group summaries or board lane requests, alongside the usual `expectedRevision` and view version. A calendar-boundary change returns `DATA_CHANGED` even when no records changed. Refresh the first page and restart continuation; do not combine pages from different contexts. The desktop forwards this marker and retains grid drafts when a read becomes stale. It does not automatically refresh an idle view at midnight.
+Queries and summaries return an optional `dateContext` when they contain relative filters. Pass it as `expectedDateContext` on continuation pages, paired group summaries or board lane requests, alongside the usual `expectedRevision` and view version. A calendar-boundary change returns `DATA_CHANGED` even when no records changed. Refresh the first page and restart continuation; do not combine pages from different contexts. A year rule retains its context throughout that local year and changes at the next January 1. The desktop forwards this marker, detects boundary changes and refreshes idle grids and boards automatically. Drafts, active editors and open forms postpone replacement; stale reads retain edits for review.
 
 CSV exports resolve the saved view against the current clock once, inside the export transaction. They export the current matching records, including collapsed grid groups. Export can therefore differ from an open view that has not been refreshed since its calendar period changed.
 
@@ -38,4 +39,6 @@ The service validates settings once at the input boundary. Temporal resolves ran
 
 Workspace format 15 prevents older programs from reopening saved relative rules they cannot interpret. Upgrading format 14 preserves schema, record and view versions. The pinned Temporal polyfill is bundled into the desktop's date resolver with its dependency license notices; the portable app does not depend on the development checkout's `node_modules`.
 
-Regression coverage includes DST gaps/folds and half-hour transitions, non-hour offsets, year/week/month boundaries, leap years, nested filters, lookup matching, summaries/export, restart/migration, HTTP/SDK/MCP/CLI and retained drafts after stale continuation. Automated desktop acceptance covers date and timestamp settings, persisted day counts, invalid zones, concurrent view changes and the narrow-window layout. Native input methods remain part of final owner acceptance.
+Format 32 protects saved year periods from older writers. Upgrading format 31 preserves existing view definitions, records, UUIDs, history and revision counters; no record rewrite is needed. Year filters participate in schema dependency checks, restart and backup/restore.
+
+Regression coverage includes DST gaps/folds and half-hour transitions, non-hour offsets, year/week/month boundaries, leap years, nested filters, lookup matching, summaries/export, restart/migration, HTTP/SDK/MCP/CLI and retained drafts after stale continuation. Year tests verify complete leap years, differing local years at the same instant, exact timestamp endpoints and year-boundary context without data writes. Automated desktop acceptance covers date and timestamp settings, persisted day counts, all three year options, invalid zones, concurrent view changes and the narrow-window layout. Native input methods remain part of final owner acceptance.

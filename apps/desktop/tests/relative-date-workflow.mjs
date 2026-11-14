@@ -84,6 +84,29 @@ export async function verifyRelativeDateWorkflow(page, app) {
   await save();
   await page.getByText('1 record · 3 fields', { exact: true }).waitFor();
   assert.equal((await call(`/tables/${table.id}/views/${view.id}/query`, 'POST', {})).records[0].values[table.primaryFieldId], '1 day task');
+  const year = Number(today.slice(0, 4)), annualDates = [-1, 0, 1].map(delta => `${year + delta}-07-01`);
+  const annualRows = (await call(`/tables/${table.id}/records`, 'POST', annualDates.map(date => ({ values: {
+    [table.primaryFieldId]: `Annual ${date}`, [due]: date, [at]: `${date}T12:00:00.000Z`,
+  } })))).records;
+  for (const [period, delta] of [['lastYear', -1], ['thisYear', 0], ['nextYear', 1]]) {
+    await open();
+    await page.getByLabel('Relative period', { exact: true }).selectOption('pastDays');
+    await page.getByLabel('Calendar days', { exact: true }).fill('7');
+    await page.getByLabel('Relative period', { exact: true }).selectOption(period);
+    assert.equal(await page.getByLabel('Calendar days', { exact: true }).count(), 0);
+    await page.getByLabel('Relative time zone', { exact: true }).fill('UTC');
+    if (period === 'thisYear') await page.screenshot({ path: '.artifacts/desktop-relative-year-settings.png' });
+    await save();
+    const expected = [day(-1), day(0), day(1), ...annualDates].filter(date => Number(date.slice(0, 4)) === year + delta).length;
+    await page.getByText(`${expected} ${expected === 1 ? 'record' : 'records'} · 3 fields`, { exact: true }).waitFor();
+    const saved = await call(`/tables/${table.id}/views/${view.id}`);
+    assert.deepEqual(saved.query.filter.conditions[0].relative, { period, timeZone: 'UTC' });
+    const matching = await call(`/tables/${table.id}/views/${view.id}/query`, 'POST', {});
+    assert.ok(matching.records.some(row => row.id === annualRows[delta + 1].id));
+    await open();
+    assert.equal(await page.getByLabel('Relative period', { exact: true }).inputValue(), period);
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  }
   await open();
   await page.getByLabel('Relative time zone', { exact: true }).fill('Asia/Shanghai');
   await call(`/tables/${table.id}/views/${view.id}`, 'PATCH', { expectedVersion: (await call(`/tables/${table.id}/views`))[0].version, name: 'Changed elsewhere' });

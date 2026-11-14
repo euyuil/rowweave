@@ -224,7 +224,8 @@ export interface RecordPage {
   records: RowRecord[];
 }
 
-export const relativeDatePeriods = ['today', 'yesterday', 'tomorrow', 'thisWeek', 'lastWeek', 'nextWeek', 'thisMonth', 'lastMonth', 'nextMonth', 'pastDays', 'nextDays'] as const;
+export const relativeDatePeriods = ['today', 'yesterday', 'tomorrow', 'thisWeek', 'lastWeek', 'nextWeek', 'thisMonth', 'lastMonth', 'nextMonth',
+  'thisYear', 'lastYear', 'nextYear', 'pastDays', 'nextDays'] as const;
 export const maxRelativeDays = 3660;
 export interface RelativeDateFilter {
   period: typeof relativeDatePeriods[number];

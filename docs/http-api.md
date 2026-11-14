@@ -114,7 +114,7 @@ Saved batch undo validates every original final version, restores the complete r
 
 ## Queries
 
-Date and timestamp fields support [relative calendar filters](relative-date-filters.md), including saved time zones and dynamic week/month/day ranges. Query and summary responses containing these filters also return `dateContext`. Reuse it as `expectedDateContext` on continuation pages and paired summary/board-lane requests. `DATA_CHANGED` requires restarting pagination when the calendar range changes, even if the data revision is unchanged.
+Date and timestamp fields support [relative calendar filters](relative-date-filters.md), including saved time zones and dynamic year/month/week/day ranges. Query and summary responses containing these filters also return `dateContext`. Reuse it as `expectedDateContext` on continuation pages and paired summary/board-lane requests. `DATA_CHANGED` requires restarting pagination when the calendar range changes, even if the data revision is unchanged.
 
 ### Summaries
 

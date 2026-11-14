@@ -28,6 +28,9 @@ test('relative filter drafts round-trip dynamic settings without converting them
   const filter: FilterGroup = { conjunction: 'or', conditions: [
     { fieldId: 'due', operator: 'relativeDate', relative: { period: 'pastDays', days: 7, timeZone: 'Asia/Shanghai' } },
     { fieldId: 'at', operator: 'relativeDate', relative: { period: 'thisWeek', timeZone: 'America/New_York' } },
+    { fieldId: 'due', operator: 'relativeDate', relative: { period: 'thisYear', timeZone: 'UTC' } },
+    { fieldId: 'at', operator: 'relativeDate', relative: { period: 'lastYear', timeZone: 'Asia/Kathmandu' } },
+    { fieldId: 'due', operator: 'relativeDate', relative: { period: 'nextYear', timeZone: 'Pacific/Kiritimati' } },
   ] };
   assert.deepEqual(filterValue(filterDraft(filter, fields), fields), filter);
 });
