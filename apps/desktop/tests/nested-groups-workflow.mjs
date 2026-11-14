@@ -72,10 +72,13 @@ export async function verifyNestedGroups(page) {
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
 
   await click(page, 5); if (await page.locator('.rowweave-cell-editor').count()) await page.keyboard.press('Escape');
+  await page.waitForFunction(() => document.querySelector('canvas')?.contains(document.activeElement));
   await page.keyboard.press('Shift+ArrowDown'); await page.keyboard.press('Shift+ArrowDown');
   await page.evaluate(() => navigator.clipboard.writeText('pending copy')); await page.keyboard.press('Control+c');
   await page.waitForFunction(async () => (await navigator.clipboard.readText()).replaceAll('\r\n', '\n') === 'Delta\nEcho');
-  await click(page, 5); if (await page.locator('.rowweave-cell-editor').count()) await page.keyboard.press('Escape');
+  // Reset the range with keyboard navigation; a repeated mouse click can open the cell editor.
+  await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowLeft');
+  await page.waitForFunction(() => document.querySelectorAll('canvas [role="gridcell"][aria-selected="true"]').length === 1);
   await page.evaluate(() => navigator.clipboard.writeText('Pasted Delta\nPasted Echo')); await page.keyboard.press('Control+v');
   await page.getByText('2 unsaved cells', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Undo', exact: true }).click(); await page.getByText('All changes saved', { exact: true }).waitFor();
