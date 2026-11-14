@@ -89,7 +89,8 @@ export class SqliteRecordStore implements RecordStore {
     this.relations = new Relations(this.db);
     this.lookups = new Lookups(this.db);
     try {
-      this.db.exec('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+      // Retain large-query index pages within a fixed per-connection cache budget.
+      this.db.exec('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA cache_size = -98304;');
       const fresh = migrate(this.db);
       this.automaticNumbers = new AutomaticNumbers(this.db);
       this.history = new RecordHistory(this.db);
@@ -448,7 +449,7 @@ export class SqliteRecordStore implements RecordStore {
 
   queryCalendar(table: Table, query: CheckedQuery, calendar: CheckedCalendar, window: CheckedCalendarWindow, view?: GridView): CalendarLayout {
     return this.transaction(() => {
-      const { current, sql, dateContext } = this.prepareQuery(table, query, view);
+      const { current, sql, dateContext } = this.prepareQuery(table, query, view, true);
       const layout = calendarLayout(this.db, calendar, window, sql);
       const buckets = [...layout.days, layout.unscheduled, layout.invalid];
       const records = this.calendarRecords(current, buckets.flatMap(bucket => bucket.ids), query.fields);
@@ -463,7 +464,7 @@ export class SqliteRecordStore implements RecordStore {
 
   queryCalendarRecords(table: Table, query: CheckedQuery, calendar: CheckedCalendar, bucket: CalendarBucket, view?: GridView): CalendarPage {
     return this.transaction(() => {
-      const { current, sql, dateContext } = this.prepareQuery(table, query, view);
+      const { current, sql, dateContext } = this.prepareQuery(table, query, view, true);
       const page = calendarPage(this.db, calendar, bucket, sql, query.offset, query.limit);
       const records = this.calendarRecords(current, page.ids, query.fields);
       return { offset: query.offset, total: page.total, records: page.ids.map(id => records.get(id)!),

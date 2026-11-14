@@ -21,7 +21,7 @@ export function querySql(table: Pick<Table, 'id' | 'fields'>, query: CheckedQuer
   options: { forIndex?: boolean; dateRanges?: ReadonlyMap<FieldFilter, DateRange>; materializeLookups?: boolean } = {}) {
   const { forIndex = false, dateRanges = new Map<FieldFilter, DateRange>(), materializeLookups = false } = options;
   const fields = new Map(table.fields.map(field => [field.id, field]));
-  const computed = new Map<string, { name: string; expression: string }>();
+  const computed = new Map<string, { name: string; expression: string; field: Field }>();
   const parameters: Record<string, SQLInputValue> = forIndex ? {} : { ':table': table.id };
   let parameterIndex = 0;
   const bind = (value: CellValue) => {
@@ -34,7 +34,7 @@ export function querySql(table: Pick<Table, 'id' | 'fields'>, query: CheckedQuer
   const raw = (field: Field, alias = forIndex ? '' : 'r') => {
     if (materializeLookups && alias === 'r' && isLookupSummary(field)) {
       let column = computed.get(field.id);
-      if (!column) { column = { name: `lookupValue${computed.size}`, expression: lookupSql(field) }; computed.set(field.id, column); }
+      if (!column) { column = { name: `lookupValue${computed.size}`, expression: lookupSql(field), field }; computed.set(field.id, column); }
       return `r.${column.name}`;
     }
     if (field.type === 'lookup') return lookupSql(field, alias);

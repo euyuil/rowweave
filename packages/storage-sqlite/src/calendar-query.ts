@@ -3,6 +3,7 @@ import type { CalendarBucket } from '../../contracts/src/index.js';
 import type { CheckedCalendar, CheckedCalendarWindow } from '../../core/src/calendar-query.js';
 import { Temporal } from '../../core/src/temporal.js';
 import type { querySql } from './query-sql.js';
+import { lookupSummaryRowsSql } from './lookups.js';
 
 type SqlQuery = ReturnType<typeof querySql>;
 interface CalendarRow { id: string; start: number | null; end: number | null; invalid: boolean }
@@ -24,8 +25,14 @@ function* rows(db: DatabaseSync, config: CheckedCalendar, sql: SqlQuery): Iterab
   const end = config.endField ? 'json_extract(r.values_json, :calendarEnd)' : 'NULL';
   const error = 'json_extract(r.formula_errors_json, :calendarStart) IS NOT NULL' +
     (config.endField ? ' OR json_extract(r.formula_errors_json, :calendarEnd) IS NOT NULL' : '');
-  const statement = db.prepare(`SELECT r.id, ${start} AS start_value, ${end} AS end_value, (${error}) AS invalid
-    FROM records r WHERE ${sql.where} ORDER BY ${sql.order}`);
+  const linked = sql.computed.map((column, index) => ({ ...column, source: `calendarLookup${index}` }));
+  const source = linked.length ? `WITH ${linked.map(column => `${column.source} AS MATERIALIZED (${lookupSummaryRowsSql(column.field)})`).join(', ')},
+    input AS NOT MATERIALIZED (SELECT r.*, ${linked.map(column => `${column.field.lookup!.operation === 'count'
+      ? `CASE WHEN ${column.source}.record_id IS NULL THEN 0 ELSE ${column.source}.value END` : `${column.source}.value`} AS ${column.name}`).join(', ')}
+    FROM records r ${linked.map(column => `LEFT JOIN ${column.source} ON ${column.source}.record_id = r.id`).join(' ')}
+    WHERE ${sql.sourceWhere})` : '';
+  const statement = db.prepare(`${source} SELECT r.id, ${start} AS start_value, ${end} AS end_value, (${error}) AS invalid
+    FROM ${sql.computed.length ? 'input' : 'records'} r WHERE ${sql.where} ORDER BY ${sql.order}`);
   for (const row of statement.iterate({ ...sql.parameters, ':calendarStart': path(config.startField.id),
     ...(config.endField ? { ':calendarEnd': path(config.endField.id) } : {}) })) {
     const startValue = row['start_value'] === null ? null : Date.parse(row['start_value'] as string);

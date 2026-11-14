@@ -197,6 +197,46 @@ test('calendar reads preserve linked filters and projected record details withou
   assert.equal(service.queryCalendar(table.id, request).totalRecords, 0);
 });
 
+test('calendar linked aggregates preserve empty counts, nulls, errors, overflow and multi-field filter ordering', t => {
+  const { service, table: initial, calendar } = setup(t);
+  let target = service.createTable({ name: 'Numbers' });
+  target = service.createField(target.id, { expectedVersion: target.version, name: 'Value', type: 'number' });
+  const value = target.fields.at(-1)!.id;
+  target = service.createField(target.id, { expectedVersion: target.version, name: 'Inverse', type: 'formula',
+    formula: { expression: '1 / [' + value + ']', resultType: 'number' } });
+  const inverse = target.fields.at(-1)!.id;
+  const targets = service.createRecords(target.id, [null, 2, 3, 1e308, 1e308, -1e308, 0].map(number => ({ values: { [value]: number } }))).records;
+  let table = service.createField(initial.id, { expectedVersion: initial.version, name: 'Numbers', type: 'relation', relation: { tableId: target.id, multiple: true } });
+  const relation = table.fields.at(-1)!.id, aggregates: string[] = [];
+  for (const operation of ['count', 'sum', 'average', 'min', 'max']) {
+    table = service.createField(table.id, { expectedVersion: table.version, name: operation, type: 'lookup',
+      lookup: { relationFieldId: relation, fieldId: value, operation } });
+    aggregates.push(table.fields.at(-1)!.id);
+  }
+  table = service.createField(table.id, { expectedVersion: table.version, name: 'Formula count', type: 'lookup',
+    lookup: { relationFieldId: relation, fieldId: inverse, operation: 'count' } });
+  aggregates.push(table.fields.at(-1)!.id);
+  const combinations = [[], [0], [1], [1, 2], [3, 4], [3, 5], [6], [1, 6]];
+  const records = service.createRecords(table.id, combinations.map((indices, index) => ({ values: {
+    [table.primaryFieldId]: String(index), [calendar.startFieldId]: '2026-11-01', [relation]: indices.map(index => targets[index]!.id),
+  } }))).records;
+  assert.equal(records[0]!.values[aggregates[0]!], 0);
+  assert.equal(records[6]!.values[aggregates[5]!], null);
+  assert.ok(records[6]!.formulaErrors?.[aggregates[5]!]);
+  assert.equal(records[4]!.values[aggregates[1]!], null);
+  assert.ok(records[4]!.formulaErrors?.[aggregates[1]!]);
+  for (const fieldId of aggregates) for (const operator of ['isEmpty', 'isNotEmpty', 'eq', 'gte']) {
+    const query = { filter: { conjunction: 'and', conditions: [{ fieldId, operator, ...(['eq', 'gte'].includes(operator) ? { value: 0 } : {}) }] },
+      sort: aggregates.map((id, index) => ({ fieldId: id, direction: index % 2 ? 'asc' : 'desc' })), fields: [table.primaryFieldId, ...aggregates] };
+    const expected = service.queryRecords(table.id, query);
+    const page = service.queryCalendarRecords(table.id, { ...query, calendar, bucket: { kind: 'day', date: '2026-11-01' } });
+    assert.equal(page.total, expected.total); assert.deepEqual(page.records, expected.records, fieldId + ' ' + operator);
+    const layout = service.queryCalendar(table.id, { ...query, calendar, from: '2026-11-01', toExclusive: '2026-11-02', previewLimit: 5 });
+    assert.equal(layout.totalRecords, expected.total); assert.equal(layout.days[0]!.count, expected.total);
+    assert.deepEqual(layout.days[0]!.records, expected.records.slice(0, 5));
+  }
+});
+
 test('calendar dates remain calendar dates and timestamp bounds handle normalized extended years', t => {
   const dates = setup(t);
   dates.service.createRecords(dates.table.id, [{ values: { [dates.calendar.startFieldId]: '2011-12-30' } }]);
