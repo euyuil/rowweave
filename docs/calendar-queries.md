@@ -67,6 +67,8 @@ Linked numeric conditions and sorting reuse grouped ID/value results instead of 
 
 ## Verification
 
+The [100,000-record performance report](calendar-performance.md) records all six service workloads below 500 ms p95, the initial failed linked-query measurement, exact sources and a separate stable process-memory check.
+
 The SQLite regression suite covers counts/previews/pages, null/reversed intervals, DST and skipped dates, normalized extended years, saved queries, linked-value filtering and projection, formula errors, automatic timestamps, stale continuations and restart. HTTP/SDK/CLI/MCP tests verify shared results, authentication, conflicts and read-only behavior. After building, run `node scripts/benchmark-calendar-queries.mjs` for the isolated 100,000-record service workload. It records source/environment and raw samples, independently verifies results and checks that reads preserve workspace state. Renderer and native-input measurements remain separate final-candidate work.
 
 After the timing run, use `node scripts/benchmark-calendar-memory.mjs .artifacts/calendar-performance-GENERATED_DIRECTORY` with the directory printed by the benchmark. This opens the generated data in a fresh service-only process, avoiding the dataset generator's arrays, and records RSS over repeated equivalent query circuits. It rejects paths outside generated benchmark directories and does not operate on a working workspace.
