@@ -79,6 +79,8 @@ History queries accept `{ limit?, before? }`; use returned `nextBefore` for cont
 | `records query` | Table ID | RecordQuery; defaults to `{}` |
 | `records summarize` | Table ID | SummaryRequest; defaults to `{}` for the whole-table count |
 | `records groups` | Table ID | GroupQuery; one scalar `groupBy` ID, an ordered array of up to three IDs, or a saved grouped-grid `viewId`; bounded display/expanded-record window, typed collapse keys/paths and numeric `measures` over complete groups |
+| `records calendar` | Table ID | CalendarLayoutRequest; configured dates/time zone, 1–62 visible dates, complete counts and up to five previews per bucket |
+| `records calendar-records` | Table ID | CalendarRecordsRequest; page a day, unscheduled records or invalid intervals with revision/date/view guards |
 | `records create` | Table ID | `[{ values }]` |
 | `records update` | Table ID | `[{ id, expectedVersion, values }]` |
 | `records delete` | Table ID | `[{ id, expectedVersion }]` |

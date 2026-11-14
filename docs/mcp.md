@@ -69,6 +69,8 @@ Tools have discoverable strict JSON schemas. Read descriptions and use stable ID
 | `records_query` | `{ tableId, query: RecordQuery }` (use `{}` for the default page) |
 | `records_summarize` | `{ tableId, input: SummaryRequest }` for full-set counts, numeric measures and bounded group pages |
 | `records_groups` | `{ tableId, input: GroupQuery }` for bounded display/expanded-record windows with typed keys, counts, offsets, collapse settings and optional numeric measures over complete groups; see [layout semantics](http-api.md#group-layout-windows) |
+| `records_calendar` | `{ tableId, input: CalendarLayoutRequest }` for complete daily counts and bounded previews with configured date fields and time zone; see [calendar semantics](calendar-queries.md) |
+| `records_calendar_records` | `{ tableId, input: CalendarRecordsRequest }` to page a day, unscheduled records or invalid intervals using the same query and guards |
 | `records_create`, `records_update`, `records_delete` | `{ tableId, records: [...] }` with the corresponding create/update/delete objects |
 | `views_list` | `{ tableId }` |
 | `views_get` | `{ tableId, viewId }` |

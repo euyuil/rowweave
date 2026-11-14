@@ -338,6 +338,32 @@ export interface GroupLayout {
   viewVersion?: number;
 }
 
+export const maxCalendarDays = 62;
+export const maxCalendarPreview = 5;
+export interface CalendarConfig { startFieldId: string; endFieldId?: string; timeZone: string }
+export interface CalendarQuery extends Pick<RecordQuery, 'filter' | 'sort' | 'search' | 'fields' | 'expectedRevision' | 'expectedDateContext'> {
+  calendar: CalendarConfig;
+  viewId?: string;
+  expectedViewVersion?: number;
+}
+export interface CalendarLayoutRequest extends CalendarQuery { from: string; toExclusive: string; previewLimit?: number }
+export type CalendarBucket = { kind: 'day'; date: string } | { kind: 'unscheduled' | 'invalid' };
+export interface CalendarRecordsRequest extends CalendarQuery { bucket: CalendarBucket; offset?: number; limit?: number }
+export interface CalendarBucketRecords { count: number; records: RowRecord[] }
+export interface CalendarLayout {
+  days: Array<CalendarBucketRecords & { date: string }>;
+  unscheduled: CalendarBucketRecords;
+  invalid: CalendarBucketRecords;
+  totalRecords: number;
+  scheduledRecords: number;
+  revision: number;
+  schemaVersion: number;
+  dateContext?: string;
+  viewId?: string;
+  viewVersion?: number;
+}
+export interface CalendarPage extends QueryPage { viewId?: string; viewVersion?: number }
+
 export interface ViewColumn {
   fieldId: string;
   width: number;

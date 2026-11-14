@@ -20,6 +20,8 @@ import type { CsvImportResult, CsvPreview } from '../../contracts/src/index.js';
 import type { WorkspaceState, WorkspaceStateRequest } from '../../contracts/src/index.js';
 import type { GroupCollapse, GroupPathCollapse, GroupLayout } from '../../contracts/src/index.js';
 import { parseGroupCollapse, parseGroupPaths, type CheckedGroupQuery } from './record-groups.js';
+import type { CalendarBucket, CalendarLayout, CalendarPage } from '../../contracts/src/index.js';
+import { parseCalendar, parseCalendarWindow, parseCalendarBucket, type CheckedCalendar, type CheckedCalendarWindow } from './calendar-query.js';
 export { ServiceError } from './errors.js';
 
 export interface RecordStore {
@@ -55,6 +57,8 @@ export interface RecordStore {
   queryRecords(table: Table, query: CheckedQuery, view?: GridView): QueryPage;
   summarizeRecords(table: Table, query: CheckedQuery, summary: CheckedSummary, view?: GridView): RecordSummary;
   queryGroups(table: Table, query: CheckedGroupQuery, collapse: GroupCollapse | GroupPathCollapse, view?: GridView): GroupLayout;
+  queryCalendar(table: Table, query: CheckedQuery, calendar: CheckedCalendar, window: CheckedCalendarWindow, view?: GridView): CalendarLayout;
+  queryCalendarRecords(table: Table, query: CheckedQuery, calendar: CheckedCalendar, bucket: CalendarBucket, view?: GridView): CalendarPage;
   listViews(tableId: string): GridView[];
   getView(tableId: string, viewId: string): GridView;
   saveView(table: Table, view: GridView, expectedVersion?: number): GridView;
@@ -307,6 +311,34 @@ export class RecordService {
     return this.store.queryGroups(table, { ...query, window, measures: parseSummary(table, {
       measures: item['measures'] === undefined ? view?.groupMeasures : item['measures'],
     }).measures }, collapse, view);
+  }
+
+  private calendarQuery(id: string, input: unknown) {
+    const table = this.store.getTable(id), item = schemaObject(input);
+    if (item['viewId'] !== undefined && (typeof item['viewId'] !== 'string' || !item['viewId'])) {
+      throw new ServiceError('INVALID_QUERY', 'viewId must be a non-empty string.');
+    }
+    const view = item['viewId'] === undefined ? undefined : this.store.getView(id, item['viewId'] as string);
+    if (item['expectedViewVersion'] !== undefined && (!view || schemaVersion(item['expectedViewVersion']) !== view.version)) {
+      throw new ServiceError('VIEW_CONFLICT', 'The view changed. Refresh before reading the calendar.', 409);
+    }
+    if (view && (item['filter'] !== undefined || item['sort'] !== undefined)) {
+      throw new ServiceError('INVALID_QUERY', 'Use the saved view filter and sort or an explicit query, not both.');
+    }
+    const query = parseQuery(table, { filter: view?.query.filter ?? item['filter'], sort: view?.query.sort ?? item['sort'],
+      search: item['search'] === undefined ? view?.query.search : item['search'], fields: item['fields'],
+      offset: item['offset'], limit: item['limit'], expectedRevision: item['expectedRevision'], expectedDateContext: item['expectedDateContext'] });
+    return { table, item, query, view, calendar: parseCalendar(table, item['calendar']) };
+  }
+
+  queryCalendar(id: string, input: unknown): CalendarLayout {
+    const { table, item, query, view, calendar } = this.calendarQuery(id, input);
+    return this.store.queryCalendar(table, query, calendar, parseCalendarWindow(item), view);
+  }
+
+  queryCalendarRecords(id: string, input: unknown): CalendarPage {
+    const { table, item, query, view, calendar } = this.calendarQuery(id, input);
+    return this.store.queryCalendarRecords(table, query, calendar, parseCalendarBucket(item['bucket']), view);
   }
 
   importCsv(id: string, input: unknown): CsvImportResult {

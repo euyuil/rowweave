@@ -36,6 +36,8 @@ Use `npm run workspace:file -- backup SOURCE NEW_DESTINATION` for a consistent o
 
 ### Dynamic tables and schema
 
+Shared [calendar queries](calendar-queries.md) provide complete day counts with bounded previews and bucket pages over configurable date/timestamp intervals. SDK `queryCalendar`/`queryCalendarRecords`, CLI `records calendar`/`records calendar-records` and MCP `records_calendar`/`records_calendar_records` share filters, projection and continuation guards. Saved calendar presentation remains in the active delivery plan.
+
 **Filters** supports [relative calendar periods, business days and rolling hours](relative-date-filters.md) for date and timestamp fields, with saved time zones and cross-page date-context checks. Desktop packaging bundles the pinned Temporal date resolver and its license notices; source service execution uses the lockfile-installed dependency. After building, run `node scripts/benchmark-business-days.mjs` for the reproducible 100,000-record saved-view workload; see [results and raw samples](business-day-performance.md).
 
 **Summarize** in the view toolbar computes counts and numeric totals for all saved records matching the current view and search. Choose a scalar grouping field and a numeric sum/average/min/max; group pages stay bounded and carry revision checks. The same operation is `POST /tables/:tableId/summary`, SDK `summarizeRecords`, CLI `rowweave records summarize TABLE_ID --json '{"groupBy":"FIELD_ID"}'`, and MCP `records_summarize`. See [HTTP summaries](http-api.md#summaries) for the complete contract.

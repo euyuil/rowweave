@@ -39,6 +39,12 @@ test('the packed SDK installs offline outside the repository, exposes usable typ
   await writeFile(join(consumer, 'consumer.ts'), `
 import { createWorkspaceClient, ApiFailure, type RecordQuery, type CsvPreview, type Table, type GroupLayout } from '@rowweave/sdk';
 const api = createWorkspaceClient({ url: 'http://127.0.0.1:4317', token: 'provided-at-runtime' });
+const calendar = { startFieldId: 'start', endFieldId: 'end', timeZone: 'Asia/Shanghai' };
+void api.queryCalendar('table', { calendar, from: '2026-11-01', toExclusive: '2026-12-01', previewLimit: 3,
+  fields: ['label'], expectedRevision: 1, viewId: 'view', expectedViewVersion: 1 }, new AbortController().signal);
+void api.queryCalendarRecords('table', { calendar, bucket: { kind: 'day', date: '2026-11-01' }, limit: 50 });
+void api.queryCalendarRecords('table', { calendar, bucket: { kind: 'unscheduled' } });
+void api.queryCalendarRecords('table', { calendar, bucket: { kind: 'invalid' } });
 const query: RecordQuery = { filter: { conjunction: 'and', conditions: [{ fieldId: 'amount', operator: 'gte', value: 1 }] } };
 const tables: Promise<Table[]> = api.listTables();
 const preview: Promise<CsvPreview> = api.previewCsv('table', { expectedVersion: 1, hasHeader: true, csv: 'Name\\nA' });

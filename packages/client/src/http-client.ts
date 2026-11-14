@@ -1,6 +1,7 @@
 import type { CalculationRefresh, CalculationStatus, FormulaPreview, FormulaPreviewRequest } from '../../contracts/src/index.js';
 import type { WorkspaceState, WorkspaceStateRequest } from '../../contracts/src/index.js';
 import type { GroupQuery, GroupLayout } from '../../contracts/src/index.js';
+import type { CalendarLayoutRequest, CalendarRecordsRequest, CalendarLayout, CalendarPage } from '../../contracts/src/index.js';
 import {
   tableId, type BatchResult, type ConversionPreview, type DeleteResult, type FieldConversion,
   type FieldCreate, type FieldUpdate, type GridView, type QueryPage, type RecordCreate, type RecordDelete,
@@ -94,6 +95,8 @@ export function createWorkspaceClient(connection: Connection, request: typeof fe
     queryRecords: (id: string, input: RecordQuery, signal?: AbortSignal) => write<QueryPage>(`${root(id)}/query`, 'POST', input, signal),
     summarizeRecords: (id: string, input: SummaryRequest, signal?: AbortSignal) => write<RecordSummary>(`${root(id)}/summary`, 'POST', input, signal),
     queryGroups: (id: string, input: GroupQuery, signal?: AbortSignal) => write<GroupLayout>(`${root(id)}/groups/query`, 'POST', input, signal),
+    queryCalendar: (id: string, input: CalendarLayoutRequest, signal?: AbortSignal) => write<CalendarLayout>(`${root(id)}/calendar/query`, 'POST', input, signal),
+    queryCalendarRecords: (id: string, input: CalendarRecordsRequest, signal?: AbortSignal) => write<CalendarPage>(`${root(id)}/calendar/records`, 'POST', input, signal),
     previewCsv: (id: string, input: CsvImportRequest, signal?: AbortSignal) => write<CsvPreview>(`${root(id)}/import/preview`, 'POST', input, signal),
     importCsv: (id: string, input: CsvImportRequest) => write<CsvImportResult>(`${root(id)}/import`, 'POST', input),
     exportCsv: async (id: string, input: CsvExportRequest = {}, signal?: AbortSignal): Promise<string> =>

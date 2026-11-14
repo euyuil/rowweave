@@ -163,6 +163,12 @@ export async function startServer({ service, token, calculations: suppliedCalcul
       send(response, 200, service.queryGroups(groups[1]!, await readJson(request)));
       return;
     }
+    const calendar = url.pathname.match(/^\/tables\/([^/]+)\/calendar\/(query|records)$/);
+    if (calendar && request.method === 'POST') {
+      const input = await readJson(request);
+      send(response, 200, calendar[2] === 'query' ? service.queryCalendar(calendar[1]!, input) : service.queryCalendarRecords(calendar[1]!, input));
+      return;
+    }
     const csvImport = url.pathname.match(/^\/tables\/([^/]+)\/import(?:\/(preview))?$/);
     if (csvImport && request.method === 'POST') {
       const body = await readJson(request, 64 * 1024 * 1024);
