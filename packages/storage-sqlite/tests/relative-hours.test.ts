@@ -147,7 +147,7 @@ test('format 33 preserves prior data and rolling filters survive restart, backup
   const view = upgraded.createView(table.id, { name: 'Recent', query: { filter: relative(at, 'pastHours') } });
   assert.deepEqual(new RecordService(data.open()).getView(table.id, view.id), view);
   const backup = join(dirname(data.path), 'hours.sqlite'), restoredPath = join(dirname(data.path), 'hours-restored.sqlite');
-  assert.equal((await backupWorkspace(data.path, backup)).version, 33);
+  assert.equal((await backupWorkspace(data.path, backup)).version, 34);
   await restoreWorkspace(backup, restoredPath);
   const restoredStore = new SqliteRecordStore(restoredPath, null, () => now);
   try {

@@ -34,7 +34,7 @@ test('saved measures include complete groups, support read overrides and survive
   await backupWorkspace(data.path, backup); await restoreWorkspace(backup, restored);
   const db = new DatabaseSync(restored);
   try {
-    assert.equal(db.prepare('PRAGMA user_version').get()!['user_version'], 33);
+    assert.equal(db.prepare('PRAGMA user_version').get()!['user_version'], 34);
     const config = JSON.parse(db.prepare('SELECT config_json FROM views WHERE id = ?').get(view.id)!['config_json'] as string);
     assert.deepEqual(config.groupMeasures, measures);
   } finally { db.close(); }
@@ -82,7 +82,7 @@ test('format 30 upgrades older workspaces without changing views, records or his
   assert.deepEqual(reopened.getRecord(table.id, record.id), record);
   const check = new DatabaseSync(data.path);
   try {
-    assert.equal(check.prepare('PRAGMA user_version').get()!['user_version'], 33);
+    assert.equal(check.prepare('PRAGMA user_version').get()!['user_version'], 34);
     assert.equal(check.prepare('SELECT count(*) AS n FROM record_changes').get()!['n'], 1);
   } finally { check.close(); }
 });

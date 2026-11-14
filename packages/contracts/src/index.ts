@@ -225,7 +225,7 @@ export interface RecordPage {
 }
 
 export const relativeDatePeriods = ['today', 'yesterday', 'tomorrow', 'thisWeek', 'lastWeek', 'nextWeek', 'thisMonth', 'lastMonth', 'nextMonth',
-  'thisYear', 'lastYear', 'nextYear', 'pastDays', 'nextDays', 'pastHours', 'nextHours'] as const;
+  'thisYear', 'lastYear', 'nextYear', 'pastDays', 'nextDays', 'pastBusinessDays', 'nextBusinessDays', 'pastHours', 'nextHours'] as const;
 export const maxRelativeDays = 3660;
 export const maxRelativeHours = 24 * maxRelativeDays;
 export const dateContextPattern = /^(?:h:-?\d{1,16}:)?[a-f0-9]{64}$/;

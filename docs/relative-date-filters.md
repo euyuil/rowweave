@@ -10,10 +10,16 @@ Use **Filters** on a date or timestamp field, choose **is in a relative period**
 | This, last, next year | January 1 through December 31, including February 29 in leap years |
 | Past N days | Today and the preceding N−1 dates |
 | Next N days | Today and the following N−1 dates |
+| Past N business days | The N most recent weekdays, including today if it is Monday–Friday |
+| Next N business days | The N next weekdays, including today if it is Monday–Friday |
 
 N must be an integer from 1 to 3,660. These are calendar periods, not rolling 24-hour durations. A date field compares its `YYYY-MM-DD` value with the calendar dates in the chosen zone. A timestamp field compares UTC instants with the first valid instant of each boundary date; daylight-saving transitions can produce days shorter or longer than 24 hours. Missing values do not match. Combine an empty check with OR when unscheduled records should also appear.
 
 Date/timestamp lookups match when at least one linked value lies inside the entire range. Two linked dates on opposite sides of the range do not together constitute a match.
+
+Business-day periods exclude Saturdays and Sundays. On a weekend, past business days end on Friday and next business days begin on Monday. Each matching weekday covers its entire local calendar date, rather than office hours. Public holidays count as weekdays; no regional holiday calendar is inferred. Use `pastBusinessDays` or `nextBusinessDays` with `days` from 1 to 3,660 and an explicit named zone.
+
+Timestamp business days follow local weekdays through offset transitions and skipped dates. A skipped local date has no matching instants. A date-only value remains its stated calendar date. Linked values must satisfy both the date interval and weekday check on the same value.
 
 ## Rolling hours
 
@@ -33,7 +39,7 @@ HTTP, SDK, CLI and MCP use the same filter condition:
 }
 ```
 
-Calendar period identifiers are `today`, `yesterday`, `tomorrow`, `thisWeek`, `lastWeek`, `nextWeek`, `thisMonth`, `lastMonth`, `nextMonth`, `thisYear`, `lastYear`, `nextYear`, `pastDays` and `nextDays`. Only the last two accept `days`. Relative conditions use `relative` instead of a fixed `value` and can appear in nested AND/OR groups. Save them in a view's `query.filter` or supply them to record queries and summaries. Years are full calendar years in the chosen zone, not rolling 365-day windows or fiscal years.
+Calendar period identifiers are `today`, `yesterday`, `tomorrow`, `thisWeek`, `lastWeek`, `nextWeek`, `thisMonth`, `lastMonth`, `nextMonth`, `thisYear`, `lastYear`, `nextYear`, `pastDays`, `nextDays`, `pastBusinessDays` and `nextBusinessDays`. These last four accept `days`. Relative conditions use `relative` instead of a fixed `value` and can appear in nested AND/OR groups. Save them in a view's `query.filter` or supply them to record queries and summaries. Years are full calendar years in the chosen zone, not rolling 365-day windows or fiscal years.
 
 Queries and summaries return an optional `dateContext` when they contain relative filters. Pass it as `expectedDateContext` on continuation pages, paired group summaries or board lane requests, alongside the usual `expectedRevision` and view version. A calendar-boundary change returns `DATA_CHANGED` even when no records changed. Refresh the first page and restart continuation; do not combine pages from different contexts. A year rule retains its context throughout that local year and changes at the next January 1. The desktop forwards this marker, detects boundary changes and refreshes idle grids and boards automatically. Drafts, active editors and open forms postpone replacement; stale reads retain edits for review.
 
@@ -52,6 +58,10 @@ Workspace format 15 prevents older programs from reopening saved relative rules 
 Format 32 protects saved year periods from older writers. Upgrading format 31 preserves existing view definitions, records, UUIDs, history and revision counters; no record rewrite is needed. Year filters participate in schema dependency checks, restart and backup/restore.
 
 Format 33 protects saved hourly periods. It preserves previous data and view definitions without rewriting records. The service resolves each hourly interval once per read transaction; SQLite uses the same parameterized range comparisons as calendar filters. Continuation contexts carry their time anchor and range digest, requiring no server-side cache or scheduled job.
+
+Format 34 gates saved business-day periods without rewriting previous data. The service finds weekday boundaries using whole weeks and a remainder. Timestamp ranges are split at time-zone offset transitions once per request; SQLite evaluates local weekdays with those fixed offsets. It does not convert time zones separately for every record or expand thousands of individual dates. Query contexts include the resolved ranges. When weekend membership is unchanged, the context remains stable; the next boundary that changes membership invalidates stale continuation.
+
+The [business-day service benchmark](business-day-performance.md) records clean-source 100,000-record results, complete-count/UUID checks, environment, reproduction steps and all raw samples. It measures service queries separately from renderer and native-input acceptance.
 
 Regression coverage includes DST gaps/folds and half-hour transitions, non-hour offsets, year/week/month boundaries, leap years, nested filters, lookup matching, summaries/export, restart/migration, HTTP/SDK/MCP/CLI and retained drafts after stale continuation. Year tests verify complete leap years, differing local years at the same instant, exact timestamp endpoints and year-boundary context without data writes. Automated desktop acceptance covers date and timestamp settings, persisted day counts, all three year options, invalid zones, concurrent view changes and the narrow-window layout. Native input methods remain part of final owner acceptance.
 
