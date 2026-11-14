@@ -65,10 +65,10 @@ test('business timestamp queries match local weekdays through DST, skipped dates
       const parts = Object.fromEntries(formatter.formatToParts(new Date(value)).map(part => [part.type, part.value]));
       return `${parts['year']}-${parts['month']}-${parts['day']}`;
     };
-    for (const [period, direction] of [['pastBusinessDays', -1], ['nextBusinessDays', 1]] as const) {
-      const dates = new Set(weekdays(localDate(instant), 5, direction));
+    for (const count of [1, 5]) for (const [period, direction] of [['pastBusinessDays', -1], ['nextBusinessDays', 1]] as const) {
+      const dates = new Set(weekdays(localDate(instant), count, direction));
       const expected = rows.filter(row => dates.has(localDate(row.values[at] as string))).map(row => row.id);
-      const filter = relative(at, period, 5, zone), actual = service.queryRecords(table.id, { filter, limit: 500 });
+      const filter = relative(at, period, count, zone), actual = service.queryRecords(table.id, { filter, limit: 500 });
       assert.deepEqual(actual.records.map(row => row.id), expected, `${zone} ${period}`);
       assert.equal(service.summarizeRecords(table.id, { filter, expectedDateContext: actual.dateContext }).totals.count, expected.length);
     }
