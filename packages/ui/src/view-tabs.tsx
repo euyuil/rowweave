@@ -26,8 +26,8 @@ export function ViewTabs({ views, selected, disabled, panelId, onSelect, onCreat
     }}>
       {views.map(view => <button key={view.id} role="tab" aria-selected={view.id === selected}
         aria-controls={panelId} tabIndex={view.id === selected ? 0 : -1} aria-disabled={disabled}
-        title={`${view.name} · ${view.type === 'board' ? 'Board' : 'Grid'}`} onClick={() => { if (!disabled && view.id !== selected) onSelect(view); }}>
-        <span aria-hidden="true" className="view-type-icon">{view.type === 'board' ? '▥' : '▦'}</span>
+        title={`${view.name} · ${view.type === 'board' ? 'Board' : view.type === 'calendar' ? 'Calendar' : 'Grid'}`} onClick={() => { if (!disabled && view.id !== selected) onSelect(view); }}>
+        <span aria-hidden="true" className="view-type-icon">{view.type === 'board' ? '▥' : view.type === 'calendar' ? '▣' : '▦'}</span>
         <span className="view-tab-name">{view.name}</span>
       </button>)}
     </div>

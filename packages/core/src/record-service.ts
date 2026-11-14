@@ -328,7 +328,12 @@ export class RecordService {
     const query = parseQuery(table, { filter: view?.query.filter ?? item['filter'], sort: view?.query.sort ?? item['sort'],
       search: item['search'] === undefined ? view?.query.search : item['search'], fields: item['fields'],
       offset: item['offset'], limit: item['limit'], expectedRevision: item['expectedRevision'], expectedDateContext: item['expectedDateContext'] });
-    return { table, item, query, view, calendar: parseCalendar(table, item['calendar']) };
+    const calendar = parseCalendar(table, item['calendar'] === undefined ? view?.calendar : item['calendar']);
+    if (view?.type === 'calendar' && (calendar.startField.id !== view.calendar.startFieldId ||
+        calendar.endField?.id !== view.calendar.endFieldId || calendar.timeZone !== view.calendar.timeZone)) {
+      throw new ServiceError('INVALID_QUERY', 'Use the saved calendar fields and time zone of this view.');
+    }
+    return { table, item, query, view, calendar };
   }
 
   queryCalendar(id: string, input: unknown): CalendarLayout {

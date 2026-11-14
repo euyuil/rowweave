@@ -636,7 +636,9 @@ test('SDK, CLI and MCP share bounded calendar layout, bucket paging and stale-wr
     ['A span', '2026-11-01', '2026-11-03'], ['B point', '2026-11-02', null],
     ['C unscheduled', null, null], ['D invalid', '2026-11-03', '2026-11-01'],
   ].map(([label, from, to]) => ({ values: { [table.primaryFieldId]: label!, [start]: from!, [end]: to! } })))).records;
-  const view = await sdk.createView(table.id, { name: 'Plan', query: { sort: [{ fieldId: table.primaryFieldId, direction: 'asc' }] } });
+  const calendar = { startFieldId: start, endFieldId: end, timeZone: 'Asia/Shanghai' };
+  const view = await json<GridView>('views_create', { tableId: table.id, input: { name: 'Plan', type: 'calendar', calendar,
+    query: { sort: [{ fieldId: table.primaryFieldId, direction: 'asc' }] } } });
   const request: CalendarLayoutRequest = { calendar: { startFieldId: start, endFieldId: end, timeZone: 'Asia/Shanghai' },
     viewId: view.id, expectedViewVersion: view.version, fields: [table.primaryFieldId, start, end],
     from: '2026-11-01', toExclusive: '2026-11-04', previewLimit: 1 };
@@ -656,8 +658,13 @@ test('SDK, CLI and MCP share bounded calendar layout, bucket paging and stale-wr
       { env: { ...process.env, ...environment } })).stdout);
   };
   assert.deepEqual(await cli('calendar', request), expected);
+  const { calendar: _calendar, ...savedRequest } = request;
+  assert.deepEqual(await sdk.getView(table.id, view.id), view);
+  assert.deepEqual(await sdk.queryCalendar(table.id, savedRequest), expected);
+  assert.deepEqual(await json('records_calendar', { tableId: table.id, input: savedRequest }), expected);
+  assert.deepEqual(await cli('calendar', savedRequest), expected);
   for (const bucket of [{ kind: 'day', date: '2026-11-02' }, { kind: 'unscheduled' }, { kind: 'invalid' }] as const) {
-    const page: CalendarRecordsRequest = { calendar: request.calendar, viewId: view.id, expectedViewVersion: view.version,
+    const page: CalendarRecordsRequest = { viewId: view.id, expectedViewVersion: view.version,
       fields: request.fields!, bucket, limit: 1, offset: bucket.kind === 'day' ? 1 : 0, expectedRevision: expected.revision };
     const result = service.queryCalendarRecords(table.id, page);
     assert.equal(result.records.length, 1);

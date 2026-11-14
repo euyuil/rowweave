@@ -10,6 +10,8 @@ import type { TableModel } from '../../client/src/table-model.js';
 import { ApiFailure, queryForView, type WorkspaceApi } from '../../client/src/http-client.js';
 import { cellDisplay, cellText } from '../../client/src/cell-values.js';
 import { prepareBoardSnapshot, type BoardSnapshot, type BoardWindow } from '../../client/src/board-refresh.js';
+import { prepareCalendarSnapshot, type CalendarSnapshot, type CalendarWindow } from '../../client/src/calendar-refresh.js';
+import { calendarToday } from '../../client/src/calendar-dates.js';
 import { parseTextValue } from '../../core/src/field-values.js';
 import { CellEditor, EditorContext, type EditableCell, type EditorHandle } from './cell-editor.js';
 import { drawSelectCell } from './select-values.js';
@@ -27,6 +29,8 @@ import { FieldForm } from './field-form.js';
 import { ColumnActions, type ColumnAction } from './column-actions.js';
 import { BoardView } from './board-view.js';
 import { captureBoardFocus } from './board-focus.js';
+import { CalendarView } from './calendar-view.js';
+import { captureCalendarFocus } from './calendar-focus.js';
 import { ViewTabs } from './view-tabs.js';
 import { useGroupedRows } from './use-grouped-rows.js';
 import { refreshSelection } from './refresh-selection.js';
@@ -81,6 +85,8 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   const [views, setViews] = useState<GridView[]>([]);
   const [view, setView] = useState<GridView>();
   const [search, setSearch] = useState('');
+  const searchDraft = useRef(search);
+  searchDraft.current = search;
   const [searchComposing, setSearchComposing] = useState(false);
   const [viewAction, setViewAction] = useState<'create' | 'edit' | 'delete' | 'filter' | 'sort' | 'display' | 'group'>();
   const [queryAnchor, setQueryAnchor] = useState<DialogAnchor>();
@@ -111,6 +117,13 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   const [notice, setNotice] = useState<string>();
   const [externalUpdate, setExternalUpdate] = useState<'pending' | 'missing'>();
   const [preparedBoard, setPreparedBoard] = useState<{ generation: number; snapshot: BoardSnapshot }>();
+  const [preparedCalendar, setPreparedCalendar] = useState<{ generation: number; snapshot: CalendarSnapshot }>();
+  const calendarWindow = useRef<CalendarWindow>();
+  const calendarWindowRevision = useRef(0);
+  const calendarWindowChanged = useCallback((window: CalendarWindow | undefined) => {
+    if (JSON.stringify(calendarWindow.current) === JSON.stringify(window)) return;
+    calendarWindow.current = window; calendarWindowRevision.current++;
+  }, []);
   const boardWindows = useRef(new Map<string | null, BoardWindow>());
   const boardWindowRevision = useRef(0);
   const boardDragging = useRef(false);
@@ -220,22 +233,34 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   }, [selection, gridRowCount, grouping.reader, grouping.pending, cachedSelectedCount, report]);
 
   const loadView = useCallback(async (discard = false) => {
+    const initialSearch = searchDraft.current;
     const state = await api.workspaceState({ tableId });
     const loaded = await api.listViews(tableId);
     const preferred = currentView.current?.id ?? localStorage.getItem(`rowweave.view.${tableId}`);
     const selected = loaded.find(item => item.id === preferred) ?? loaded[0]!;
     const text = currentView.current?.id === selected.id ? appliedSearch.current : selected.query.search ?? '';
-    currentView.current = selected;
-    appliedSearch.current = text;
-    setViews(loaded);
-    setView(selected);
-    setSearch(text);
-    const query = queryForView(selected, text);
-    if (discard) await model.discardAndReload(query);
-    else await model.refresh(query);
-    knownViewsRevision.current = state.table?.viewsRevision;
-    setExternalUpdate(undefined);
-    localStorage.setItem(`rowweave.view.${tableId}`, selected.id);
+    let calendarRefresh: CalendarSnapshot | undefined;
+    const snapshot = await model.prepareRefresh(queryForView(selected, text), {
+      ...(selected.type === 'calendar' ? { selectRows: async (table: Table, first: QueryPage, signal: AbortSignal) => {
+        const window = currentView.current?.id === selected.id && calendarWindow.current
+          ? calendarWindow.current : { month: calendarToday(selected.calendar.timeZone).slice(0, 7), offset: 0 };
+        calendarRefresh = await prepareCalendarSnapshot(api, table, selected, first, text, window, signal);
+        return [];
+      } } : {}),
+    });
+    flushSync(() => {
+      if (!model.commitRefresh(snapshot, { drafts: discard ? 'discard' : 'preserve' })) {
+        throw new Error('The table changed while reloading. Reload again.');
+      }
+      currentView.current = selected;
+      appliedSearch.current = text;
+      setViews(loaded); setView(selected);
+      if (searchDraft.current === initialSearch) setSearch(text);
+      setPreparedCalendar(calendarRefresh ? { generation: model.queryVersion, snapshot: calendarRefresh } : undefined);
+      knownViewsRevision.current = state.table?.viewsRevision;
+      setExternalUpdate(undefined);
+      localStorage.setItem(`rowweave.view.${tableId}`, selected.id);
+    });
   }, [api, model, tableId]);
 
   const applyView = useCallback(async (selected: GridView, text = selected.query.search ?? '') => {
@@ -282,9 +307,17 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     if (generation !== model.queryVersion || activity !== interaction.current || !canRefresh.current()) return;
     let groupRefresh: Awaited<ReturnType<typeof grouping.prepareRefresh>> | undefined;
     let boardRefresh: BoardSnapshot | undefined;
+    let calendarRefresh: CalendarSnapshot | undefined;
     const windowRevision = boardWindowRevision.current;
+    const calendarRevision = calendarWindowRevision.current;
     const snapshot = await model.prepareRefresh(queryForView(selected, text), { start: visible.y, count: visible.height + 5, signal,
-      ...(selected.groupBy ? { selectRows: async (table: Table, first: QueryPage, signal: AbortSignal) => {
+      ...(selected.groupBy || selected.type === 'calendar' ? { selectRows: async (table: Table, first: QueryPage, signal: AbortSignal) => {
+        if (selected.type === 'calendar') {
+          const window = previousView.type === 'calendar' && previousView.id === selected.id && calendarWindow.current
+            ? calendarWindow.current : { month: calendarToday(selected.calendar.timeZone).slice(0, 7), offset: 0 };
+          calendarRefresh = await prepareCalendarSnapshot(api, table, selected, first, text, window, signal);
+          return [];
+        }
         if (selected.type === 'board') {
           const windows = previousView.type === 'board' && previousView.id === selected.id && previousView.groupBy === selected.groupBy
             ? [...boardWindows.current.values()] : [];
@@ -297,16 +330,18 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     });
     if (signal.aborted || generation !== model.queryVersion || activity !== interaction.current || previousView !== currentView.current || !canRefresh.current()) return;
     if (previousView.type === 'board' && windowRevision !== boardWindowRevision.current) return;
+    if (previousView.type === 'calendar' && calendarRevision !== calendarWindowRevision.current) return;
     const retained = previousView.type === 'grid' && selected.type === 'grid'
       ? refreshSelection(selection, model, snapshot, grouping.rows, groupRefresh?.rows)
       : { selection: { columns: CompactSelection.empty(), rows: CompactSelection.empty() }, cleared: false };
     const wasStale = model.stale;
-    const restoreBoardFocus = captureBoardFocus(rootHost.current!);
+    const restoreCardFocus = captureBoardFocus(rootHost.current!) ?? captureCalendarFocus(rootHost.current!);
     // External-store notifications and view state must render together to keep the content mounted.
     flushSync(() => {
       if (!model.commitRefresh(snapshot)) return;
       if (groupRefresh) grouping.commitRefresh(groupRefresh, selected, text);
       setPreparedBoard(boardRefresh ? { generation: model.queryVersion, snapshot: boardRefresh } : undefined);
+      setPreparedCalendar(calendarRefresh ? { generation: model.queryVersion, snapshot: calendarRefresh } : undefined);
       currentView.current = selected;
       appliedSearch.current = text;
       knownViewsRevision.current = state.table!.viewsRevision;
@@ -316,8 +351,11 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       if (retained.cleared) setNotice('Changes were loaded. The previous selection was cleared; select records again before editing.');
       localStorage.setItem(`rowweave.view.${tableId}`, selected.id);
     });
-    if (restoreBoardFocus?.()) setNotice('Changes were loaded. The focused record is outside the visible view.');
-    if (restoreBoardFocus && selected.type === 'grid') grid.current?.focus();
+    if (restoreCardFocus?.()) setNotice('Changes were loaded. The focused record is outside the visible view.');
+    if (restoreCardFocus && selected.type === 'grid') grid.current?.focus();
+    if (restoreCardFocus && selected.type !== 'grid' && previousView.type !== selected.type) {
+      rootHost.current?.querySelector<HTMLElement>('.board-view, .calendar-view')?.focus({ preventScroll: true });
+    }
   };
 
   useEffect(() => {
@@ -357,10 +395,10 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   }, []);
 
   useEffect(() => {
-    if (!ready || offline || model.saving || searchComposing || search === appliedSearch.current || !currentView.current) return;
+    if (!ready || offline || busy || model.saving || searchComposing || search === appliedSearch.current || !currentView.current) return;
     const timer = setTimeout(() => { void applyView(currentView.current!, search); }, 200);
     return () => clearTimeout(timer);
-  }, [search, searchComposing, ready, offline, model.saving, applyView]);
+  }, [search, searchComposing, ready, offline, busy, model.saving, applyView]);
 
   useEffect(() => {
     let active = true;
@@ -385,7 +423,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   }, [ready, view?.type]);
 
   useEffect(() => {
-    if (!ready || offline || view?.type === 'board' || (grouping.enabled && (!grouping.reader || grouping.pending))) return;
+    if (!ready || offline || view?.type !== 'grid' || (grouping.enabled && (!grouping.reader || grouping.pending))) return;
     const controller = new AbortController(), reader = grouping.reader, generation = model.queryVersion;
     const timer = setTimeout(() => {
       void (async () => {
@@ -536,7 +574,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     if (!result.records.length) throw new Error('This record was deleted. Reload the table.');
     return result.records[0]!;
   };
-  const openBoardRecord = async (record: RowRecord) => {
+  const openViewRecord = async (record: RowRecord) => {
     if (recordActionsLocked || busyRef.current) return;
     setBusy(true); busyRef.current = true; setError(undefined);
     try { setRecordAction({ kind: 'edit', records: [await readCurrentRecord(record)] }); }
@@ -665,7 +703,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     <section className="table-panel" id={`table-view-${tableId}`} role="tabpanel" aria-label={view?.name ?? 'Loading view'}>
     <div className="record-toolbar">
       <button className="primary" disabled={recordActionsLocked} onClick={() => void openRecord('create')}>+ New record</button>
-      {view?.type !== 'board' && <><button disabled={recordActionsLocked || selectedCount !== 1} onClick={() => void openRecord('edit')}>Open record</button>
+      {view?.type === 'grid' && <><button disabled={recordActionsLocked || selectedCount !== 1} onClick={() => void openRecord('edit')}>Open record</button>
       <button disabled={recordActionsLocked || selectedCount !== 1} onClick={() => void openRecord('duplicate')}>Duplicate</button>
       <button disabled={recordActionsLocked || !selectedCount} onClick={() => void openRecord('delete')}>Delete records</button></>}
       <button disabled={recordActionsLocked} onClick={() => setCsvAction('import')}>Import CSV</button>
@@ -675,6 +713,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       <button disabled={recordActionsLocked || !view || searchComposing} onClick={() => setCsvAction('export')}>Export CSV</button>
       <span>{pending > 0 || editorDirty ? 'Save or discard grid edits to manage records.'
         : view?.type === 'board' ? 'Open a card to edit, or move it to another group.'
+          : view?.type === 'calendar' ? 'Choose a date to browse its records, or open a preview to edit.'
           : selectedCount === undefined ? 'Loading selection…' : selectedCount ? `${selectedCount.toLocaleString()} selected` : 'Select a row or cell to open a record.'}</span>
     </div>
       <div className="view-toolbar">
@@ -704,8 +743,13 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       {ready && table && view?.type === 'board' ? <BoardView table={table} view={view} search={appliedSearch.current} generation={queryVersion} api={api}
         revision={model.dataRevision!} dateContext={model.dateContext} onWindow={boardWindowChanged} onDragChange={boardDragChanged}
         prepared={preparedBoard?.generation === queryVersion ? preparedBoard.snapshot : undefined}
-        disabled={recordActionsLocked} onOpen={record => void openBoardRecord(record)} onRefresh={() => void reload()}
+        disabled={recordActionsLocked} onOpen={record => void openViewRecord(record)} onRefresh={() => void reload()}
         onCreate={lane => setRecordAction({ kind: 'create', records: [], initialValues: { [view.groupBy!]: lane } })} onMove={moveBoardRecord} />
+        : ready && table && view?.type === 'calendar' ? <CalendarView key={view.id} table={table} view={view} search={appliedSearch.current}
+          generation={queryVersion} revision={model.dataRevision!} dateContext={model.dateContext} api={api}
+          prepared={preparedCalendar?.generation === queryVersion ? preparedCalendar.snapshot : undefined}
+          disabled={recordActionsLocked} onWindow={calendarWindowChanged} onOpen={record => void openViewRecord(record)} onRefresh={() => void reload()}
+          onCreate={values => setRecordAction({ kind: 'create', records: [], initialValues: values })} />
         : <div className="grid-host" aria-busy={locked || !ready || grouping.pending} ref={gridHost} onCopyCapture={event => {
         if (!gridHost.current?.querySelector('canvas')?.contains(document.activeElement)) return;
         event.preventDefault();
@@ -793,7 +837,8 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     </section>
     <footer><span role="status" className={pending ? 'pending-status' : ''}>{status}</span>
       <span>{table ? `${model.rowCount.toLocaleString()} ${model.rowCount === 1 ? 'record' : 'records'} · ${fields.length} ${fields.length === 1 ? 'field' : 'fields'}` : 'Loading records…'}</span>
-      <span>{view?.type === 'board' ? 'Move records by dragging or choosing a status' : 'Enter to edit · Esc to cancel · Ctrl+C / Ctrl+V · Ctrl+S to save'}</span></footer>
+      <span>{view?.type === 'board' ? 'Move records by dragging or choosing a status' : view?.type === 'calendar'
+        ? 'Arrow keys to navigate dates · Enter to browse records' : 'Enter to edit · Esc to cancel · Ctrl+C / Ctrl+V · Ctrl+S to save'}</span></footer>
     {recordAction && table && <RecordDialog action={recordAction} table={table} api={api} setDirty={setFormDirty}
       onClose={() => setRecordAction(undefined)} onSaved={() => { setRecordAction(undefined); void refreshAfterWrite('Records'); }} />}
     {trashOpen && table && <TrashDialog table={table} api={api} setDirty={setFormDirty} onClose={() => setTrashOpen(false)}

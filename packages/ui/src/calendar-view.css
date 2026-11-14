@@ -1,0 +1,52 @@
+.rowweave-app .calendar-view { display: flex; flex: 1; flex-direction: column; gap: 12px; min-height: 0; overflow: auto; padding: 12px; background: #f6f8fc; }
+.rowweave-app .calendar-tools { display: flex; flex-direction: column; gap: 8px; }
+.rowweave-app .calendar-tools p { margin: 0; color: #60708a; font-size: 12px; }
+.rowweave-app .calendar-month-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.rowweave-app .calendar-month-controls h2 { min-width: 170px; margin: 0; text-align: center; font-size: 18px; }
+.rowweave-app .calendar-month-input { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 12px; color: #60708a; }
+.rowweave-app .calendar-month-input input { width: 145px; min-width: 0; }
+.rowweave-app .calendar-buckets { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.rowweave-app .calendar-buckets > span { margin-left: auto; font-size: 12px; color: #60708a; }
+.rowweave-app .calendar-buckets button[aria-expanded="true"] { border-color: #315cbe; background: #eaf0fc; color: #244570; }
+.rowweave-app .calendar-content { display: grid; flex: 0 0 auto; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 12px; }
+.rowweave-app .calendar-content.with-records { grid-template-columns: minmax(0, 1fr) 300px; }
+.rowweave-app .calendar-month-scroll { min-width: 0; overflow: auto; }
+.rowweave-app .calendar-month { overflow: hidden; border: 1px solid #dce4f0; border-radius: 8px; background: white; }
+.rowweave-app .calendar-weekdays, .rowweave-app .calendar-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.rowweave-app .calendar-weekdays { padding: 7px 0; background: #edf2fa; color: #60708a; font-size: 12px; text-align: center; }
+.rowweave-app .calendar-day { display: flex; flex-direction: column; gap: 3px; min-width: 0; min-height: 96px; padding: 4px; border-top: 1px solid #e5eaf1; border-right: 1px solid #e5eaf1; }
+.rowweave-app .calendar-day:last-child { border-right: 0; }
+.rowweave-app .calendar-day.adjacent-month { background: #f8f9fc; }
+.rowweave-app .calendar-day.adjacent-month .calendar-day-heading { color: #7d8ba1; }
+.rowweave-app .calendar-day.selected-day { outline: 2px solid #6e93dd; outline-offset: -2px; }
+.rowweave-app .calendar-day-heading { display: flex; align-items: center; justify-content: space-between; gap: 2px; width: 100%; min-width: 0; border: 0; background: transparent; padding: 0 3px; font-size: 12px; }
+.rowweave-app .calendar-day-heading > span { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; }
+.rowweave-app .calendar-day-heading[aria-current="date"] > span { border-radius: 50%; background: #315cbe; color: white; }
+.rowweave-app .calendar-day-heading small { color: #60708a; font-size: 10px; }
+.rowweave-app .calendar-previews { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.rowweave-app .calendar-preview { display: flex; align-items: center; gap: 4px; min-width: 0; max-width: 100%; overflow: hidden; border: 0; border-radius: 3px; background: #eef3ff; color: #244570; padding: 2px 4px; text-align: left; font-size: 12px; line-height: 18px; }
+.rowweave-app .calendar-preview > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rowweave-app .calendar-preview > small { flex: 0 0 auto; color: #60708a; font-size: 10px; }
+.rowweave-app .calendar-more { align-self: flex-start; margin-top: auto; border: 0; background: transparent; color: #315cbe; padding: 1px 4px; font-size: 11px; }
+.rowweave-app .calendar-records { min-width: 0; max-height: min(650px, 70vh); overflow: auto; padding: 12px; border: 1px solid #dce4f0; border-radius: 8px; background: white; }
+.rowweave-app .calendar-records > header { display: flex; align-items: start; justify-content: space-between; gap: 8px; }
+.rowweave-app .calendar-records h3 { margin: 0; font-size: 15px; line-height: 1.45; }
+.rowweave-app .calendar-records > p { color: #60708a; font-size: 12px; }
+.rowweave-app .calendar-record-card { padding: 12px 0; border-bottom: 1px solid #e5eaf1; }
+.rowweave-app .calendar-record-title { width: 100%; min-width: 0; border: 0; background: transparent; padding: 0; text-align: left; font-weight: 600; overflow-wrap: anywhere; }
+.rowweave-app .calendar-record-card dl { display: grid; gap: 7px; margin: 9px 0 0; }
+.rowweave-app .calendar-record-card dt { margin-bottom: 2px; color: #60708a; font-size: 11px; }
+.rowweave-app .calendar-record-card dd { margin: 0; font-size: 12px; overflow-wrap: anywhere; }
+.rowweave-app .calendar-pagination { position: sticky; bottom: -12px; display: flex; align-items: center; justify-content: space-between; gap: 5px; padding: 10px 0; background: white; font-size: 11px; }
+.rowweave-app .calendar-view button:focus-visible, .rowweave-app .calendar-view h3:focus-visible { outline: 2px solid #315cbe; outline-offset: 2px; }
+@media (max-width: 1250px) {
+  .rowweave-app .calendar-content.with-records { grid-template-columns: minmax(0, 1fr); }
+  .rowweave-app .calendar-records { max-height: 420px; }
+}
+@media (max-width: 850px) {
+  .rowweave-app .calendar-view { padding: 8px; }
+  .rowweave-app .calendar-day { padding: 3px; }
+  .rowweave-app .calendar-preview { padding: 1px 2px; font-size: 11px; }
+  .rowweave-app .calendar-preview > small { display: none; }
+  .rowweave-app .calendar-month-input { margin-left: 0; }
+}
