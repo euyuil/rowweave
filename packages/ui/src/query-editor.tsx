@@ -1,6 +1,6 @@
 import React, { useId } from 'react';
 import type { Field, FilterOperator, SortRule } from '../../contracts/src/index.js';
-import { maxRelativeDays, relativeDatePeriods, type RelativeDateFilter } from '../../contracts/src/index.js';
+import { maxRelativeDays, maxRelativeHours, relativeDatePeriods, type RelativeDateFilter } from '../../contracts/src/index.js';
 import { FieldInput } from './field-input.js';
 import { filterCount, filterOperators, type GroupDraft, type RuleDraft } from './filter-draft.js';
 import { queryValueField } from '../../core/src/record-query.js';
@@ -14,6 +14,7 @@ const periodNames: Record<RelativeDateFilter['period'], string> = {
   today: 'Today', yesterday: 'Yesterday', tomorrow: 'Tomorrow', thisWeek: 'This week', lastWeek: 'Last week', nextWeek: 'Next week',
   thisMonth: 'This month', lastMonth: 'Last month', nextMonth: 'Next month', pastDays: 'Past N days', nextDays: 'Next N days',
   thisYear: 'This year', lastYear: 'Last year', nextYear: 'Next year',
+  pastHours: 'Past N hours', nextHours: 'Next N hours',
 };
 const timeZones = ['UTC', ...Intl.supportedValuesOf('timeZone')];
 
@@ -82,6 +83,7 @@ function FilterRule({ fields, rule, onChange, path }: { fields: Field[]; rule: R
   const ordered = ['gt', 'gte', 'lt', 'lte'].includes(rule.operator);
   const collection = field.type === 'multiSelect' || field.type === 'relation' || field.type === 'attachment';
   const nullOnly = collection && (rule.operator === 'eq' || rule.operator === 'neq');
+  const rolling = rule.relative?.period === 'pastHours' || rule.relative?.period === 'nextHours';
   return <div className="filter-rule" role="group" aria-label={`Filter ${path}`}>
     <select aria-label="Filter field" value={field.id} onChange={event => onChange({ fieldId: event.target.value, operator: 'isNotEmpty', value: null })}>
       {fields.map(item => <option value={item.id} key={item.id}>{item.name}</option>)}
@@ -99,16 +101,22 @@ function FilterRule({ fields, rule, onChange, path }: { fields: Field[]; rule: R
       <label>Period<select aria-label="Relative period" value={rule.relative!.period} onChange={event => {
         const period = event.target.value as RelativeDateFilter['period'];
         onChange({ ...rule, relative: { period, timeZone: rule.relative!.timeZone,
-          ...(period === 'pastDays' || period === 'nextDays' ? { days: rule.relative!.days ?? 7 } : {}) } });
-      }}>{relativeDatePeriods.map(period => <option key={period} value={period}>{periodNames[period]}</option>)}</select></label>
+          ...(period === 'pastDays' || period === 'nextDays' ? { days: rule.relative!.days ?? 7 } : {}),
+          ...(period === 'pastHours' || period === 'nextHours' ? { hours: rule.relative!.hours ?? 24 } : {}) } });
+      }}>{relativeDatePeriods.filter(period => field.type === 'datetime' || (period !== 'pastHours' && period !== 'nextHours'))
+        .map(period => <option key={period} value={period}>{periodNames[period]}</option>)}</select></label>
       {(rule.relative!.period === 'pastDays' || rule.relative!.period === 'nextDays') && <label>Days<input aria-label="Calendar days" type="number"
         min={1} max={maxRelativeDays} step={1} required value={rule.relative!.days ?? ''}
         onChange={event => onChange({ ...rule, relative: { ...rule.relative!, days: event.target.valueAsNumber } })} /></label>}
+      {rolling && <label>Hours<input aria-label="Elapsed hours" type="number"
+        min={1} max={maxRelativeHours} step={1} required value={rule.relative!.hours ?? ''}
+        onChange={event => onChange({ ...rule, relative: { ...rule.relative!, hours: event.target.valueAsNumber } })} /></label>}
       <label>Time zone<input aria-label="Relative time zone" required list={timeZoneList} value={rule.relative!.timeZone} placeholder="Asia/Shanghai"
         onChange={event => onChange({ ...rule, relative: { ...rule.relative!, timeZone: event.target.value } })} /></label>
       <datalist id={timeZoneList}>{timeZones.map(zone => <option value={zone} key={zone} />)}</datalist>
       <small>{rule.relative!.period === 'pastDays' || rule.relative!.period === 'nextDays' ? 'The day count includes today. ' : ''}
-        Calendar periods use this time zone; weeks start Monday. Updates automatically while editing is idle.</small>
+        {rolling ? 'Elapsed hours are independent of time zone. The window refreshes after one minute while editing is idle.'
+          : 'Calendar periods use this time zone; weeks start Monday. Updates automatically while editing is idle.'}</small>
     </div>}
     {!empty && !nullOnly && rule.operator !== 'relativeDate' && <FieldInput allowUploads={false} field={{ ...field, name: 'Value', required: ordered,
       ...(field.relation ? { relation: { ...field.relation, multiple: true } } : {}) }} value={rule.value} onChange={value => onChange({ ...rule, value })} />}

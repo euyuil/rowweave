@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { maxRelativeDays, relativeDatePeriods, maxGroupCollapseKeys, maxGroupLevels } from '../../../packages/contracts/src/index.js';
+import { maxRelativeDays, maxRelativeHours, dateContextPattern, relativeDatePeriods, maxGroupCollapseKeys, maxGroupLevels } from '../../../packages/contracts/src/index.js';
 
 const id = z.string().describe('Stable ID from the workspace schema or a query result; never a display name or position.');
 const version = z.number().int().describe('Version from the most recent read of this object.');
@@ -38,7 +38,8 @@ export const fieldUpdate = z.strictObject({
 export const conversion = z.strictObject({ ...expectedVersion, field });
 const condition = z.strictObject({ fieldId: id, operator: z.enum(['eq', 'neq', 'contains', 'gt', 'gte', 'lt', 'lte', 'isEmpty', 'isNotEmpty', 'hasAny', 'relativeDate']), value: value.exactOptional(),
   relative: z.strictObject({ period: z.enum(relativeDatePeriods), timeZone: z.string().describe('Named time zone, such as Asia/Shanghai or UTC.'),
-    days: z.int().min(1).max(maxRelativeDays).describe('For pastDays/nextDays only; includes today. Weeks start Monday.').exactOptional() }).exactOptional(),
+    days: z.int().min(1).max(maxRelativeDays).describe('For pastDays/nextDays only; includes today. Weeks start Monday.').exactOptional(),
+    hours: z.int().min(1).max(maxRelativeHours).describe('For pastHours/nextHours on timestamps only; exact elapsed hours, including both endpoints.').exactOptional() }).exactOptional(),
 });
 const filter = z.strictObject({
   conjunction: z.enum(['and', 'or']),
@@ -52,7 +53,7 @@ const query = {
 const page = {
   offset: z.number().int().exactOptional(), limit: z.number().int().describe('At most 500; use small pages and project only needed fields.').exactOptional(),
   fields: z.array(id).exactOptional(), expectedRevision: version.describe('Reuse the first page revision for consistent continuation pages.').exactOptional(),
-  expectedDateContext: z.string().regex(/^[a-f0-9]{64}$/).describe('Reuse dateContext from the first page or summary; DATA_CHANGED requires refreshing after the calendar period changes.').exactOptional(),
+  expectedDateContext: z.string().regex(dateContextPattern).describe('Reuse opaque dateContext from the first page or summary; DATA_CHANGED requires refreshing after a calendar boundary or rolling-window expiry.').exactOptional(),
 };
 const groupFields = z.union([id, z.array(id).min(1).max(maxGroupLevels)]);
 export const recordQuery = z.strictObject({ ...page, ...query, recordIds: z.array(id).exactOptional(), groupBy: groupFields.exactOptional() });

@@ -5,8 +5,8 @@ import { syncQueryIndexes } from './query-indexes.js';
 
 export function migrate(db: DatabaseSync): boolean {
   const version = db.prepare('PRAGMA user_version').get()!['user_version'] as number;
-  if (version === 32) return false;
-  if (version < 0 || version > 32) throw new Error(`Unsupported database version: ${version}.`);
+  if (version === 33) return false;
+  if (version < 0 || version > 33) throw new Error(`Unsupported database version: ${version}.`);
   db.exec('BEGIN IMMEDIATE');
   try {
     if (version < 2) {
@@ -137,7 +137,7 @@ export function migrate(db: DatabaseSync): boolean {
         UPDATE tables SET views_revision = views_revision + 1 WHERE id = old.table_id;
       END;
     `);
-    db.exec('PRAGMA user_version = 32; COMMIT;');
+    db.exec('PRAGMA user_version = 33; COMMIT;');
     return version === 0;
   } catch (error) {
     db.exec('ROLLBACK');

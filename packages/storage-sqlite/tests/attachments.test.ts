@@ -25,7 +25,7 @@ test('attachments retain exact binary bytes and immutable metadata across restar
   const reopened = new RecordService(data.open());
   assert.deepEqual(reopened.getAttachment(table.id, file.id), file);
   const backup = join(dirname(data.path), 'files-backup.sqlite'), restored = join(dirname(data.path), 'restored.sqlite');
-  assert.equal((await backupWorkspace(data.path, backup)).version, 32);
+  assert.equal((await backupWorkspace(data.path, backup)).version, 33);
   await restoreWorkspace(backup, restored);
   const restoredStore = new SqliteRecordStore(restored);
   try { assert.deepEqual(Buffer.from(new RecordService(restoredStore).downloadAttachment(table.id, file.id).bytes), bytes); }

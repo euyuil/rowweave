@@ -105,7 +105,7 @@ test('format 32 preserves prior views and year rules survive restart, backup and
   const view = upgraded.createView(table.id, { name: 'This year', query: { filter: relative(due, 'thisYear') } });
   assert.deepEqual(new RecordService(data.open()).getView(table.id, view.id), view);
   const backup = join(dirname(data.path), 'years.sqlite'), restoredPath = join(dirname(data.path), 'years-restored.sqlite');
-  assert.equal((await backupWorkspace(data.path, backup)).version, 32);
+  assert.equal((await backupWorkspace(data.path, backup)).version, 33);
   await restoreWorkspace(backup, restoredPath);
   const restoredStore = new SqliteRecordStore(restoredPath, null, () => now);
   try {

@@ -138,7 +138,7 @@ export class SqliteRecordStore implements RecordStore {
       if (hasRelativeDateFilter(view.query.filter)) {
         const fields = this.db.prepare('SELECT definition_json FROM fields WHERE table_id = ? ORDER BY position').all(input.tableId)
           .map(row => JSON.parse(row['definition_json'] as string) as Field);
-        const dates = relativeDateRanges(this.lookups.resolve({ fields }), view.query.filter, this.transactionTime!);
+        const dates = relativeDateRanges(this.lookups.resolve({ fields }), view.query.filter, this.transactionTime!, input.dateContext);
         if (dates.dateContext) state.table.view.dateContext = dates.dateContext;
       }
       return state;
@@ -406,9 +406,9 @@ export class SqliteRecordStore implements RecordStore {
       const target = this.getTable(field.relation!.tableId);
       return [target.id, target];
     }));
-    const dates = relativeDateRanges(current, query.filter, this.clock());
+    const dates = relativeDateRanges(current, query.filter, this.transactionTime!, query.expectedDateContext);
     if (query.expectedDateContext !== undefined && query.expectedDateContext !== dates.dateContext) {
-      throw new ServiceError('DATA_CHANGED', 'The relative date range changed. Refresh to use the current calendar period; your drafts are retained.', 409);
+      throw new ServiceError('DATA_CHANGED', 'The relative date range changed. Refresh to use the current period; your drafts are retained.', 409);
     }
     return { current, ...(dates.dateContext ? { dateContext: dates.dateContext } : {}),
       sql: querySql(current, { ...query, ...(view?.type === 'grid' && view.groupBy ? { groupBy: view.groupBy } : {}) }, targets,

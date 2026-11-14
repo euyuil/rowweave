@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { groupFieldIds, isReadOnlyField, maxPageSize, maxBatchRecords, maxBatchCells, maxFields, tableId,
+import { dateContextPattern, groupFieldIds, isReadOnlyField, maxPageSize, maxBatchRecords, maxBatchCells, maxFields, tableId,
   type BatchResult, type CellValue, type ConversionPreview, type DeleteResult, type Field, type GridView, type QueryPage, type RecordDelete, type RecordPage, type RecordUpdate, type RowRecord, type Table, type ViewPage } from '../../contracts/src/index.js';
 import { schemaName, schemaObject, schemaVersion } from './schema-validation.js';
 import { parseField } from './field-schema.js';
@@ -81,6 +81,10 @@ export class RecordService {
     }
     if (item['viewId'] !== undefined && item['tableId'] === undefined) {
       throw new ServiceError('INVALID_QUERY', 'Provide tableId when requesting view state.');
+    }
+    if (item['dateContext'] !== undefined && (item['viewId'] === undefined ||
+        typeof item['dateContext'] !== 'string' || !dateContextPattern.test(item['dateContext']))) {
+      throw new ServiceError('INVALID_QUERY', 'Provide a selected view and its returned dateContext.');
     }
     return this.store.workspaceState(item as WorkspaceStateRequest);
   }

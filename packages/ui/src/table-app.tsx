@@ -264,7 +264,8 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     const previousView = currentView.current;
     if (!previousView) return;
     const generation = model.queryVersion, activity = interaction.current;
-    const state = await api.workspaceState({ tableId, viewId: previousView.id }, signal);
+    const state = await api.workspaceState({ tableId, viewId: previousView.id,
+      ...(model.dateContext ? { dateContext: model.dateContext } : {}) }, signal);
     if (signal.aborted || generation !== model.queryVersion || previousView !== currentView.current) return;
     setRefreshFailure(undefined);
     if (!state.table) { setExternalUpdate('missing'); return; }
