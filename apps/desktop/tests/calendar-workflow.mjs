@@ -81,10 +81,32 @@ export async function verifyCalendarWorkflow(page, application) {
   await dialog.getByLabel('End', { exact: true }).fill('2024-03-01');
   await dialog.getByRole('button', { name: 'Save record', exact: true }).click();
   await pane.getByText('No matching records.', { exact: true }).waitFor();
-  await calendar.getByRole('button', { name: 'Close calendar records', exact: true }).click();
   const heading = calendar.locator('[data-calendar-day="2024-02-29"]');
-  await heading.focus(); await page.keyboard.press('ArrowRight');
-  assert.equal(await page.locator(':focus').getAttribute('data-calendar-day'), '2024-03-01');
+  // Initialize the test poller's native frame callback before delaying application frames.
+  await page.waitForFunction(() => !!document.querySelector('.calendar-records'));
+  const releaseFrames = await page.evaluateHandle(() => {
+    const request = window.requestAnimationFrame, cancel = window.cancelAnimationFrame;
+    const pending = new Map();
+    let next = -1;
+    window.requestAnimationFrame = callback => { const id = next--; pending.set(id, callback); return id; };
+    window.cancelAnimationFrame = id => { if (!pending.delete(id)) cancel.call(window, id); };
+    return () => {
+      window.requestAnimationFrame = request; window.cancelAnimationFrame = cancel;
+      const callbacks = [...pending.values()]; pending.clear();
+      for (const callback of callbacks) callback(performance.now());
+    };
+  });
+  try {
+    await calendar.getByRole('button', { name: 'Close calendar records', exact: true }).evaluate(element => element.click());
+    await page.waitForFunction(() => !document.querySelector('.calendar-records'), undefined, { polling: 10 });
+    await heading.focus(); await page.keyboard.press('ArrowRight');
+    await page.waitForFunction(() => document.activeElement?.getAttribute('data-calendar-day') === '2024-03-01', undefined, { polling: 10 });
+    await releaseFrames.evaluate(release => release());
+    assert.equal(await page.locator(':focus').getAttribute('data-calendar-day'), '2024-03-01');
+  } finally {
+    await releaseFrames.evaluate(release => release());
+    await releaseFrames.dispose();
+  }
   await page.keyboard.press('Home');
   assert.equal(await page.locator(':focus').getAttribute('data-calendar-day'), '2024-02-26');
   await page.keyboard.press('Enter');

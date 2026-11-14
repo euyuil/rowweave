@@ -31,6 +31,7 @@ export function CalendarView({ table, view, search, generation, revision, dateCo
   const [pageFailure, setPageFailure] = useState<{ key: string; offset: number; message: string }>();
   const root = useRef<HTMLElement>(null), bucketHeading = useRef<HTMLHeadingElement>(null);
   const pendingDayFocus = useRef<string>(), pendingBucketFocus = useRef(false), pendingBucketScroll = useRef(false);
+  const pendingReturnFocus = useRef<CalendarBucket>();
   const primary = table.fields.find(field => field.id === table.primaryFieldId)!;
   const start = table.fields.find(field => field.id === view.calendar.startFieldId)!;
   const end = view.calendar.endFieldId ? table.fields.find(field => field.id === view.calendar.endFieldId)! : undefined;
@@ -83,6 +84,13 @@ export function CalendarView({ table, view, search, generation, revision, dateCo
     return () => onWindow(undefined);
   }, [onWindow, month, bucket, offset]);
   useLayoutEffect(() => {
+    if (pendingReturnFocus.current) {
+      const previous = pendingReturnFocus.current;
+      pendingReturnFocus.current = undefined;
+      const target = root.current?.querySelector<HTMLElement>(previous.kind === 'day'
+        ? '[data-calendar-day="' + previous.date + '"]' : '[data-calendar-bucket="' + previous.kind + '"]');
+      target?.focus({ preventScroll: true }); target?.scrollIntoView({ block: 'nearest' });
+    }
     if (pendingBucketScroll.current && bucketHeading.current && (page || count === 0 || pageError)) {
       pendingBucketScroll.current = false;
       if (pendingBucketFocus.current) { pendingBucketFocus.current = false; bucketHeading.current.focus({ preventScroll: true }); }
@@ -106,13 +114,8 @@ export function CalendarView({ table, view, search, generation, revision, dateCo
     pendingBucketFocus.current = focus; pendingBucketScroll.current = true;
   };
   const closeBucket = () => {
-    const previous = bucket;
+    pendingReturnFocus.current = bucket;
     setBucket(undefined); setPosition(0);
-    requestAnimationFrame(() => {
-      const target = root.current?.querySelector<HTMLElement>(previous?.kind === 'day'
-        ? '[data-calendar-day="' + previous.date + '"]' : '[data-calendar-bucket="' + previous?.kind + '"]');
-      target?.focus({ preventScroll: true }); target?.scrollIntoView({ block: 'nearest' });
-    });
   };
   const title = bucket?.kind === 'day' ? calendarDateLabel(bucket.date) : bucket?.kind === 'unscheduled' ? 'Unscheduled records' : 'Invalid date ranges';
   const creation = bucket?.kind === 'day' ? calendarInitialValues(table, view.calendar, bucket.date) : undefined;
