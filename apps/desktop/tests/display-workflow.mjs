@@ -37,11 +37,12 @@ export async function verifyDisplayWorkflow(page) {
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   const bounds = await page.locator('canvas').first().boundingBox();
   await page.mouse.click(bounds.x + 100, bounds.y + 64);
+  await page.waitForFunction(() => document.querySelector('canvas')?.contains(document.activeElement));
   await page.keyboard.press('Control+c');
-  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), 'One');
+  await page.waitForFunction(async () => await navigator.clipboard.readText() === 'One');
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Control+c');
-  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), 'Two');
+  await page.waitForFunction(async () => await navigator.clipboard.readText() === 'Two');
   await page.screenshot({ path: '.artifacts/desktop-frozen-columns.png' });
   await page.evaluate(() => {
     const clipboardData = new DataTransfer(); clipboardData.setData('text/plain', '布局测试');

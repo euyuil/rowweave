@@ -39,7 +39,7 @@ export async function verifyCalculationControls(page, application) {
   await page.keyboard.press('Escape'); await dialog.waitFor({ state: 'detached' });
   assert.equal(await button.evaluate(element => element === document.activeElement), true);
 
-  let mocked = { ...status, running: true }, statusFailure = false, refreshCalls = 0;
+  let mocked = status, statusFailure = false, refreshCalls = 0;
   const statusRoute = async route => mocked === undefined ? route.continue() : route.fulfill({
     status: statusFailure ? 503 : 200, contentType: 'application/json',
     body: JSON.stringify(statusFailure ? { error: { code: 'STATUS_UNAVAILABLE', message: 'Synthetic status outage' } } : mocked) });
@@ -59,9 +59,34 @@ export async function verifyCalculationControls(page, application) {
       if (!await editor.count()) await page.keyboard.press('Enter');
       await editor.waitFor();
     };
-    await openName();
-    await editor.fill('保留中文草稿');
+    // Exercise keyboard entry before a slow frame finishes, including deferred grid focus.
+    const restoreFrames = await page.evaluateHandle(() => {
+      const request = window.requestAnimationFrame.bind(window), cancel = window.cancelAnimationFrame.bind(window);
+      const pending = new Map();
+      window.requestAnimationFrame = callback => {
+        let complete;
+        const promise = new Promise(resolve => { complete = resolve; });
+        const id = request(time => {
+          pending.get(id).timer = setTimeout(() => { pending.delete(id); callback(time); complete(); }, 500);
+        });
+        pending.set(id, { promise, complete });
+        return id;
+      };
+      window.cancelAnimationFrame = id => {
+        const entry = pending.get(id);
+        if (entry) { clearTimeout(entry.timer); entry.complete(); pending.delete(id); }
+        cancel(id);
+      };
+      return async () => {
+        window.requestAnimationFrame = request; window.cancelAnimationFrame = cancel;
+        await Promise.all([...pending.values()].map(entry => entry.promise));
+      };
+    });
+    try { await openName(); await editor.fill('保留中文草稿'); }
+    finally { await restoreFrames.evaluate(restore => restore()); await restoreFrames.dispose(); }
     await editor.evaluate(element => element.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true, data: '保留中文草稿' })));
+    assert.equal(await editor.evaluate(element => element === document.activeElement), true);
+    mocked = { ...status, running: true };
     await button.filter({ hasText: 'Updating' }).waitFor();
     assert.equal(await editor.inputValue(), '保留中文草稿');
     assert.equal(await editor.evaluate(element => element === document.activeElement), true);
