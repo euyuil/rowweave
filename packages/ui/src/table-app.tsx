@@ -724,8 +724,12 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       }}>
         {ready && table && (!grouping.enabled || grouping.rows) ? <EditorContext.Provider value={editorBridge}><DataEditor
           ref={grid} onCellClicked={([, row], event) => {
-            if (grouping.rows?.at(row)?.kind === 'group') { event.preventDefault(); toggleGroup(row); }
-            grid.current?.focus();
+            if (grouping.rows?.at(row)?.kind === 'group') {
+              event.preventDefault(); toggleGroup(row); grid.current?.focus();
+            } else {
+              // Follow the grid's deferred focus without taking it back from a new editor.
+              requestAnimationFrame(() => { if (!activeEditor.current) grid.current?.focus(); });
+            }
           }}
           width={size.width} height={size.height} rows={gridRowCount}
           columns={columns}

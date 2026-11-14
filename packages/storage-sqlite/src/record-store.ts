@@ -6,6 +6,9 @@ import { summarize } from './record-summary.js';
 import { groupLayout } from './group-layout.js';
 import { nestedGroupLayout } from './nested-group-layout.js';
 import type { CheckedGroupQuery } from '../../core/src/record-groups.js';
+import type { CheckedCalendar, CheckedCalendarWindow } from '../../core/src/calendar-query.js';
+import type { CalendarBucket, CalendarLayout, CalendarPage } from '../../contracts/src/index.js';
+import { calendarLayout, calendarPage } from './calendar-query.js';
 import { groupFieldIds, type GroupCollapse, type GroupPathCollapse, type GroupLayout } from '../../contracts/src/index.js';
 import type { CheckedSummary } from '../../core/src/record-summary.js';
 import type { RecordSummary, RecordHistoryQuery, RecordHistoryPage, RecordChangeDetail, RecordRestore, RecordTrashPage } from '../../contracts/src/index.js';
@@ -86,7 +89,8 @@ export class SqliteRecordStore implements RecordStore {
     this.relations = new Relations(this.db);
     this.lookups = new Lookups(this.db);
     try {
-      this.db.exec('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+      // Retain large-query index pages within a fixed per-connection cache budget.
+      this.db.exec('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA cache_size = -98304;');
       const fresh = migrate(this.db);
       this.automaticNumbers = new AutomaticNumbers(this.db);
       this.history = new RecordHistory(this.db);
@@ -419,17 +423,7 @@ export class SqliteRecordStore implements RecordStore {
     return this.transaction(() => {
       const { current, sql, dateContext } = this.prepareQuery(table, query, view, true);
       const { total, rows } = queryPage(this.db, sql, query);
-      const hydrated = this.hydrateRecords(current, rows.map(row => this.decode(row)), query.fields);
-      const records = hydrated.map(record => {
-        if (query.fields) {
-          record.values = Object.fromEntries(query.fields.map(id => [id, record.values[id] ?? null]));
-          if (record.formulaErrors) {
-            record.formulaErrors = Object.fromEntries(Object.entries(record.formulaErrors).filter(([id]) => query.fields!.includes(id)));
-            if (!Object.keys(record.formulaErrors).length) delete record.formulaErrors;
-          }
-        }
-        return record;
-      });
+      const records = this.projectRecords(current, rows, query.fields);
       return { offset: query.offset, records, total, revision: current.revision, schemaVersion: current.version, ...(dateContext ? { dateContext } : {}) };
     }, 'DEFERRED');
   }
@@ -451,6 +445,39 @@ export class SqliteRecordStore implements RecordStore {
       return { ...layout,
         ...(dateContext ? { dateContext } : {}), ...(view ? { viewId: view.id, viewVersion: view.version } : {}) };
     }, 'DEFERRED');
+  }
+
+  queryCalendar(table: Table, query: CheckedQuery, calendar: CheckedCalendar, window: CheckedCalendarWindow, view?: GridView): CalendarLayout {
+    return this.transaction(() => {
+      const { current, sql, dateContext } = this.prepareQuery(table, query, view, true);
+      const layout = calendarLayout(this.db, calendar, window, sql);
+      const buckets = [...layout.days, layout.unscheduled, layout.invalid];
+      const records = this.calendarRecords(current, buckets.flatMap(bucket => bucket.ids), query.fields);
+      const hydrate = (bucket: { count: number; ids: string[] }) => ({ count: bucket.count, records: bucket.ids.map(id => records.get(id)!) });
+      return { totalRecords: layout.totalRecords, scheduledRecords: layout.scheduledRecords,
+        days: layout.days.map(day => ({ date: day.date, ...hydrate(day) })),
+        unscheduled: hydrate(layout.unscheduled), invalid: hydrate(layout.invalid),
+        revision: current.revision, schemaVersion: current.version, ...(dateContext ? { dateContext } : {}),
+        ...(view ? { viewId: view.id, viewVersion: view.version } : {}) };
+    }, 'DEFERRED');
+  }
+
+  queryCalendarRecords(table: Table, query: CheckedQuery, calendar: CheckedCalendar, bucket: CalendarBucket, view?: GridView): CalendarPage {
+    return this.transaction(() => {
+      const { current, sql, dateContext } = this.prepareQuery(table, query, view, true);
+      const page = calendarPage(this.db, calendar, bucket, sql, query.offset, query.limit);
+      const records = this.calendarRecords(current, page.ids, query.fields);
+      return { offset: query.offset, total: page.total, records: page.ids.map(id => records.get(id)!),
+        revision: current.revision, schemaVersion: current.version, ...(dateContext ? { dateContext } : {}),
+        ...(view ? { viewId: view.id, viewVersion: view.version } : {}) };
+    }, 'DEFERRED');
+  }
+
+  private calendarRecords(table: Table, ids: string[], fields?: string[]): Map<string, RowRecord> {
+    if (!ids.length) return new Map();
+    const rows = this.db.prepare(`SELECT id, version, values_json, formula_errors_json FROM records
+      WHERE table_id = ? AND id IN (SELECT value FROM json_each(?))`).all(table.id, JSON.stringify([...new Set(ids)])) as unknown as StoredRecord[];
+    return new Map(this.projectRecords(table, rows, fields).map(record => [record.id, record]));
   }
 
   private decodeView(row: StoredView): GridView {
@@ -525,6 +552,19 @@ export class SqliteRecordStore implements RecordStore {
     const errors = JSON.parse(row.formula_errors_json) as Record<string, string>;
     return { id: row.id, version: row.version, values: JSON.parse(row.values_json) as RowRecord['values'],
       ...(Object.keys(errors).length ? { formulaErrors: errors } : {}) };
+  }
+
+  private projectRecords(table: Table, rows: StoredRecord[], fields?: string[]): RowRecord[] {
+    return this.hydrateRecords(table, rows.map(row => this.decode(row)), fields).map(record => {
+      if (fields) {
+        record.values = Object.fromEntries(fields.map(id => [id, record.values[id] ?? null]));
+        if (record.formulaErrors) {
+          record.formulaErrors = Object.fromEntries(Object.entries(record.formulaErrors).filter(([id]) => fields.includes(id)));
+          if (!Object.keys(record.formulaErrors).length) delete record.formulaErrors;
+        }
+      }
+      return record;
+    });
   }
 
   private hydrateRecords(table: Table, records: RowRecord[], fields?: string[]): RowRecord[] {

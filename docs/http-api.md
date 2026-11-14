@@ -99,6 +99,8 @@ Records have `{ id, version, values }`, with values keyed by field ID. Relation 
 | `POST /tables/:table/query` | RecordQuery below | QueryPage / `queryRecords(id, query, signal?)` |
 | `POST /tables/:table/summary` | SummaryRequest below | RecordSummary / `summarizeRecords(id, input, signal?)` |
 | `POST /tables/:table/groups/query` | GroupQuery below | GroupLayout / `queryGroups(id, input, signal?)` |
+| `POST /tables/:table/calendar/query` | [CalendarLayoutRequest](calendar-queries.md) | CalendarLayout / `queryCalendar(id, input, signal?)` |
+| `POST /tables/:table/calendar/records` | [CalendarRecordsRequest](calendar-queries.md#page-a-bucket) | CalendarPage / `queryCalendarRecords(id, input, signal?)` |
 
 Batch operations are atomic and require unique record IDs. Partial updates change only supplied fields. Creation omits computed lookup fields; explicitly supplying a lookup, including null, is rejected. Ordinary batches support up to 2,000 records and 20,000 changed/created cells. A conflict or invalid value on any record prevents every write in that batch.
 

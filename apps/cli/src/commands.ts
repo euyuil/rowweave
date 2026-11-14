@@ -1,6 +1,7 @@
 import type { WorkspaceApi, TableCreate, TableUpdate, FieldCreate, FieldUpdate, FieldConversion, RecordCreate,
   RecordUpdate, RecordDelete, RecordQuery, ViewCreate, ViewUpdate, ViewPageRequest, SummaryRequest, GroupQuery,
-  RecordHistoryQuery, RecordRestore, DeletedRecordRestore, AttachmentQuery, FormulaPreviewRequest, WorkspaceStateRequest } from '../../../packages/client/src/index.js';
+  RecordHistoryQuery, RecordRestore, DeletedRecordRestore, AttachmentQuery, FormulaPreviewRequest, WorkspaceStateRequest,
+  CalendarLayoutRequest, CalendarRecordsRequest } from '../../../packages/client/src/index.js';
 
 export class UsageError extends Error {}
 
@@ -45,6 +46,8 @@ export const commands: Record<string, Command> = {
   'records query': { ids: 1, input: 'optional', run: (api, [id], input) => api.queryRecords(id!, input as RecordQuery) },
   'records summarize': { ids: 1, input: 'optional', run: (api, [id], input) => api.summarizeRecords(id!, input as SummaryRequest) },
   'records groups': { ids: 1, input: 'required', run: (api, [id], input) => api.queryGroups(id!, input as GroupQuery) },
+  'records calendar': { ids: 1, input: 'required', run: (api, [id], input) => api.queryCalendar(id!, input as CalendarLayoutRequest) },
+  'records calendar-records': { ids: 1, input: 'required', run: (api, [id], input) => api.queryCalendarRecords(id!, input as CalendarRecordsRequest) },
   'records create': { ids: 1, input: 'required', run: (api, [id], input) => api.createRecords(id!, input as RecordCreate[]) },
   'records update': { ids: 1, input: 'required', run: (api, [id], input) => api.updateRecords(id!, input as RecordUpdate[]) },
   'records delete': { ids: 1, input: 'required', run: (api, [id], input) => api.deleteRecords(id!, input as RecordDelete[]) },

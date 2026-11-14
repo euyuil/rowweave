@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { maxRelativeDays, maxRelativeHours, dateContextPattern, relativeDatePeriods, maxGroupCollapseKeys, maxGroupLevels } from '../../../packages/contracts/src/index.js';
+import { maxRelativeDays, maxRelativeHours, dateContextPattern, relativeDatePeriods, maxGroupCollapseKeys, maxGroupLevels, maxCalendarPreview } from '../../../packages/contracts/src/index.js';
 
 const id = z.string().describe('Stable ID from the workspace schema or a query result; never a display name or position.');
 const version = z.number().int().describe('Version from the most recent read of this object.');
@@ -58,6 +58,22 @@ const page = {
 const groupFields = z.union([id, z.array(id).min(1).max(maxGroupLevels)]);
 export const recordQuery = z.strictObject({ ...page, ...query, recordIds: z.array(id).exactOptional(), groupBy: groupFields.exactOptional() });
 const summaryMeasures = z.array(z.strictObject({ fieldId: id, operation: z.enum(['sum', 'average', 'min', 'max']) })).max(12);
+const calendarQuery = {
+  ...query,
+  calendar: z.strictObject({ startFieldId: id, endFieldId: id.exactOptional(),
+    timeZone: z.string().describe('Explicit time zone used to place timestamps on calendar dates.') }),
+  viewId: id.exactOptional(), expectedViewVersion: version.exactOptional(),
+  fields: page.fields, expectedRevision: page.expectedRevision, expectedDateContext: page.expectedDateContext,
+};
+export const calendarLayout = z.strictObject({ ...calendarQuery,
+  from: z.string().describe('First visible calendar date, YYYY-MM-DD.'),
+  toExclusive: z.string().describe('Exclusive last boundary, YYYY-MM-DD; at most 62 days after from.'),
+  previewLimit: z.int().min(0).max(maxCalendarPreview).describe('Records per day or exceptional bucket, default 3; zero returns complete counts only.').exactOptional(),
+});
+export const calendarRecords = z.strictObject({ ...calendarQuery, offset: page.offset, limit: page.limit,
+  bucket: z.union([z.strictObject({ kind: z.literal('day'), date: z.string() }),
+    z.strictObject({ kind: z.enum(['unscheduled', 'invalid']) })]),
+});
 export const recordGroups = z.strictObject({
   window: z.enum(['displayRows', 'expandedRecords']).describe('Offsets count display rows by default; expandedRecords skips all headings and collapsed records.').exactOptional(),
   viewId: id.exactOptional(), expectedViewVersion: version.exactOptional(), groupBy: groupFields.exactOptional(),

@@ -15,17 +15,28 @@ export function lookupSql(field: Field, alias = 'r'): string {
     ORDER BY edge.position${multi ? ', CAST(choice.key AS INTEGER)' : ''}))`;
 }
 
-function aggregateSql(field: Field, alias: string, error = false): string {
+function aggregateValueSql(field: Field, error: boolean): string {
   const literal = (text: string) => `'${text.replaceAll("'", "''")}'`;
   const path = literal(`$.${JSON.stringify(field.lookup!.fieldId)}`);
   const functions = { count: 'COUNT', sum: 'SUM', average: 'AVG', min: 'MIN', max: 'MAX' };
   const operation = field.lookup!.operation as keyof typeof functions;
   const result = `${functions[operation]}(CAST(json_extract(target.values_json, ${path}) AS REAL))`;
   const invalid = field.lookupResult!.type === 'formula' ? `MAX(json_extract(target.formula_errors_json, ${path}) IS NOT NULL)` : '0';
-  return `(SELECT CASE WHEN ${invalid} THEN ${error ? "'A linked formula has an error.'" : 'NULL'}
+  return `CASE WHEN ${invalid} THEN ${error ? "'A linked formula has an error.'" : 'NULL'}
     WHEN abs(${result}) > 1.7976931348623157e308 THEN ${error ? "'The linked summary exceeds the numeric range.'" : 'NULL'}
-    ELSE ${error ? 'NULL' : result} END FROM relation_edges edge JOIN records target ON target.id = edge.target_record_id
+    ELSE ${error ? 'NULL' : result} END`;
+}
+
+function aggregateSql(field: Field, alias: string, error = false): string {
+  const literal = (text: string) => `'${text.replaceAll("'", "''")}'`;
+  return `(SELECT ${aggregateValueSql(field, error)} FROM relation_edges edge JOIN records target ON target.id = edge.target_record_id
     WHERE edge.source_record_id = ${alias}.id AND edge.field_id = ${literal(field.lookup!.relationFieldId)})`;
+}
+
+export function lookupSummaryRowsSql(field: Field): string {
+  return `SELECT edge.source_record_id AS record_id, ${aggregateValueSql(field, false)} AS value
+    FROM relation_edges edge JOIN records target ON target.id = edge.target_record_id
+    WHERE edge.field_id = '${field.lookup!.relationFieldId.replaceAll("'", "''")}' GROUP BY edge.source_record_id`;
 }
 
 function lookupErrorSql(field: Field): string {

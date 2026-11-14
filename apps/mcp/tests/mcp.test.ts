@@ -18,6 +18,7 @@ import type { Attachment } from '../../../packages/contracts/src/index.js';
 import type { CalculationRefresh, CalculationStatus, FormulaPreview } from '../../../packages/contracts/src/index.js';
 import { createWorkspaceClient } from '../../../packages/client/src/index.js';
 import type { GroupLayout } from '../../../packages/contracts/src/index.js';
+import type { CalendarLayout, CalendarLayoutRequest, CalendarRecordsRequest } from '../../../packages/contracts/src/index.js';
 
 const runFile = promisify(execFile);
 const entry = resolve('apps/mcp/dist/rowweave-mcp.js');
@@ -624,17 +625,73 @@ test('MCP creates board views, queries empty lanes and moves records using their
   assert.equal((await call('views_query', { tableId: table.id, viewId: view.id, query: { lane: 'missing' } })).isError, true);
 });
 
+test('SDK, CLI and MCP share bounded calendar layout, bucket paging and stale-write guards', async t => {
+  const { service, server, token, environment } = await setup(t), { json, call } = await connect(t, environment);
+  const sdk = createWorkspaceClient({ url: server.url, token });
+  let table = await sdk.createTable({ name: 'Calendar interfaces' });
+  table = await sdk.createField(table.id, { expectedVersion: table.version, name: 'Start', type: 'date' });
+  table = await sdk.createField(table.id, { expectedVersion: table.version, name: 'End', type: 'date' });
+  const start = table.fields[1]!.id, end = table.fields[2]!.id;
+  const rows = (await sdk.createRecords(table.id, [
+    ['A span', '2026-11-01', '2026-11-03'], ['B point', '2026-11-02', null],
+    ['C unscheduled', null, null], ['D invalid', '2026-11-03', '2026-11-01'],
+  ].map(([label, from, to]) => ({ values: { [table.primaryFieldId]: label!, [start]: from!, [end]: to! } })))).records;
+  const view = await sdk.createView(table.id, { name: 'Plan', query: { sort: [{ fieldId: table.primaryFieldId, direction: 'asc' }] } });
+  const request: CalendarLayoutRequest = { calendar: { startFieldId: start, endFieldId: end, timeZone: 'Asia/Shanghai' },
+    viewId: view.id, expectedViewVersion: view.version, fields: [table.primaryFieldId, start, end],
+    from: '2026-11-01', toExclusive: '2026-11-04', previewLimit: 1 };
+  const before = service.workspaceState({ tableId: table.id, viewId: view.id });
+  const expected = service.queryCalendar(table.id, request);
+  assert.deepEqual(expected.days.map(day => day.count), [1, 2, 1]);
+  assert.equal(expected.scheduledRecords, 2); assert.equal(expected.totalRecords, 4);
+  assert.equal(expected.unscheduled.count, 1); assert.equal(expected.invalid.count, 1);
+  assert.deepEqual(await sdk.queryCalendar(table.id, request), expected);
+  assert.deepEqual(await json('records_calendar', { tableId: table.id, input: request }), expected);
+  const directory = await mkdtemp(join(tmpdir(), 'rowweave-calendar-cli-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const input = join(directory, 'query.json');
+  const cli = async (command: string, value: unknown) => {
+    await writeFile(input, JSON.stringify(value));
+    return JSON.parse((await runFile(process.execPath, [resolve('apps/cli/dist/rowweave.js'), 'records', command, table.id, '--input', input],
+      { env: { ...process.env, ...environment } })).stdout);
+  };
+  assert.deepEqual(await cli('calendar', request), expected);
+  for (const bucket of [{ kind: 'day', date: '2026-11-02' }, { kind: 'unscheduled' }, { kind: 'invalid' }] as const) {
+    const page: CalendarRecordsRequest = { calendar: request.calendar, viewId: view.id, expectedViewVersion: view.version,
+      fields: request.fields!, bucket, limit: 1, offset: bucket.kind === 'day' ? 1 : 0, expectedRevision: expected.revision };
+    const result = service.queryCalendarRecords(table.id, page);
+    assert.equal(result.records.length, 1);
+    assert.deepEqual(await sdk.queryCalendarRecords(table.id, page), result);
+    assert.deepEqual(await json('records_calendar_records', { tableId: table.id, input: page }), result);
+    assert.deepEqual(await cli('calendar-records', page), result);
+  }
+  assert.deepEqual(service.workspaceState({ tableId: table.id, viewId: view.id }), before);
+  assert.equal((await fetch(server.url + '/tables/' + table.id + '/calendar/query', {
+    method: 'POST', body: JSON.stringify(request), headers: { 'Content-Type': 'application/json' },
+  })).status, 401);
+  await sdk.updateRecords(table.id, [{ id: rows[1]!.id, expectedVersion: rows[1]!.version, values: { [start]: '2026-11-03' } }]);
+  const stale = { ...request, expectedRevision: expected.revision };
+  await assert.rejects(sdk.queryCalendar(table.id, stale), { code: 'DATA_CHANGED' });
+  assert.match(text(await call('records_calendar', { tableId: table.id, input: stale })), /DATA_CHANGED/);
+  await assert.rejects(cli('calendar', stale), error => /DATA_CHANGED/.test(String((error as { stderr: string }).stderr)));
+  await sdk.updateView(table.id, view.id, { expectedVersion: view.version, name: 'Updated plan' });
+  assert.match(text(await call('records_calendar_records', { tableId: table.id, input: {
+    calendar: request.calendar, viewId: view.id, expectedViewVersion: view.version, bucket: { kind: 'invalid' },
+  } })), /VIEW_CONFLICT/);
+});
+
 test('MCP discovers all operations and runs versioned schema, records, views and CSV workflows over stdio', async t => {
   const { service, environment } = await setup(t);
   const { client, call, json, used, stderr } = await connect(t, environment);
   const tools = (await client.listTools()).tools;
-  assert.equal(tools.length, 43);
+  assert.equal(tools.length, 45);
   assert.equal(tools.find(tool => tool.name === 'workspace_state')!.annotations!.readOnlyHint, true);
   assert.deepEqual(await json('workspace_state'), service.workspaceState({}));
   assert.equal(tools.find(tool => tool.name === 'formulas_preview')!.annotations!.readOnlyHint, true);
   assert.ok(tools.every(tool => tool.inputSchema.type === 'object' && tool.inputSchema.additionalProperties === false));
   assert.equal(tools.find(tool => tool.name === 'records_query')!.annotations!.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === 'records_groups')!.annotations!.readOnlyHint, true);
+  for (const name of ['records_calendar', 'records_calendar_records']) assert.equal(tools.find(tool => tool.name === name)!.annotations!.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === 'records_update')!.annotations!.destructiveHint, true);
   assert.equal(tools.find(tool => tool.name === 'records_create')!.annotations!.idempotentHint, false);
   assert.equal((await client.listResourceTemplates()).resourceTemplates.length, 2);
@@ -646,6 +703,12 @@ test('MCP discovers all operations and runs versioned schema, records, views and
   assert.equal((await json<CalculationStatus>('calculations_status')).running, false);
   assert.equal(tools.find(tool => tool.name === 'calculations_status')!.annotations!.readOnlyHint, true);
   let table = await json<Table>('tables_create', { name: 'MCP projects' });
+  let calendarTable = await json<Table>('tables_create', { name: 'Calendar discovery' });
+  calendarTable = await json<Table>('fields_create', { tableId: calendarTable.id, input: { expectedVersion: calendarTable.version, name: 'Day', type: 'date' } });
+  const calendar = { startFieldId: calendarTable.fields[1]!.id, timeZone: 'UTC' };
+  assert.equal((await json<CalendarLayout>('records_calendar', { tableId: calendarTable.id, input: { calendar, from: '2026-11-01', toExclusive: '2026-11-02' } })).totalRecords, 0);
+  assert.equal((await json<QueryPage>('records_calendar_records', { tableId: calendarTable.id, input: { calendar, bucket: { kind: 'unscheduled' } } })).total, 0);
+  await json('tables_delete', { tableId: calendarTable.id, expectedVersion: calendarTable.version });
   const stateRequest = { tableId: table.id, viewId: service.listViews(table.id)[0]!.id };
   assert.deepEqual(await json('workspace_state', stateRequest), service.workspaceState(stateRequest));
   assert.equal(JSON.parse(text(await call('workspace_state', { viewId: stateRequest.viewId }))).error.code, 'INVALID_QUERY');
