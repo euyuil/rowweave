@@ -26,6 +26,8 @@ Create a saved calendar through `views_create`, CLI `views create`, SDK `createV
 
 Calendar configuration is persisted in workspace format 35 and included in backups. Field renames preserve it through UUIDs. Deleting or converting a configured date field to an incompatible type returns `VIEW_DEPENDENCY`; change the calendar settings first. Changing the view type removes configuration belonging to the previous type. Calendar views do not accept grid grouping or board lanes.
 
+The date queries below also accept a saved [Gantt view](gantt-views.md) ID and inherit its date fields and time zone. The Gantt scale changes presentation only; it does not change calendar query results.
+
 ## Read a date window
 
 Use `POST /tables/:table/calendar/query`, SDK `queryCalendar`, CLI `records calendar`, or MCP `records_calendar`:

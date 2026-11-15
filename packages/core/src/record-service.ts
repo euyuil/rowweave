@@ -43,7 +43,7 @@ export interface RecordStore {
   deleteTable(id: string, expectedVersion: number): void;
   readPage(offset: number, limit: number, id?: string): RecordPage;
   updateBatch(updates: RecordUpdate[], id: string, schemaVersion: number): BatchResult;
-  rescheduleRecord(table: Table, view: Extract<GridView, { type: 'calendar' }>, recordId: string, change: RecordSchedule): BatchResult;
+  rescheduleRecord(table: Table, view: Extract<GridView, { type: 'calendar' | 'gantt' }>, recordId: string, change: RecordSchedule): BatchResult;
   getRecord(tableId: string, recordId: string): RowRecord;
   createRecords(table: Table, values: Array<Record<string, CellValue>>): BatchResult;
   deleteRecords(tableId: string, records: RecordDelete[]): DeleteResult;
@@ -331,10 +331,11 @@ export class RecordService {
     const query = parseQuery(table, { filter: view?.query.filter ?? item['filter'], sort: view?.query.sort ?? item['sort'],
       search: item['search'] === undefined ? view?.query.search : item['search'], fields: item['fields'],
       offset: item['offset'], limit: item['limit'], expectedRevision: item['expectedRevision'], expectedDateContext: item['expectedDateContext'] });
-    const calendar = parseCalendar(table, item['calendar'] === undefined ? view?.calendar : item['calendar']);
-    if (view?.type === 'calendar' && (calendar.startField.id !== view.calendar.startFieldId ||
-        calendar.endField?.id !== view.calendar.endFieldId || calendar.timeZone !== view.calendar.timeZone)) {
-      throw new ServiceError('INVALID_QUERY', 'Use the saved calendar fields and time zone of this view.');
+    const savedDates = view?.calendar ?? view?.gantt;
+    const calendar = parseCalendar(table, item['calendar'] === undefined ? savedDates : item['calendar']);
+    if (savedDates && (calendar.startField.id !== savedDates.startFieldId ||
+        calendar.endField?.id !== savedDates.endFieldId || calendar.timeZone !== savedDates.timeZone)) {
+      throw new ServiceError('INVALID_QUERY', 'Use the saved date fields and time zone of this view.');
     }
     return { table, item, query, view, calendar };
   }
@@ -428,7 +429,7 @@ export class RecordService {
   rescheduleRecord(id: string, viewId: string, recordId: string, input: unknown): BatchResult {
     const change = parseRecordSchedule(input), table = this.store.getTable(id), view = this.store.getView(id, viewId);
     if (view.version !== change.expectedViewVersion) throw new ServiceError('VIEW_CONFLICT', 'This view changed. Reload before rescheduling.', 409);
-    if (view.type !== 'calendar') throw new ServiceError('INVALID_SCHEDULE', 'Choose a saved calendar view with configured date fields.');
+    if (view.type !== 'calendar' && view.type !== 'gantt') throw new ServiceError('INVALID_SCHEDULE', 'Choose a saved calendar or Gantt view with configured date fields.');
     return this.store.rescheduleRecord(table, view, recordId, change);
   }
 

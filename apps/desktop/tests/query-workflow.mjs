@@ -148,7 +148,7 @@ export async function verifyQueryWorkflow(page, application) {
   await rule('1.1').getByLabel('Value *', { exact: true }).press('Control+s');
   await dialog.waitFor({ state: 'detached' });
   assert.equal((await read()).view.query.sort[0].direction, 'desc');
-  assert.match(await filters.textContent(), /On/);
+  await filters.getByText('On', { exact: true }).waitFor();
   await page.getByText('1 unsaved cell', { exact: true }).waitFor();
   const configuredFilter = (await read()).view.query.filter;
   await sorting.click();

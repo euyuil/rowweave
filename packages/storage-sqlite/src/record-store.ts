@@ -503,7 +503,7 @@ export class SqliteRecordStore implements RecordStore {
       name = excluded.name, version = excluded.version, config_json = excluded.config_json`)
       .run(view.id, view.tableId, view.name, view.version, JSON.stringify({ query: view.query, columns: view.columns,
         rowHeight: view.rowHeight, frozenColumns: view.frozenColumns, type: view.type, groupBy: view.groupBy, groupMeasures: view.groupMeasures,
-        calendar: view.calendar }));
+        calendar: view.calendar, gantt: view.gantt }));
   }
 
   private syncViews(table: Table): void {
@@ -771,7 +771,7 @@ export class SqliteRecordStore implements RecordStore {
     return this.transaction(() => this.writeBatch(updates, id, schemaVersion), 'IMMEDIATE', { recordWrite: true });
   }
 
-  rescheduleRecord(table: Table, view: Extract<GridView, { type: 'calendar' }>, recordId: string, change: RecordSchedule): BatchResult {
+  rescheduleRecord(table: Table, view: Extract<GridView, { type: 'calendar' | 'gantt' }>, recordId: string, change: RecordSchedule): BatchResult {
     return this.transaction(() => {
       this.checkSchema(table.id, table.version);
       if (this.getView(table.id, view.id).version !== change.expectedViewVersion) {
@@ -779,7 +779,7 @@ export class SqliteRecordStore implements RecordStore {
       }
       const record = this.readRecord(table.id, recordId);
       if (record.version !== change.expectedVersion) throw new ServiceError('VERSION_CONFLICT', 'This record changed. Reload before rescheduling.', 409);
-      const values = rescheduledValues(parseCalendar(table, view.calendar), record, change);
+      const values = rescheduledValues(parseCalendar(table, view.type === 'calendar' ? view.calendar : view.gantt), record, change);
       return this.writeBatch([{ id: recordId, expectedVersion: change.expectedVersion, values }], table.id, table.version);
     }, 'IMMEDIATE', { recordWrite: true });
   }

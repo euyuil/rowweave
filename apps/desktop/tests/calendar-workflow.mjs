@@ -69,6 +69,7 @@ export async function verifyCalendarWorkflow(page, application) {
   assert.equal(await calendar.getByLabel('Calendar month', { exact: true }).inputValue(), '2024-02');
   await pane.getByRole('button', { name: 'Next', exact: true }).click();
   await pane.getByText('51–53 of 53', { exact: true }).waitFor();
+  await pane.getByRole('button', { name: 'Task 052', exact: true }).waitFor();
   assert.equal(await pane.locator('.calendar-record-card').count(), 3);
   await calendar.getByRole('button', { name: 'Unscheduled (2)', exact: true }).click();
   await pane.getByRole('button', { name: 'Unscheduled task', exact: true }).waitFor();

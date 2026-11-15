@@ -1,0 +1,49 @@
+.rowweave-app .gantt-view { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; overflow: hidden; background: #f7f9fc; }
+.rowweave-app .gantt-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rowweave-app .gantt-tools button, .rowweave-app .gantt-selection button, .rowweave-app .gantt-pages button { padding: 6px 10px; font-size: 12px; }
+.rowweave-app .gantt-tools label, .rowweave-app .gantt-selection label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #526381; }
+.rowweave-app .gantt-tools input, .rowweave-app .gantt-tools select, .rowweave-app .gantt-selection input, .rowweave-app .gantt-selection select { height: 32px; padding: 4px 6px; border: 1px solid #cfdaed; border-radius: 5px; background: white; color: #182c49; }
+.rowweave-app .gantt-tools > span { font-size: 12px; color: #637492; margin-left: auto; }
+.rowweave-app .gantt-selection { display: flex; align-items: center; gap: 8px; min-height: 34px; flex-wrap: wrap; }
+.rowweave-app .gantt-selection > span { flex: 1 1 180px; min-width: 180px; max-width: 350px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; font-weight: 600; }
+.rowweave-app .gantt-selection input { width: 65px; }
+.rowweave-app .gantt-status { height: 18px; min-height: 18px; margin: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; color: #637492; }
+.rowweave-app .gantt-status.form-error { color: #a32b38; }
+.rowweave-app .gantt-viewport { flex: 1; min-height: 180px; overflow: auto; border: 1px solid #d8e1ef; border-radius: 7px; background: white; }
+.rowweave-app .gantt-table { position: relative; min-width: 100%; }
+.rowweave-app .gantt-header { display: flex; position: sticky; top: 0; height: 48px; z-index: 3; background: #f5f8fe; border-bottom: 1px solid #d8e1ef; }
+.rowweave-app .gantt-label { position: sticky; left: 0; width: 240px; min-width: 240px; box-sizing: border-box; padding: 8px 10px; z-index: 2; border-right: 1px solid #d8e1ef; background: white; overflow: hidden; }
+.rowweave-app .gantt-header > .gantt-label { display: flex; align-items: center; font-weight: 600; font-size: 13px; background: #f5f8fe; z-index: 4; }
+.rowweave-app .gantt-axis { display: flex; height: 100%; flex: none; }
+.rowweave-app .gantt-axis > span { display: flex; flex: none; box-sizing: border-box; flex-direction: column; align-items: center; justify-content: center; font-size: 12px; border-left: 1px solid #e8edf6; color: #526381; }
+.rowweave-app .gantt-axis small { font-size: 10px; line-height: 16px; }
+.rowweave-app .gantt-axis .weekend { background: #edf1f8; }
+.rowweave-app .gantt-axis .month-start { border-left-color: #a7b9d7; }
+.rowweave-app .gantt-row { display: flex; border-bottom: 1px solid #edf0f6; box-sizing: border-box; }
+.rowweave-app .gantt-row.selected > .gantt-label { background: #edf3ff; }
+.rowweave-app .gantt-record-title { max-width: 100%; padding: 0; background: none; border: 0; text-align: left; color: #1d3c6b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; line-height: 20px; }
+.rowweave-app .gantt-card-fields { display: flex; gap: 6px; font-size: 11px; color: #60718c; overflow: hidden; white-space: nowrap; margin-top: 3px; }
+.rowweave-app .gantt-card-fields > span { overflow: hidden; text-overflow: ellipsis; }
+.rowweave-app .gantt-card-fields small { font-size: 10px; }
+.rowweave-app .gantt-track { flex: 1; position: relative; background-image: linear-gradient(to right, #edf0f6 1px, transparent 1px); }
+.rowweave-app .gantt-bar { position: absolute; top: 50%; transform: translateY(-50%); height: 25px; padding: 3px 8px; border-radius: 5px; border: 1px solid #315cbe; background: #dce7ff; color: #1d439a; min-width: 0; text-align: left; cursor: grab; touch-action: none; user-select: none; overflow: hidden; }
+.rowweave-app .gantt-bar[aria-pressed="true"] { box-shadow: 0 0 0 2px #91b2ff; }
+.rowweave-app .gantt-bar:active { cursor: grabbing; }
+.rowweave-app .gantt-bar.point { background: #cfe2f8; border-color: #276b9d; }
+.rowweave-app .gantt-bar.clipped-start { border-left-style: dashed; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.rowweave-app .gantt-bar.clipped-end { border-right-style: dashed; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.rowweave-app .gantt-bar-text { display: block; font-size: 11px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; pointer-events: none; }
+.rowweave-app .gantt-grip { position: absolute; top: 0; bottom: 0; width: 6px; cursor: ew-resize; touch-action: none; background: #315cbe55; }
+.rowweave-app .gantt-grip.start { left: 0; }
+.rowweave-app .gantt-grip.end { right: 0; }
+.rowweave-app .gantt-outside, .rowweave-app .gantt-exception { position: absolute; top: 50%; left: 10px; transform: translateY(-50%); font-size: 12px; padding: 3px 8px; }
+.rowweave-app .gantt-exception.invalid { color: #9b3242; border-color: #e7bfca; }
+.rowweave-app .gantt-empty { margin: 24px; color: #637492; }
+.rowweave-app .gantt-pages { display: flex; align-items: center; justify-content: flex-start; gap: 10px; flex-wrap: wrap; padding: 0; font-size: 12px; color: #637492; }
+.rowweave-app .gantt-pages small { margin-left: auto; }
+.rowweave-app .gantt-view button:focus-visible { outline: 2px solid #315cbe; outline-offset: 2px; }
+@media (max-width: 1100px) {
+  .rowweave-app .gantt-selection > span { flex-basis: 100%; max-width: 100%; }
+  .rowweave-app .gantt-tools > span { margin-left: 0; flex-basis: 100%; }
+  .rowweave-app .gantt-pages small { flex-basis: 100%; margin-left: 0; }
+}
