@@ -729,6 +729,54 @@ test('SDK, CLI and MCP share atomic schedule writes, history and conflict errors
     input: { ...input, expectedVersion: 3 } })), /VIEW_CONFLICT/);
 });
 
+test('saved Gantt views share configuration, filtered reads and scheduling across SDK, CLI and MCP', async t => {
+  const { service, server, token, environment } = await setup(t), { json, call } = await connect(t, environment);
+  const sdk = createWorkspaceClient({ url: server.url, token });
+  let table = await sdk.createTable({ name: 'Timeline interfaces' });
+  for (const name of ['Start', 'End']) table = await sdk.createField(table.id, { expectedVersion: table.version, name, type: 'date' });
+  const start = table.fields[1]!.id, end = table.fields[2]!.id, name = table.primaryFieldId;
+  const rows = (await sdk.createRecords(table.id, [{ values: { [name]: 'Included', [start]: '2024-02-28', [end]: '2024-03-01' } },
+    { values: { [name]: 'Excluded', [start]: '2024-02-28' } }])).records;
+  const directory = await mkdtemp(join(tmpdir(), 'rowweave-gantt-cli-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const file = join(directory, 'input.json');
+  const cli = async (args: string[], input: unknown) => {
+    await writeFile(file, JSON.stringify(input));
+    return JSON.parse((await runFile(process.execPath, [resolve('apps/cli/dist/rowweave.js'), ...args, '--input', file],
+      { env: { ...process.env, ...environment } })).stdout);
+  };
+  const input = { name: 'Timeline', type: 'gantt' as const, gantt: { startFieldId: start, endFieldId: end, timeZone: 'UTC', scale: 'week' as const },
+    query: { filter: { conjunction: 'and' as const, conditions: [{ fieldId: name, operator: 'eq' as const, value: 'Included' }] } } };
+  const views = [await sdk.createView(table.id, input), await json<GridView>('views_create', { tableId: table.id, input }),
+    await cli(['views', 'create', table.id], input) as GridView];
+  for (const view of views) {
+    assert.equal(view.type, 'gantt'); assert.deepEqual(view.gantt, input.gantt);
+    const query = { limit: 1, fields: [name, start, end], expectedViewVersion: view.version };
+    const expected = service.queryView(table.id, view.id, query);
+    assert.equal(expected.total, 1); assert.equal(expected.records[0]!.id, rows[0]!.id);
+    assert.deepEqual(await sdk.queryView(table.id, view.id, query), expected);
+    assert.deepEqual(await json('views_query', { tableId: table.id, viewId: view.id, query }), expected);
+    assert.deepEqual(await cli(['views', 'query', table.id, view.id], query), expected);
+    const range = { viewId: view.id, from: '2024-02-28', toExclusive: '2024-03-02' };
+    assert.deepEqual((await sdk.queryCalendar(table.id, range)).days.map(day => day.count), [1, 1, 1]);
+  }
+  let record = rows[0]!;
+  for (let index = 0; index < views.length; index++) {
+    const view = views[index]!, input = { expectedVersion: record.version, expectedViewVersion: view.version, action: 'move' as const, days: 1 };
+    const result: BatchResult = index === 0 ? await sdk.rescheduleRecord(table.id, view.id, record.id, input)
+      : index === 1 ? await json('records_reschedule', { tableId: table.id, viewId: view.id, recordId: record.id, input })
+      : await cli(['records', 'reschedule', table.id, view.id, record.id], input);
+    record = result.records[0]!;
+  }
+  assert.equal(record.values[start], '2024-03-02'); assert.equal(record.values[end], '2024-03-04');
+  const view = views[1]!;
+  await json('views_update', { tableId: table.id, viewId: view.id, input: { expectedVersion: view.version, gantt: { ...input.gantt, scale: 'day' } } });
+  const stale = { expectedVersion: record.version, expectedViewVersion: view.version, action: 'move', days: 1 };
+  assert.match(text(await call('records_reschedule', { tableId: table.id, viewId: view.id, recordId: record.id, input: stale })), /VIEW_CONFLICT/);
+  assert.deepEqual(service.getRecord(table.id, record.id), record);
+  assert.match(text(await call('views_create', { tableId: table.id, input: { ...input, gantt: { ...input.gantt, scale: 'month' } } })), /scale/);
+});
+
 test('MCP discovers all operations and runs versioned schema, records, views and CSV workflows over stdio', async t => {
   const { service, environment } = await setup(t);
   const { client, call, json, used, stderr } = await connect(t, environment);

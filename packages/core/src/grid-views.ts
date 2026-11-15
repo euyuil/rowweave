@@ -14,19 +14,29 @@ export function defaultView(table: Pick<Table, 'id' | 'fields'>): GridView {
 export function parseView(table: Table, input: unknown, previous = defaultView(table)): GridView {
   const item = schemaObject(input);
   const type = item['type'] === undefined ? previous.type : item['type'];
-  if (type !== 'grid' && type !== 'board' && type !== 'calendar') throw new ServiceError('INVALID_VIEW', 'Choose a grid, board or calendar view.');
+  if (type !== 'grid' && type !== 'board' && type !== 'calendar' && type !== 'gantt') throw new ServiceError('INVALID_VIEW', 'Choose a grid, board, calendar or Gantt view.');
   let calendar: GridView['calendar'];
-  if (type === 'calendar') {
+  let gantt: GridView['gantt'];
+  if (type === 'calendar' || type === 'gantt') {
     try {
-      const checked = parseCalendar(table, item['calendar'] === undefined ? previous.calendar : item['calendar']);
-      calendar = { startFieldId: checked.startField.id, ...(checked.endField ? { endFieldId: checked.endField.id } : {}), timeZone: checked.timeZone };
+      const settings = schemaObject(item[type] === undefined ? previous[type] : item[type]);
+      const checked = parseCalendar(table, settings);
+      const dates = { startFieldId: checked.startField.id, ...(checked.endField ? { endFieldId: checked.endField.id } : {}), timeZone: checked.timeZone };
+      if (type === 'calendar') calendar = dates;
+      else {
+        const scale = settings['scale'];
+        if (scale !== 'day' && scale !== 'week') throw new ServiceError('INVALID_VIEW', 'Choose day or week scale for the timeline.');
+        gantt = { ...dates, scale };
+      }
     } catch (error) {
       if (error instanceof ServiceError) throw new ServiceError('INVALID_VIEW', error.message);
       throw error;
     }
-  } else if (item['calendar'] !== undefined) throw new ServiceError('INVALID_VIEW', 'Calendar settings require a calendar view.');
+  }
+  if (type !== 'calendar' && item['calendar'] !== undefined) throw new ServiceError('INVALID_VIEW', 'Calendar settings require a calendar view.');
+  if (type !== 'gantt' && item['gantt'] !== undefined) throw new ServiceError('INVALID_VIEW', 'Gantt settings require a Gantt view.');
   const grouping = item['groupBy'] === undefined ? (type === previous.type ? previous.groupBy : undefined) : item['groupBy'];
-  if (type === 'calendar' && grouping != null) throw new ServiceError('INVALID_VIEW', 'Calendar views do not use record grouping.');
+  if ((type === 'calendar' || type === 'gantt') && grouping != null) throw new ServiceError('INVALID_VIEW', 'Calendar and Gantt views do not use record grouping.');
   if (type === 'board' && (typeof grouping !== 'string' || !table.fields.some(field => field.id === grouping && field.type === 'singleSelect'))) {
     throw new ServiceError('INVALID_VIEW', 'A board needs a single-select grouping field. Choose another field or change the view to a grid.');
   }
@@ -70,10 +80,10 @@ export function parseView(table: Table, input: unknown, previous = defaultView(t
   if (!Number.isInteger(frozenColumns) || (frozenColumns as number) < 0 || (frozenColumns as number) > visible) {
     throw new ServiceError('INVALID_VIEW', 'Freeze a whole number of leading columns, up to the number of visible fields.');
   }
-  const { groupBy: _previousGroup, groupMeasures: _previousMeasures, calendar: _previousCalendar, ...base } = previous;
+  const { groupBy: _previousGroup, groupMeasures: _previousMeasures, calendar: _previousCalendar, gantt: _previousGantt, ...base } = previous;
   return { ...base, name: item['name'] === undefined ? previous.name : schemaName(item['name']), query: saved, columns,
     rowHeight: rowHeight as RowHeight, frozenColumns: frozenColumns as number,
-    ...(type === 'board' ? { type, groupBy: groupBy as string } : type === 'calendar' ? { type, calendar: calendar! }
+    ...(type === 'board' ? { type, groupBy: groupBy as string } : type === 'calendar' ? { type, calendar: calendar! } : type === 'gantt' ? { type, gantt: gantt! }
       : { type, ...(groupBy === undefined ? {} : { groupBy }) }),
     ...(measures.length ? { groupMeasures: measures } : {}) };
 }

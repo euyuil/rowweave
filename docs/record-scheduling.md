@@ -1,6 +1,6 @@
 # Record scheduling
 
-Move a record's configured date range or adjust one boundary through the shared service. These operations use a saved calendar's start/end fields and time zone. They are available through HTTP, the SDK, CLI and MCP; direct timeline interaction is a subsequent delivery step.
+Move a record's configured date range or adjust one boundary through the shared service. These operations use a saved calendar or Gantt view's start/end fields and time zone. They are available through HTTP, the SDK, CLI and MCP, and through pointer, keyboard and explicit controls in the [Gantt view](gantt-views.md).
 
 ## Request
 
@@ -49,4 +49,4 @@ After a conflict, reread the record and view and reconcile the intended change. 
 
 ## Verification
 
-SQLite regressions cover leap dates, points, resizing, daylight-saving gaps/folds, duration preservation, skipped dates, read-only fields, formula errors, invalid requests, atomic version conflicts, history, undo and restart. Real HTTP/SDK/CLI/MCP tests compare writes and conflict responses, authentication and history behavior. The independently installed SDK compiles a scheduling consumer. This service-only change does not claim timeline UI or native-input acceptance.
+SQLite regressions cover leap dates, points, resizing, daylight-saving gaps/folds, duration preservation, skipped dates, read-only fields, formula errors, invalid requests, atomic version conflicts, history, undo and restart. Real HTTP/SDK/CLI/MCP tests compare writes and conflict responses, authentication and history behavior. The independently installed SDK compiles a scheduling consumer. [Gantt acceptance](gantt-views.md#verification) covers the UI separately; native input remains a final-candidate check.

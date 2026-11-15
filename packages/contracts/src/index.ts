@@ -341,6 +341,7 @@ export interface GroupLayout {
 export const maxCalendarDays = 62;
 export const maxCalendarPreview = 5;
 export interface CalendarConfig { startFieldId: string; endFieldId?: string; timeZone: string }
+export interface GanttConfig extends CalendarConfig { scale: 'day' | 'week' }
 export interface CalendarQuery extends Pick<RecordQuery, 'filter' | 'sort' | 'search' | 'fields' | 'expectedRevision' | 'expectedDateContext'> {
   calendar?: CalendarConfig;
   viewId?: string;
@@ -386,9 +387,10 @@ interface ViewDefinition {
 }
 
 export type GridView = ViewDefinition & (
-  { type: 'grid'; groupBy?: string | string[]; calendar?: never } |
-  { type: 'board'; groupBy: string; calendar?: never } |
-  { type: 'calendar'; calendar: CalendarConfig; groupBy?: never }
+  { type: 'grid'; groupBy?: string | string[]; calendar?: never; gantt?: never } |
+  { type: 'board'; groupBy: string; calendar?: never; gantt?: never } |
+  { type: 'calendar'; calendar: CalendarConfig; groupBy?: never; gantt?: never } |
+  { type: 'gantt'; gantt: GanttConfig; groupBy?: never; calendar?: never }
 );
 
 export interface ViewCreate {
@@ -397,8 +399,9 @@ export interface ViewCreate {
   columns?: ViewColumn[];
   rowHeight?: RowHeight;
   frozenColumns?: number;
-  type?: 'grid' | 'board' | 'calendar';
+  type?: 'grid' | 'board' | 'calendar' | 'gantt';
   calendar?: CalendarConfig;
+  gantt?: GanttConfig;
   groupBy?: string | string[] | null;
   groupMeasures?: SummaryMeasure[];
 }
