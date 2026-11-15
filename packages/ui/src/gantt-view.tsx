@@ -53,7 +53,8 @@ export function GanttView({ table, view, search, generation, revision, dateConte
     if (locked || !savedFocus.current) return;
     const { element, key, recordId } = savedFocus.current; savedFocus.current = undefined;
     const target = element.isConnected && element.getAttribute('data-gantt-focus') === key ? element
-      : recordId ? viewport.current?.querySelector<HTMLElement>('[data-gantt-focus="title:' + CSS.escape(recordId) + '"]') : undefined;
+      : recordId ? viewport.current?.querySelector<HTMLElement>('[data-gantt-focus="title:' + CSS.escape(recordId) + '"]')
+        ?? viewport.current?.closest<HTMLElement>('.gantt-view') : undefined;
     if (document.activeElement === document.body) target?.focus({ preventScroll: true });
   }, [locked]);
   const moveRange = (date: string) => { setAnchor(ganttStart(date, view.gantt.scale)); if (viewport.current) viewport.current.scrollLeft = 0; };

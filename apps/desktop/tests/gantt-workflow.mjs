@@ -125,6 +125,16 @@ export async function verifyGanttWorkflow(page, application) {
   await row(1).getByRole('button', { name: 'Before range · Show date', exact: true }).click();
   await bar(1).waitFor();
   await timeline.getByLabel('Timeline start', { exact: true }).fill('2024-02-26');
+  let configured = (await call(root + '/views')).find(view => view.name === 'Project plan');
+  configured = await call(root + '/views/' + configured.id, 'PATCH', { expectedVersion: configured.version,
+    query: { filter: { conjunction: 'and', conditions: [{ fieldId: start, operator: 'gte', value: '2024-03-02' }] } } });
+  await timeline.focus(); await timeline.getByText('1–1 of 1 record', { exact: true }).waitFor();
+  await bar(0).focus(); await page.keyboard.press('ArrowLeft');
+  await timeline.getByText('No matching records.', { exact: true }).waitFor();
+  await page.waitForFunction(() => document.activeElement === document.querySelector('.gantt-view'));
+  assert.equal((await current(0)).values[start], '2024-03-01');
+  configured = await call(root + '/views/' + configured.id, 'PATCH', { expectedVersion: configured.version, query: {} });
+  await timeline.focus(); await bar(0).waitFor();
   await timeline.getByLabel('Timeline scale', { exact: true }).selectOption('week');
   await timeline.locator('.gantt-axis > span').nth(167).waitFor();
   await timeline.getByLabel('Timeline scale', { exact: true }).selectOption('day');
