@@ -53,6 +53,8 @@ For each row, record merged PRs, observed behavior, regression evidence, current
 
 ## Progress
 
+- The intermittent exit investigation reproduced a concrete shared-service defect without UI automation: a connected socket that had never sent complete HTTP headers kept shutdown pending for more than 35 seconds. Two real-socket regressions failed on the previous implementation. Shutdown now closes only those unrequested sockets, retaining graceful handling for accepted requests, calculations and writes. Type checking, production build and all 428 Node tests on the current main-based change passed without skips, including the accepted-calculation/queued-write drain regression. This is an independent lifecycle fix; its CI and a final candidate with repeated clean desktop shutdown remain required. The experiment does not establish that every earlier isolated desktop timeout had the same cause.
+
 - 2026-11-15 scope decision: the owner excluded the five modules listed above while retaining gallery and the other required outcomes. PR [#105](https://github.com/euyuil/rowweave/pull/105) merged as `eb9038b4454520cf911f4830838187adb200c292` after exact-head Linux/Windows CI passed. Its final clean portable source was `8fe26caccd6c20e4f20fa222c1e9e5a222af38f5`; final calendar/Gantt refresh and restart checks passed. This closes Calendar and Gantt, not the overall goal. Earlier progress entries retain the checks that were pending at those earlier checkpoints.
 
 - Baseline: PRs #54–#58 delivered two-way links, connected scalar formulas, one-level enum grouping, relative calendar dates and their verification report. They are prerequisites, not closure of this inventory.
