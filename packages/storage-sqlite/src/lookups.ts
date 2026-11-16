@@ -5,9 +5,14 @@ import { maxFormulaArrayItems } from '../../core/src/array-formulas.js';
 
 const literal = (text: string) => `'${text.replaceAll("'", "''")}'`;
 
+function isTwoHopSummary(field: Field): boolean {
+  const target = field.lookupResult!;
+  return isLookupSummary(field) && target.type === 'lookup' && !isLookupSummary(target) && target.lookupResult!.type !== 'lookup';
+}
+
 function chainedLookupSql(field: Field, alias = 'r', depth = 0): string {
   const targetField = field.lookupResult!;
-  if (targetField.type !== 'lookup') return `json_object('value', ${isLookupSummary(field) ? lookupSql(field, alias) : `json(${lookupSql(field, alias)})`}, 'error', ${lookupErrorSql(field, alias)})`;
+  if (targetField.type !== 'lookup' || isTwoHopSummary(field)) return `json_object('value', ${isLookupSummary(field) ? lookupSql(field, alias) : `json(${lookupSql(field, alias)})`}, 'error', ${lookupErrorSql(field, alias)})`;
   const target = `linked${depth}`, edge = `link${depth}`, result = `computed${depth}`, choice = `member${depth}`, input = `lookup_inputs${depth}`;
   const array = !isLookupSummary(targetField), summary = isLookupSummary(field);
   const value = `${input}.value`;
@@ -33,6 +38,7 @@ function chainedLookupSql(field: Field, alias = 'r', depth = 0): string {
 }
 
 export function lookupSql(field: Field, alias = 'r'): string {
+  if (isTwoHopSummary(field)) return aggregateSql(field, alias);
   if (field.lookupResult!.type === 'lookup') return `json_extract(${chainedLookupSql(field, alias)}, '$.value')`;
   if (isLookupSummary(field)) return aggregateSql(field, alias);
   const literal = (text: string) => `'${text.replaceAll("'", "''")}'`;
@@ -46,13 +52,13 @@ export function lookupSql(field: Field, alias = 'r'): string {
     ORDER BY edge.position${multi ? ', CAST(choice.key AS INTEGER)' : ''}))`;
 }
 
-function aggregateValueSql(field: Field, error: boolean): string {
+function aggregateValueSql(field: Field, error: boolean, source = field): string {
   const literal = (text: string) => `'${text.replaceAll("'", "''")}'`;
-  const path = literal(`$.${JSON.stringify(field.lookup!.fieldId)}`);
+  const path = literal(`$.${JSON.stringify(source.lookup!.fieldId)}`);
   const functions = { count: 'COUNT', sum: 'SUM', average: 'AVG', min: 'MIN', max: 'MAX' };
   const operation = field.lookup!.operation as keyof typeof functions;
   const result = `${functions[operation]}(CAST(json_extract(target.values_json, ${path}) AS REAL))`;
-  const invalid = field.lookupResult!.type === 'formula' ? `MAX(json_extract(target.formula_errors_json, ${path}) IS NOT NULL)` : '0';
+  const invalid = source.lookupResult!.type === 'formula' ? `MAX(json_extract(target.formula_errors_json, ${path}) IS NOT NULL)` : '0';
   return `CASE WHEN ${invalid} THEN ${error ? "'A linked formula has an error.'" : 'NULL'}
     WHEN abs(${result}) > 1.7976931348623157e308 THEN ${error ? "'The linked summary exceeds the numeric range.'" : 'NULL'}
     ELSE ${error ? 'NULL' : result} END`;
@@ -60,8 +66,13 @@ function aggregateValueSql(field: Field, error: boolean): string {
 
 function aggregateSql(field: Field, alias: string, error = false): string {
   const literal = (text: string) => `'${text.replaceAll("'", "''")}'`;
-  return `(SELECT ${aggregateValueSql(field, error)} FROM relation_edges edge JOIN records target ON target.id = edge.target_record_id
-    WHERE edge.source_record_id = ${alias}.id AND edge.field_id = ${literal(field.lookup!.relationFieldId)})`;
+  const source = isTwoHopSummary(field) ? field.lookupResult! : field;
+  // A direct numeric lookup has at most 200 scalar members; aggregate its edges without building JSON arrays.
+  const route = source === field ? `WHERE edge.source_record_id = ${alias}.id`
+    : `JOIN relation_edges outer_edge ON edge.source_record_id = outer_edge.target_record_id
+      WHERE outer_edge.source_record_id = ${alias}.id AND outer_edge.field_id = ${literal(field.lookup!.relationFieldId)}`;
+  return `(SELECT ${aggregateValueSql(field, error, source)} FROM relation_edges edge JOIN records target ON target.id = edge.target_record_id
+    ${route} AND edge.field_id = ${literal(source.lookup!.relationFieldId)})`;
 }
 
 export function lookupSummaryRowsSql(field: Field): string {
@@ -73,6 +84,7 @@ export function lookupSummaryRowsSql(field: Field): string {
 }
 
 function lookupErrorSql(field: Field, alias = 'r'): string {
+  if (isTwoHopSummary(field)) return aggregateSql(field, alias, true);
   if (field.lookupResult!.type === 'lookup') return `json_extract(${chainedLookupSql(field, alias)}, '$.error')`;
   if (isLookupSummary(field)) return aggregateSql(field, alias, true);
   if (field.lookupResult!.type !== 'formula') return 'NULL';
