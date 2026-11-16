@@ -1,6 +1,16 @@
 # Chained lookups
 
-A lookup can target another lookup in its linked table. For example, a portfolio can collect item amounts through its collections, or sum the totals already calculated on those collections. Use the existing field-create/update operations through HTTP, SDK, CLI or MCP; the desktop target chooser is tracked separately in the [active delivery plan](gap-closure-plan.md).
+A lookup can target another lookup in its linked table. For example, a portfolio can collect item amounts through its collections, or sum the totals already calculated on those collections. Configure it in the shared desktop/Harness field editor or use the existing field-create/update operations through HTTP, SDK, CLI or MCP.
+
+## Configure a lookup
+
+Open **Manage fields**, choose **Add field**, select **Lookup**, then choose the linked field and the field to look up. Existing lookup targets are marked **(Lookup)**; duplicate names include their stable field IDs so they can be distinguished. Values can include text, selections, files or numbers. Numeric summaries offer number fields, numeric formulas and lookups returning numbers, including arrays or other summaries.
+
+Reopen **Configure** to change the target or operation without replacing the field identity. Compatible selections remain selected when switching operations. The field itself is omitted from its target list; indirect cycles are rejected by the service with an explanation, retaining the draft and leaving saved data unchanged. If the target schema cannot be loaded, the field draft remains visible and saving is unavailable; cancel and reopen after the connection is restored.
+
+Calculated values remain read-only. Nested selections retain labels/colors, numeric results retain the appropriate formatting, and files download from their original owning table. External updates reach the grid after an open record draft is saved or canceled; a draft is not overwritten by a changed lookup result.
+
+## Shared interfaces
 
 ```ts
 const table = await api.createField(portfolios.id, {
@@ -34,6 +44,8 @@ SQLite format 38 marks support for lookup-to-lookup targets. Upgrading preserves
 ## Verification and performance
 
 SQLite tests cover typed flattening, empty/scalar summaries, pure and mixed cycles, table cycles, transitive schema/view validation, operation changes, error recovery, numeric overflow, file ownership, typed queries/CSV, the 40,000-item boundary, sixteen mixed levels, migration, restart and backup. Real SDK/CLI/MCP tests create chained fields and compare their schemas, results, read-only errors and stale revisions through authenticated HTTP.
+
+Automated desktop coverage exercises array/scalar target choices, duplicate names, target-read failure, numeric/select/file presentation, attachment bytes, protected refresh, cycle-error drafts, read-only clipboard values and restart. Installed Harness coverage exercises its packaged field editor, numeric results, browser file downloads and external refresh. These tests do not replace final native input or file-dialog acceptance.
 
 Run `npm run build`, then `node scripts/benchmark-chained-lookups.mjs`. It creates isolated data under `.artifacts/`, records the exact source state, machine, runtime and raw samples, and checks every result outside the timed interval. The workload has 1,000 items, 1,000 collections, 10,000 portfolios and 25,000 links, yielding ten numeric members per portfolio. Each read warms twice and records twenty samples. Dataset creation is measured separately.
 

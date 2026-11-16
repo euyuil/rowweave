@@ -543,6 +543,10 @@ test('SDK, CLI and MCP share chained lookup schemas, queries, errors and revisio
   assert.match(text(await call('records_query', { tableId: table.id, query: stale })), /DATA_CHANGED/);
   await assert.rejects(run(['records', 'query', table.id], stale), error => /DATA_CHANGED/.test(String((error as { stderr: string }).stderr)));
   assert.match(text(await call('records_update', { tableId: table.id, records: [{ id: root.id, expectedVersion: root.version, values: { [second]: [1] } }] })), /READ_ONLY_FIELD/);
+  const beforeCycle = await api.getTable(table.id);
+  await assert.rejects(api.updateField(table.id, first, { expectedVersion: beforeCycle.version,
+    lookup: { relationFieldId: link, fieldId: second } }), { code: 'INVALID_FORMULA' });
+  assert.deepEqual(await api.getTable(table.id), beforeCycle);
 });
 
 test('MCP and CLI create paired fields and update the same relationship from either side', async t => {

@@ -14,6 +14,7 @@ import { verifyRelationWorkflow } from './relation-workflow.mjs';
 import { verifyReciprocalWorkflow } from './reciprocal-workflow.mjs';
 import { verifyRelationPairing, verifyRelationPairingAfterRestart } from './relation-pairing-workflow.mjs';
 import { verifyLookupWorkflow } from './lookup-workflow.mjs';
+import { verifyChainedLookups, verifyChainedLookupsAfterRestart } from './chained-lookup-workflow.mjs';
 import { verifyCsvWorkflow } from './csv-workflow.mjs';
 import { verifySummaryWorkflow } from './summary-workflow.mjs';
 import { verifyColumnWorkflow } from './column-workflow.mjs';
@@ -295,6 +296,7 @@ try {
   await verifyReciprocalWorkflow(page, application);
   const relationPairing = await verifyRelationPairing(page, application);
   await verifyLookupWorkflow(page);
+  const chainedLookups = await verifyChainedLookups(page, application);
   await verifyCsvWorkflow(page, application, dataDirectory);
   await verifySummaryWorkflow(page);
   await verifyColumnWorkflow(page);
@@ -348,6 +350,7 @@ try {
   await verifyGanttAfterRestart(page, gantt);
   await verifyGalleryAfterRestart(page, gallery);
   await verifyRelationPairingAfterRestart(page, relationPairing);
+  await verifyChainedLookupsAfterRestart(page, chainedLookups);
   for (const name of ['Projects 项目', 'Tasks']) {
     await choose(name);
     await page.getByRole('heading', { name, exact: true }).waitFor();

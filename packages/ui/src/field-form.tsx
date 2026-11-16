@@ -7,7 +7,7 @@ import { FieldInput } from './field-input.js';
 import { FormulaPreviewPanel } from './formula-preview.js';
 import { fromFormValue, toFormValue, type FormValue } from './field-input-values.js';
 import { rewriteFormulaReferences } from '../../core/src/formulas.js';
-import { isReadOnlyField, valueField } from '../../contracts/src/index.js';
+import { isReadOnlyField, lookupElementField } from '../../contracts/src/index.js';
 
 export const fieldTypeNames: Record<FieldType, string> = {
   text: 'Text', multiline: 'Multiline text', url: 'URL', number: 'Number', autoNumber: 'Automatic number', checkbox: 'Checkbox', date: 'Date',
@@ -44,8 +44,10 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved, ancho
   const [lookupField, setLookupField] = useState(field?.lookup?.fieldId ?? '');
   const [lookupTarget, setLookupTarget] = useState<Table>();
   const [lookupOperation, setLookupOperation] = useState<NonNullable<NonNullable<Field['lookup']>['operation']>>(field?.lookup?.operation ?? 'values');
-  const lookupFields = lookupTarget?.fields.filter(candidate => !['relation', 'lookup'].includes(candidate.type) &&
-    (lookupOperation === 'values' || valueField(candidate).type === 'number')) ?? [];
+  const lookupFields = lookupTarget?.fields.filter(candidate => candidate.type !== 'relation' && candidate.id !== field?.id &&
+    (lookupOperation === 'values' || lookupElementField(candidate).type === 'number')) ?? [];
+  const lookupFieldLabel = (candidate: Field) => candidate.name + (candidate.type === 'lookup' ? ' (Lookup)' : '') +
+    (lookupTarget!.fields.filter(other => other.name === candidate.name).length > 1 ? ` (${candidate.id})` : '');
   useEffect(() => {
     if (!lookupTarget) return;
     setLookupField(current => lookupFields.some(candidate => candidate.id === current) ? current : lookupFields[0]?.id ?? '');
@@ -181,10 +183,10 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved, ancho
           </select></label>
           <label className="form-field">Look up field<select required aria-label="Look up field" value={lookupField} disabled={!lookupTarget} onChange={event => setLookupField(event.target.value)}>
             {!lookupFields.length && <option value="">No compatible fields</option>}
-            {lookupFields.map(field => <option key={field.id} value={field.id}>{field.name}</option>)}
+            {lookupFields.map(field => <option key={field.id} value={field.id}>{lookupFieldLabel(field)}</option>)}
           </select></label>
-          <p className="form-note">Values follow the linked records and cannot be edited here. Add a linked-record field first to use a lookup.</p>
-          {lookupOperation !== 'values' && <p className="form-note">Uses numeric values, including numeric formulas. Empty values are skipped; count returns 0 when none exist, while other summaries stay empty.</p>}
+          <p className="form-note">Values follow the linked records and cannot be edited here. Nested lookup values are combined in the same order.</p>
+          {lookupOperation !== 'values' && <p className="form-note">Uses numeric fields, formulas and lookups. Empty values are skipped; count returns 0 when none exist, while other summaries stay empty.</p>}
         </>}
         {type === 'relation' && <>
           <label className="form-field">Link to table<select required disabled={!!field?.relation?.inverseFieldId} aria-label="Link to table" value={targetId} onChange={event => { setTargetId(event.target.value); setDefaultValue(null); }}>
