@@ -31,12 +31,12 @@ export async function verifyViewportCache(page, application) {
     ]).flat();
     table = await call(root + '/fields', 'POST', { expectedVersion: table.version, name: 'Group', type: 'singleSelect', options });
     const field = table.fields[1];
-    const records = (await call(root + '/records', 'POST', options.flatMap(option => Array.from({ length: option.id.startsWith('heavy') ? 100 : 1 }, (_, index) => ({
-      values: { [name]: option.name + ' record ' + index, [field.id]: option.id },
-    }))))).records;
     const view = (await call(root + '/views'))[0];
     const nextPage = page.waitForResponse(response => new URL(response.url()).pathname === root + '/views/' + view.id + '/query' &&
       response.ok() && response.request().postDataJSON()?.offset === 100);
+    const records = (await call(root + '/records', 'POST', options.flatMap(option => Array.from({ length: option.id.startsWith('heavy') ? 100 : 1 }, (_, index) => ({
+      values: { [name]: option.name + ' record ' + index, [field.id]: option.id },
+    }))))).records;
     await waitForLiveSync(page);
     await nextPage;
     const scroller = page.locator('.dvn-scroller');
@@ -79,7 +79,6 @@ export async function verifyViewportCache(page, application) {
     await page.getByText('All changes saved', { exact: true }).waitFor();
     assert.equal(await cell(2).textContent(), 'Visible 0 record 0');
     await page.getByRole('button', { name: 'Redo', exact: true }).click();
-    await waitForAutosave(page);
     await waitForAutosave(page);
     await page.getByText('All changes saved', { exact: true }).waitFor(); await ready();
     assert.equal((await call(root + '/records/' + records[100].id)).values[name], '保留可见草稿');

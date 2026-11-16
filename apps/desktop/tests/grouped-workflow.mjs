@@ -14,11 +14,14 @@ export async function verifyGroupedWorkflow(page, app) {
   }, { path, method, input });
   const ready = () => page.waitForFunction(() => document.querySelector('.grid-host')?.getAttribute('aria-busy') === 'false');
   const select = async (row, column = 0) => {
+    await waitForLiveSync(page);
     await ready();
     await page.locator('canvas').first().waitFor({ state: 'visible' });
     const canvas = await page.locator('canvas').first().boundingBox();
     await page.mouse.click(canvas.x + 100 + column * 180, canvas.y + 58 + row * 36, { delay: 50 });
+    await page.waitForFunction(() => document.querySelector('canvas')?.contains(document.activeElement) || !!document.querySelector('.rowweave-cell-editor'));
     if (await page.locator('.rowweave-cell-editor').count()) await page.keyboard.press('Escape');
+    await page.waitForFunction(() => document.querySelector('canvas')?.contains(document.activeElement));
   };
   const copy = async expected => {
     await page.evaluate(() => navigator.clipboard.writeText('pending copy'));
@@ -74,7 +77,6 @@ export async function verifyGroupedWorkflow(page, app) {
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   await page.getByText('All changes saved', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Redo', exact: true }).click();
-  await waitForAutosave(page);
   await waitForAutosave(page);
   await page.getByText('All changes saved', { exact: true }).waitFor();
   await ready();
