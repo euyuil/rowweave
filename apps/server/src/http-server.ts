@@ -22,6 +22,12 @@ export async function startServer({ service, token, calculations: suppliedCalcul
   const expectedAuth = Buffer.from(`Bearer ${token}`);
   const calculations = suppliedCalculations ?? new Calculations({ refresh: async () => service.refreshCalculations(), close: async () => {} }, false);
   const unrequestedSockets = new Set<Socket>();
+  const streams = new Set<ServerResponse>();
+  const notify = () => { for (const stream of streams) if (!stream.write('{}\n')) stream.destroy(); };
+  const unsubscribe = calculations.subscribe(notify);
+  // Heartbeats also invalidate date-dependent queries and cover reconnect gaps.
+  const heartbeat = setInterval(notify, 15_000);
+  heartbeat.unref();
   const server = createServer((request, response) => {
     unrequestedSockets.delete(request.socket);
     void handle(request, response).catch(error => {
@@ -78,6 +84,14 @@ export async function startServer({ service, token, calculations: suppliedCalcul
       throw new ServiceError('UNAUTHORIZED', 'A valid access token is required.', 401);
     }
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+    if (url.pathname === '/workspace/events' && request.method === 'GET') {
+      if (streams.size >= 64) throw new ServiceError('TOO_MANY_SUBSCRIBERS', 'Too many live connections. Try again shortly.', 503);
+      response.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
+      streams.add(response);
+      response.once('close', () => streams.delete(response));
+      response.write('{}\n');
+      return;
+    }
     if (url.pathname === '/workspace/state' && request.method === 'POST') {
       send(response, 200, service.workspaceState(await readJson(request)));
       return;
@@ -259,6 +273,9 @@ export async function startServer({ service, token, calculations: suppliedCalcul
   return {
     url: `http://${authority}`,
     close: async () => {
+      clearInterval(heartbeat); unsubscribe();
+      for (const stream of streams) stream.end();
+      streams.clear();
       calculations.stop();
       server.closeIdleConnections();
       const closed = new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));

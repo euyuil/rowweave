@@ -450,6 +450,9 @@ export interface RecordUpdate {
   id: string;
   expectedVersion: number;
   values: Record<string, CellValue>;
+  expectedValues?: Record<string, CellValue>;
+  expectedFieldVersions?: Record<string, number>;
+  expectedSchemaVersion?: number;
 }
 
 export interface RecordSchedule {
@@ -475,6 +478,7 @@ export interface DeleteResult {
 export interface BatchResult {
   records: RowRecord[];
   batchId?: string;
+  previousFieldVersions?: Record<string, Record<string, number>>;
 }
 
 export const maxBatchRecords = 2_000;

@@ -1,3 +1,4 @@
+import { waitForLiveSync } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyHistoryWorkflow(page, application) {
@@ -29,10 +30,10 @@ export async function verifyHistoryWorkflow(page, application) {
   const read = () => call(`${root}/records/${record.id}`);
   const dialog = page.getByRole('dialog'), history = dialog.getByRole('region', { name: 'Record history', exact: true });
   const open = async () => {
-    await page.getByRole('button', { name: 'Reload', exact: true }).click();
+    await waitForLiveSync(page);
     await page.waitForFunction(() => document.querySelector('.grid-host')?.getAttribute('aria-busy') === 'false');
     const bounds = await page.locator('canvas').first().boundingBox();
-    await page.mouse.click(bounds.x + 15, bounds.y + 58);
+    if (await page.getByRole('button', { name: 'Open record', exact: true }).isDisabled()) await page.mouse.click(bounds.x + 15, bounds.y + 58);
     await page.getByRole('button', { name: 'Open record', exact: true }).click();
     await dialog.getByRole('heading', { name: 'Launch review', exact: true }).waitFor();
   };
@@ -64,6 +65,9 @@ export async function verifyHistoryWorkflow(page, application) {
   await confirmation.getByRole('button', { name: 'Cancel restoration', exact: true }).click();
   assert.deepEqual(await read(), record);
   await dialog.getByRole('button', { name: 'Details', exact: true }).click();
+  const outage = route => route.request().method() === 'PATCH'
+    ? route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: { code: 'TEST_OUTAGE', message: 'History draft save unavailable' } }) }) : route.continue();
+  await page.route('**' + root + '/records', outage);
   await dialog.getByLabel('Cost', { exact: true }).fill('99');
   await showHistory();
   await history.getByRole('status').filter({ hasText: 'Your unsaved changes are kept' }).waitFor();
@@ -74,6 +78,7 @@ export async function verifyHistoryWorkflow(page, application) {
   assert.equal(await dialog.getByLabel('Cost', { exact: true }).inputValue(), '99');
   await showHistory(); await page.keyboard.press('Escape');
   await dialog.getByRole('button', { name: 'Discard changes', exact: true }).click();
+  await page.unroute('**' + root + '/records', outage);
   assert.deepEqual(await read(), record);
   await open(); await showHistory(); await selectOriginal();
   await details.getByRole('button', { name: 'Restore after change', exact: true }).click();

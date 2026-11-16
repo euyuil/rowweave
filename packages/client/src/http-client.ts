@@ -1,4 +1,5 @@
 import type { CalculationRefresh, CalculationStatus, FormulaPreview, FormulaPreviewRequest } from '../../contracts/src/index.js';
+import { workspaceEvents } from './workspace-events.js';
 import type { WorkspaceState, WorkspaceStateRequest } from '../../contracts/src/index.js';
 import type { GroupQuery, GroupLayout } from '../../contracts/src/index.js';
 import type { CalendarLayoutRequest, CalendarRecordsRequest, CalendarLayout, CalendarPage } from '../../contracts/src/index.js';
@@ -64,6 +65,7 @@ export function createWorkspaceClient(connection: Connection, request: typeof fe
   const write = <T>(path: string, method: string, body: unknown, signal?: AbortSignal) =>
     call<T>(path, { method, body: JSON.stringify(body), ...(signal ? { signal } : {}) });
   const api = {
+    watchWorkspace: workspaceEvents(connection, request),
     workspaceState: (input: WorkspaceStateRequest = {}, signal?: AbortSignal) => write<WorkspaceState>('/workspace/state', 'POST', input, signal),
     uploadAttachment: (id: string, input: AttachmentUpload) => write<Attachment>(`${root(id)}/attachments`, 'POST', input),
     listAttachments: (id: string, input: AttachmentQuery = {}, signal?: AbortSignal) => write<AttachmentPage>(`${root(id)}/attachments/query`, 'POST', input, signal),
@@ -85,7 +87,7 @@ export function createWorkspaceClient(connection: Connection, request: typeof fe
     deleteField: (id: string, fieldId: string, expectedVersion: number) => write<Table>(field(id, fieldId), 'DELETE', { expectedVersion }),
     previewConversion: (id: string, fieldId: string, input: FieldConversion) => write<ConversionPreview>(`${field(id, fieldId)}/conversion/preview`, 'POST', input),
     applyConversion: (id: string, fieldId: string, input: FieldConversion) => write<Table>(`${field(id, fieldId)}/conversion/apply`, 'POST', input),
-    getRecord: (id: string, recordId: string) => call<RowRecord>(`${root(id)}/records/${encodeURIComponent(recordId)}`),
+    getRecord: (id: string, recordId: string, signal?: AbortSignal) => call<RowRecord>(`${root(id)}/records/${encodeURIComponent(recordId)}`, signal ? { signal } : {}),
     recordHistory: (id: string, recordId: string, query: RecordHistoryQuery = {}) => write<RecordHistoryPage>(`${record(id, recordId)}/history`, 'POST', query),
     recordBatches: (id: string, query: RecordHistoryQuery = {}) => write<RecordBatchPage>(`${root(id)}/batches/query`, 'POST', query),
     recordBatchChanges: (id: string, batchId: string, query: RecordHistoryQuery = {}) => write<RecordBatchChanges>(`${root(id)}/batches/${encodeURIComponent(batchId)}`, 'POST', query),

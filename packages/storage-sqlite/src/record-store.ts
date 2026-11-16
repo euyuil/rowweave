@@ -899,13 +899,23 @@ export class SqliteRecordStore implements RecordStore {
     this.checkSchema(id, schemaVersion);
     const table = this.getTable(id);
     const calculate = compileFormulas(table, { skipLinked: true, now: this.transactionTime! });
+    const previousFieldVersions: Record<string, Record<string, number>> = {};
     const records = updates.map(update => {
       const stored = read.get(update.id, id) as unknown as StoredRecord | undefined;
       if (!stored) throw new ServiceError('RECORD_NOT_FOUND', `Record ${update.id} does not exist.`, 404);
-      if (stored.version !== update.expectedVersion) {
-        throw new ServiceError('VERSION_CONFLICT', `Record ${update.id} changed. Reload before saving again.`, 409);
-      }
       const record = this.decode(stored);
+      const matches = update.expectedValues
+        ? Object.entries(update.expectedValues).every(([field, value]) => {
+          const version = update.expectedFieldVersions?.[field] ?? update.expectedVersion;
+          return version <= stored.version && JSON.stringify(record.values[field] ?? null) === JSON.stringify(value) &&
+            (version === stored.version || !this.history.fieldChangedSince(id, record.id, field, version));
+        })
+        : stored.version === update.expectedVersion;
+      if (!matches || update.expectedVersion > stored.version) {
+        throw new ServiceError('VERSION_CONFLICT', `Record ${update.id} changed in a field you edited. Your changes have not been applied.`, 409);
+      }
+      if (update.expectedValues) previousFieldVersions[update.id] = Object.fromEntries(Object.keys(update.values)
+        .map(field => [field, this.history.lastFieldVersion(id, update.id, field)]));
       const values = { ...record.values, ...update.values };
       this.attachments.validateValues(table, values, true);
       this.recordTimes.edit(table.fields, values);
@@ -920,7 +930,9 @@ export class SqliteRecordStore implements RecordStore {
     const linked = this.relations.write(table.fields, updates);
     for (const record of records) if (linked.values.has(record.id)) record.values = linked.values.get(record.id)!;
     const computed = this.finishRecordWrite(id, records.map(record => record.id), linked);
-    return { batchId: this.history.currentBatchId(), records: this.hydrateRecords(table, records.map(record => computed.has(record.id) ? this.readRecord(id, record.id) : record)) };
+    return { batchId: this.history.currentBatchId(),
+      ...(Object.keys(previousFieldVersions).length ? { previousFieldVersions } : {}),
+      records: this.hydrateRecords(table, records.map(record => computed.has(record.id) ? this.readRecord(id, record.id) : record)) };
   }
 
   close(): void {

@@ -1,3 +1,4 @@
+import { waitForLiveSync, waitForAutosave, closeSavedRecord } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyBoardWorkflow(page) {
@@ -33,7 +34,7 @@ export async function verifyBoardWorkflow(page) {
     }
   };
   page.on('request', capture);
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await page.getByText('506 records · 4 fields', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'New view', exact: true }).click();
   await page.getByLabel('View name', { exact: true }).fill('By status');
@@ -59,7 +60,7 @@ export async function verifyBoardWorkflow(page) {
   await page.screenshot({ path: '.artifacts/desktop-board-record-panel.png' });
   assert.equal(await page.getByLabel('Notes', { exact: true }).inputValue(), 'Hidden note 0');
   await page.getByLabel('Name', { exact: true }).fill('Moved task');
-  await page.getByRole('button', { name: 'Save record', exact: true }).click();
+  await closeSavedRecord(page);
   await doing.getByRole('button', { name: 'Moved task', exact: true }).waitFor();
   await todo.getByRole('button', { name: '+ New record', exact: true }).click();
   assert.equal(await page.getByLabel('Status', { exact: true }).inputValue(), 'todo');
@@ -112,11 +113,11 @@ export async function verifyBoardWorkflow(page) {
   await page.keyboard.press('Enter');
   await page.getByRole('textbox', { name: 'Cell value', exact: true }).fill('Keep this draft');
   await page.keyboard.press('Enter');
-  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
+  await waitForAutosave(page);
   await page.getByRole('tab', { name: 'By status', exact: true }).click();
   await page.getByRole('region', { name: 'By status board', exact: true }).waitFor();
-  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await waitForAutosave(page);
+  await waitForAutosave(page);
   await page.getByText('All changes saved', { exact: true }).waitFor();
   await doing.scrollIntoViewIfNeeded();
   await doing.getByRole('button', { name: 'Keep this draft', exact: true }).waitFor();

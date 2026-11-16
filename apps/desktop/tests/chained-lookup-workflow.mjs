@@ -1,3 +1,4 @@
+import { waitForLiveSync, closeSavedRecord } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -136,20 +137,21 @@ export async function verifyChainedLookups(page, application) {
     await call(rootPath(leaf.id) + '/records', 'PATCH', [{ id: items[1].id, expectedVersion: items[1].version, values: { [amount.id]: 30 } }]);
     await page.waitForRequest(request => request.url().endsWith('/workspace/state') && request.postDataJSON()?.tableId === root.id && !!request.postDataJSON()?.viewId);
     assert.equal(await panel.getByLabel('Name', { exact: true }).inputValue(), 'Draft stays');
-    assert.equal(await panel.getByLabel('All amounts', { exact: true }).textContent(), '$0.00, $25.00');
-    await panel.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await panel.getByLabel('All amounts', { exact: true }).filter({ hasText: '$0.00, $30.00' }).waitFor();
+    await closeSavedRecord(page);
     await page.waitForFunction(() => document.querySelector('canvas [aria-rowindex="2"] [role="gridcell"][aria-colindex="3"]')?.textContent === '[0,30]');
     await openChainRecord(page);
     assert.equal(await panel.getByLabel('All amounts', { exact: true }).textContent(), '$0.00, $30.00');
     assert.equal(await panel.getByLabel('Total', { exact: true }).textContent(), '$30.00');
-    assert.equal(await panel.getByLabel('Name', { exact: true }).inputValue(), 'Portfolio');
+    assert.equal(await panel.getByLabel('Name', { exact: true }).inputValue(), 'Draft stays');
     await panel.getByText('1 matching records', { exact: true }).waitFor();
     await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setContentSize(1440, 1100));
     await page.waitForFunction(() => innerWidth === 1440 && innerHeight === 1100);
     await panel.getByRole('button', { name: 'Download nested.bin', exact: true }).waitFor();
     await page.screenshot({ path: '.artifacts/desktop-chained-record.png' });
     await application.evaluate(({ BrowserWindow }, size) => BrowserWindow.getAllWindows()[0].setContentSize(...size), originalSize);
-    await panel.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await panel.getByLabel('Name', { exact: true }).fill('Portfolio');
+    await closeSavedRecord(page);
     await page.getByRole('button', { name: 'Manage fields', exact: true }).click();
     await manage.getByRole('group', { name: 'Total', exact: true }).getByRole('button', { name: 'Configure', exact: true }).click();
     await ready(); assert.equal(await picker.inputValue(), inner.id);
@@ -157,7 +159,7 @@ export async function verifyChainedLookups(page, application) {
     assert.equal((await call(rootPath(root.id) + '/records/' + record.id)).values[total.id], 30);
     const self = await add(root, { name: 'Self', type: 'relation', relation: { tableId: root.id, multiple: true } });
     const back = await add(root, { name: 'Further values', type: 'lookup', lookup: lookup(self, values) });
-    await page.getByRole('button', { name: 'Reload', exact: true }).click();
+    await waitForLiveSync(page);
     await page.getByRole('button', { name: 'Manage fields', exact: true }).click();
     await manage.getByRole('group', { name: 'All amounts', exact: true }).getByRole('button', { name: 'Configure', exact: true }).click();
     await page.getByLabel('Linked field', { exact: true }).selectOption(self.id); await ready();
@@ -172,9 +174,9 @@ export async function verifyChainedLookups(page, application) {
     await page.getByRole('dialog', { name: 'Configure field', exact: true }).getByRole('button', { name: 'Cancel', exact: true }).click();
     await manage.getByRole('button', { name: 'Done', exact: true }).click();
     for (const field of [back, self]) await call(rootPath(root.id) + '/fields/' + field.id, 'DELETE', { expectedVersion: (await call(rootPath(root.id))).version });
-    await page.getByRole('button', { name: 'Reload', exact: true }).click();
+    await waitForLiveSync(page);
     await page.getByText('1 record · 7 fields', { exact: true }).waitFor();
-    await openChainRecord(page); await panel.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await openChainRecord(page); await panel.getByRole('button', { name: 'Close', exact: true }).click();
     await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowRight');
     await page.keyboard.press('Enter'); assert.equal(await page.locator('.rowweave-cell-editor').count(), 0);
     await page.keyboard.press('Control+c');
@@ -199,7 +201,7 @@ export async function verifyChainedLookupsAfterRestart(page, fixture) {
   assert.equal(await panel.getByLabel('All amounts', { exact: true }).textContent(), '$0.00, $30.00');
   assert.equal(await panel.getByLabel('Total', { exact: true }).textContent(), '$30.00');
   await panel.getByRole('button', { name: 'Download nested.bin', exact: true }).waitFor();
-  await panel.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await panel.getByRole('button', { name: 'Close', exact: true }).click();
   for (const table of [fixture.root, fixture.middle, fixture.leaf]) {
     await chooseChainTable(page, table);
     await page.getByRole('button', { name: 'Delete table', exact: true }).click();

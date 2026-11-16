@@ -1,3 +1,4 @@
+import { waitForAutosave, cancelDialog } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 import { waitForResponse } from './wait-for-response.mjs';
 
@@ -25,7 +26,7 @@ export async function verifyCatalogRefresh(page, application) {
   await item('Catalog current').waitFor();
   assert.equal(await tableName.inputValue(), 'Local catalog draft 中文');
   assert.equal(await tableName.evaluate(element => element === document.activeElement), true);
-  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   if (!original.length) await page.getByRole('heading', { name: 'Choose a table', exact: true }).waitFor();
   await item('Catalog current').click(); await ready();
   await call('/tables/' + current.id + '/records', 'POST', [{ values: { [current.primaryFieldId]: 'Saved record' } }]);
@@ -51,6 +52,7 @@ export async function verifyCatalogRefresh(page, application) {
   assert.equal(await editor.evaluate(element => element === document.activeElement), true);
   await page.getByRole('heading', { name: 'Catalog current', exact: true }).waitFor();
   await editor.dispatchEvent('compositionend', { data: '中文' }); await page.keyboard.press('Enter');
+  await page.getByRole('alert').filter({ hasText: 'fields changed' }).waitFor();
   await page.getByText('1 unsaved cell', { exact: true }).waitFor();
   other = await create('Catalog destination'); await item(other.name).waitFor();
   await remove(current);

@@ -1,3 +1,4 @@
+import { waitForLiveSync, closeSavedRecord, cancelDialog } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyFormulaWorkflow(page) {
@@ -25,7 +26,7 @@ export async function verifyFormulaWorkflow(page) {
   for (const name of ['Quantity', 'Price']) table = await call(`/tables/${table.id}/fields`, 'POST', { expectedVersion: table.version, name, type: 'number' });
   const quantity = table.fields[1].id, price = table.fields[2].id;
   const row = (await call(`/tables/${table.id}/records`, 'POST', [{ values: { [table.primaryFieldId]: 'Estimate', [quantity]: 3, [price]: 120 } }])).records[0];
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await page.getByText('1 record · 3 fields', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Manage fields', exact: true }).click();
   await page.getByRole('button', { name: 'Add field', exact: true }).click();
@@ -62,11 +63,11 @@ export async function verifyFormulaWorkflow(page) {
   await page.getByRole('button', { name: 'Open record', exact: true }).click();
   assert.equal(await page.getByLabel('Total', { exact: true }).textContent(), '$360.00');
   await page.getByLabel('Quantity', { exact: true }).fill('4');
-  await page.getByRole('button', { name: 'Save record', exact: true }).click();
+  await closeSavedRecord(page);
   await page.getByRole('dialog').waitFor({ state: 'detached' });
   assert.equal((await call(`/tables/${table.id}/records/${row.id}`)).values[formula.id], 480);
   table = await call(`/tables/${table.id}/fields/${quantity}`, 'PATCH', { expectedVersion: table.version, name: 'Hours' });
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await ready();
   await page.getByRole('button', { name: 'Manage fields', exact: true }).click();
   await page.getByRole('group', { name: 'Total', exact: true }).getByRole('button', { name: 'Configure', exact: true }).click();
@@ -81,7 +82,7 @@ export async function verifyFormulaWorkflow(page) {
   await page.getByRole('button', { name: 'Open record', exact: true }).click();
   assert.match(await page.getByLabel('Total', { exact: true }).textContent(), /Division by zero/);
   await page.screenshot({ path: '.artifacts/desktop-formula-error.png' });
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   await page.getByRole('button', { name: 'Delete table', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Delete table', exact: true }).click();
   await page.getByRole('dialog').waitFor({ state: 'detached' });

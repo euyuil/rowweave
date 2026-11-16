@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { closeSavedRecord, waitForLiveSync, registerLiveConnection } from './live-ui.mjs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { once } from 'node:events';
@@ -17,6 +18,7 @@ import { createWorkspaceClient } from '../packages/client/dist/index.js';
 const run = promisify(execFile);
 
 export async function verifyCrossInterfaceWorkflow(connection, harnessPage, tableId, packaged) {
+  registerLiveConnection(harnessPage, connection);
   const directory = await mkdtemp(join(tmpdir(), 'rowweave-interfaces-'));
   const sdk = createWorkspaceClient(connection);
   const environment = { ROWWEAVE_URL: connection.url, ROWWEAVE_TOKEN: connection.token };
@@ -73,11 +75,11 @@ export async function verifyCrossInterfaceWorkflow(connection, harnessPage, tabl
       assert.equal(await page.getByLabel('Budget', { exact: true }).inputValue(), String(expected));
       assert.equal(await page.getByLabel('Reviewed', { exact: true }).inputValue(), 'true');
       await page.getByLabel('Budget', { exact: true }).fill(String(next));
-      await page.getByRole('button', { name: 'Save record', exact: true }).click();
+      await closeSavedRecord(page);
       await page.getByRole('dialog').waitFor({ state: 'detached' });
       assert.equal((await sdk.getRecord(tableId, record.id)).values[budget], next);
     };
-    await harnessPage.getByRole('button', { name: 'Reload', exact: true }).click();
+    await waitForLiveSync(harnessPage);
     await harnessPage.getByText('3 records · 3 fields', { exact: true }).waitFor();
     await editFromUi(harnessPage, 42, 43);
 
@@ -110,7 +112,7 @@ export async function verifyCrossInterfaceWorkflow(connection, harnessPage, tabl
     assert.equal(final.version, 4);
     assert.equal(final.values[budget], 44);
     assert.deepEqual(await cli(['records', 'get', tableId, record.id]), final);
-    await harnessPage.getByRole('button', { name: 'Reload', exact: true }).click();
+    await waitForLiveSync(harnessPage);
     await editFromUi(harnessPage, 44, 45);
     assert.equal((await mcp('records_get', { tableId, recordId: record.id })).version, 5);
     assert.deepEqual(errors, []);

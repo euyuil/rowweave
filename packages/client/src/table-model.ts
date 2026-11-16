@@ -5,6 +5,7 @@ import {
 import { parseTextValue, validateValue } from '../../core/src/field-values.js';
 import { ApiFailure, type TableApi, type TableQuery } from './http-client.js';
 import { sameValue } from './cell-values.js';
+import { LiveHistory } from './live-history.js';
 
 export interface CellEdit {
   row: number;
@@ -41,6 +42,7 @@ export interface TableRefresh {
 }
 
 export class TableModel {
+  readonly liveHistory: LiveHistory;
   table: Table | undefined;
   rowCount = 0;
   saving = false;
@@ -68,6 +70,7 @@ export class TableModel {
   private redoStack: HistoryEntry[] = [];
 
   constructor(private readonly api: TableApi, readonly pageSize = 100, readonly maxPages = 12) {
+    this.liveHistory = new LiveHistory(updates => api.save(updates));
     if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 500 ||
         !Number.isInteger(maxPages) || maxPages < 1) throw new Error('Invalid cache configuration.');
   }
@@ -509,6 +512,7 @@ export class TableModel {
       }
       this.edits = { ...this.edits, rows };
     }
+    if (this.conflicted) this.error = 'The record changed while your edits were pending. Review the current values before retrying.';
     this.emit();
     return true;
   }
@@ -538,6 +542,41 @@ export class TableModel {
       this.saving = false;
       this.emit();
     }
+  }
+
+  acceptSaved(records: RowRecord[]): void {
+    const saved = new Map(records.map(record => [record.id, record]));
+    for (const [index, page] of this.pages) this.pages.set(index, { ...page, records: page.records.map(record => saved.get(record.id) ?? record) });
+    for (const [index, record] of this.visibleRows) this.visibleRows.set(index, saved.get(record.id) ?? record);
+    this.emit();
+  }
+
+  async saveLive(): Promise<void> {
+    if (this.saving || !this.edits.drafts.size) return;
+    this.saving = true; this.error = undefined; this.conflicted = false; this.emit();
+    try {
+      const result = await this.liveHistory.commit(this.table!, [...this.edits.drafts.values()].map(draft => ({ record: draft.base, values: draft.values })));
+      this.lastSavedBatchId = result.batchId;
+      this.edits = { drafts: new Map(), rows: new Map() };
+      this.undoStack = []; this.redoStack = [];
+      this.acceptSaved(result.records);
+    } catch (error) {
+      this.error = error instanceof Error ? error.message : 'Saving failed.';
+      this.conflicted = error instanceof ApiFailure && error.code === 'VERSION_CONFLICT';
+      throw error;
+    } finally { this.saving = false; this.emit(); }
+  }
+
+  async waitForWrite(): Promise<void> {
+    if (!this.saving && !this.liveHistory.busy) return;
+    await new Promise<void>(resolve => {
+      const check = () => {
+        if (this.saving || this.liveHistory.busy) return;
+        unsubscribe(); unwatchHistory(); resolve();
+      };
+      const unsubscribe = this.subscribe(check), unwatchHistory = this.liveHistory.subscribe(check);
+      check();
+    });
   }
 
   async discardAndReload(query?: TableQuery): Promise<void> {

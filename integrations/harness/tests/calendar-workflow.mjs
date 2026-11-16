@@ -1,3 +1,4 @@
+import { waitForLiveSync, closeSavedRecord } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyHarnessCalendar(page, service) {
@@ -10,7 +11,7 @@ export async function verifyHarnessCalendar(page, service) {
   table = service.createField(table.id, { expectedVersion: table.version, name: 'Start', type: 'datetime' });
   const start = table.fields[1].id;
   const record = service.createRecords(table.id, [{ values: { [table.primaryFieldId]: 'Local-zone meeting', [start]: '2024-02-28T18:30:00.000Z' } }]).records[0];
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await page.getByText('1 record · 2 fields', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'New view', exact: true }).click();
   await dialog.getByLabel('View name', { exact: true }).fill('Meetings');
@@ -28,7 +29,7 @@ export async function verifyHarnessCalendar(page, service) {
   await pane.getByText('Feb 29, 2024, 2:30 AM GMT+8', { exact: true }).waitFor();
   await pane.getByRole('button', { name: 'Local-zone meeting', exact: true }).click();
   await dialog.getByLabel('Name', { exact: true }).fill('Edited meeting');
-  await dialog.getByRole('button', { name: 'Save record', exact: true }).click();
+  await closeSavedRecord(page);
   await pane.getByRole('button', { name: 'Edited meeting', exact: true }).waitFor();
   assert.equal(service.getRecord(table.id, record.id).values[table.primaryFieldId], 'Edited meeting');
   await pane.getByRole('button', { name: '+ New record on this date', exact: true }).click();
@@ -43,7 +44,7 @@ export async function verifyHarnessCalendar(page, service) {
   table = service.createField(table.id, { expectedVersion: table.version, name: 'Created', type: 'createdTime' });
   const automatic = table.fields.at(-1).id;
   service.createView(table.id, { name: 'Created dates', type: 'calendar', calendar: { startFieldId: automatic, timeZone: 'UTC' } });
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await page.getByRole('tab', { name: 'Created dates', exact: true }).click();
   const automaticCalendar = page.getByRole('region', { name: 'Created dates calendar', exact: true });
   const date = service.getRecord(table.id, record.id).values[automatic].slice(0, 10);

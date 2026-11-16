@@ -1,3 +1,4 @@
+import { waitForLiveSync, closeSavedRecord } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 function pairingApi(page) {
@@ -39,7 +40,7 @@ export async function verifyRelationPairing(page, application) {
   const sourcePath = '/tables/' + source.id, targetPath = '/tables/' + target.id;
   source = await call(sourcePath + '/fields', 'POST', { expectedVersion: source.version, name: 'Projects', type: 'relation', relation: { tableId: target.id, multiple: true } });
   const field = source.fields.at(-1);
-  await page.getByRole('button', { name: 'Reload', exact: true }).click(); await ready();
+  await waitForLiveSync(page); await ready();
   await page.getByRole('button', { name: 'Manage fields', exact: true }).click();
   const row = manage.getByRole('group', { name: 'Projects', exact: true });
   await row.getByRole('button', { name: 'Pair existing field', exact: true }).click();
@@ -104,7 +105,7 @@ async function verifySelfPairingRecovery(page, call, create) {
   const [forward, reverse, other] = table.fields.slice(1);
   const records = (await call(root + '/records', 'POST', ['First', 'Second'].map(name => ({ values: { [table.primaryFieldId]: name } })))).records;
   await call(root + '/records', 'PATCH', [{ id: records[0].id, expectedVersion: records[0].version, values: { [forward.id]: [records[1].id] } }]);
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await page.getByText('2 records · 4 fields', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Manage fields', exact: true }).click();
   const manage = page.getByRole('dialog', { name: 'Manage fields', exact: true });
@@ -165,7 +166,7 @@ export async function verifyRelationPairingAfterRestart(page, fixture) {
   await page.mouse.click(bounds.x + 100, bounds.y + 58);
   await page.getByRole('button', { name: 'Open record', exact: true }).click();
   await page.getByRole('button', { name: 'Unlink Plan', exact: true }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Save record', exact: true }).click();
+  await closeSavedRecord(page);
   await page.getByRole('dialog').waitFor({ state: 'detached' });
   assert.deepEqual((await call(`/tables/${source.id}/records/${tasks[0].id}`)).values[field.id], [projects[1].id]);
   await page.getByRole('button', { name: 'Manage fields', exact: true }).click();

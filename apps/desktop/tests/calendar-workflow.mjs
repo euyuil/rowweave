@@ -1,3 +1,4 @@
+import { waitForLiveSync, closeSavedRecord, cancelDialog } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyCalendarWorkflow(page, application) {
@@ -21,7 +22,7 @@ export async function verifyCalendarWorkflow(page, application) {
   await dialog.getByLabel('View type', { exact: true }).selectOption('calendar');
   await dialog.getByText('Add a date or timestamp field in Manage fields before creating a calendar.', { exact: true }).waitFor();
   assert.equal(await dialog.getByRole('button', { name: 'Create view', exact: true }).isDisabled(), true);
-  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   let table = (await call('/tables')).find(table => table.name === 'Calendar lab');
   const root = '/tables/' + table.id, name = table.primaryFieldId;
   for (const field of [{ name: 'Start', type: 'date' }, { name: 'End', type: 'date' }, { name: 'At', type: 'datetime' },
@@ -38,7 +39,7 @@ export async function verifyCalendarWorkflow(page, application) {
   const reads = [];
   const capture = request => { if (/\/calendar\/(query|records)$/.test(request.url())) reads.push({ url: request.url(), input: request.postDataJSON() }); };
   page.on('request', capture);
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await page.getByText('56 records · 6 fields', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'New view', exact: true }).click();
   await dialog.getByLabel('View name', { exact: true }).fill('Schedule');
@@ -64,7 +65,7 @@ export async function verifyCalendarWorkflow(page, application) {
   await pane.getByRole('button', { name: 'Task 025', exact: true }).click();
   assert.equal(await dialog.getByLabel('Hidden', { exact: true }).inputValue(), 'Complete details 25');
   await dialog.getByLabel('Name', { exact: true }).fill('Edited calendar task');
-  await dialog.getByRole('button', { name: 'Save record', exact: true }).click();
+  await closeSavedRecord(page);
   await pane.getByRole('button', { name: 'Edited calendar task', exact: true }).waitFor();
   assert.equal(await calendar.getByLabel('Calendar month', { exact: true }).inputValue(), '2024-02');
   await pane.getByRole('button', { name: 'Next', exact: true }).click();
@@ -75,12 +76,12 @@ export async function verifyCalendarWorkflow(page, application) {
   await pane.getByRole('button', { name: 'Unscheduled task', exact: true }).waitFor();
   await pane.getByRole('button', { name: 'Unscheduled task', exact: true }).click();
   await dialog.getByLabel('Start', { exact: true }).fill('2024-02-29');
-  await dialog.getByRole('button', { name: 'Save record', exact: true }).click();
+  await closeSavedRecord(page);
   await calendar.getByRole('button', { name: 'Unscheduled (1)', exact: true }).waitFor();
   await calendar.getByRole('button', { name: 'Invalid dates (1)', exact: true }).click();
   await pane.getByRole('button', { name: 'Reversed range', exact: true }).click();
   await dialog.getByLabel('End', { exact: true }).fill('2024-03-01');
-  await dialog.getByRole('button', { name: 'Save record', exact: true }).click();
+  await closeSavedRecord(page);
   await pane.getByText('No matching records.', { exact: true }).waitFor();
   const heading = calendar.locator('[data-calendar-day="2024-02-29"]');
   // Initialize the test poller's native frame callback before delaying application frames.
@@ -171,7 +172,7 @@ export async function verifyCalendarAfterRestart(page, fixture) {
   assert.equal(await dialog.getByLabel('Calendar start field', { exact: true }).inputValue(), fixture.start);
   assert.equal(await dialog.getByLabel('Calendar end field', { exact: true }).inputValue(), fixture.end);
   assert.equal(await dialog.getByLabel('Calendar time zone', { exact: true }).inputValue(), 'Asia/Shanghai');
-  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   await page.getByRole('button', { name: 'Delete table', exact: true }).click();
   await dialog.getByRole('button', { name: 'Delete table', exact: true }).click();
   await dialog.waitFor({ state: 'detached' });

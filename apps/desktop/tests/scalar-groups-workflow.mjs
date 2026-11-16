@@ -1,3 +1,4 @@
+import { waitForLiveSync, waitForAutosave } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyScalarGroups(page) {
@@ -32,7 +33,7 @@ export async function verifyScalarGroups(page) {
   let view = (await call(root + '/views'))[0];
   view = await call(root + '/views/' + view.id, 'PATCH', { expectedVersion: view.version,
     columns: view.columns.map(column => ({ ...column, hidden: column.fieldId === category })) });
-  await page.getByRole('button', { name: 'Reload', exact: true }).click(); await ready();
+  await waitForLiveSync(page); await ready();
   await page.getByRole('button', { name: 'Groups', exact: true }).click();
   await dialog.getByLabel('Grid group field', { exact: true }).selectOption(category);
   await dialog.getByRole('button', { name: 'Save view', exact: true }).click(); await dialog.waitFor({ state: 'detached' });
@@ -46,8 +47,8 @@ export async function verifyScalarGroups(page) {
     await page.keyboard.press('Enter');
     const editor = page.getByRole('textbox', { name: 'Cell value', exact: true });
     await editor.fill('Deep draft 中文'); await page.keyboard.press('Tab');
-    await page.getByText('1 unsaved cell', { exact: true }).waitFor();
-    await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+    await waitForAutosave(page);
+    await waitForAutosave(page);
     await page.getByText('All changes saved', { exact: true }).waitFor(); await ready();
     assert.equal((await call(root + '/records/' + records[799].id)).values[name], 'Deep draft 中文');
     await page.getByRole('button', { name: 'Collapse all', exact: true }).click(); await home();
@@ -72,12 +73,12 @@ export async function verifyScalarGroups(page) {
       assert.equal((await call(root + '/records/' + records[0].id)).version, 1);
     } finally { await page.unroute('**' + root + '/groups/query', failExpanded); }
     await page.keyboard.press('Control+v');
-    await page.getByText('2 unsaved cells', { exact: true }).waitFor();
+    await waitForAutosave(page);
     await page.getByRole('button', { name: 'Undo', exact: true }).click();
     await page.getByText('All changes saved', { exact: true }).waitFor();
     await page.getByRole('button', { name: 'Redo', exact: true }).click();
-    await page.getByText('2 unsaved cells', { exact: true }).waitFor();
-    await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+    await waitForAutosave(page);
+    await waitForAutosave(page);
     await page.getByText('All changes saved', { exact: true }).waitFor(); await ready();
     assert.equal((await call(root + '/records/' + records[0].id)).values[name], 'First pasted');
     assert.equal((await call(root + '/records/' + records[799].id)).values[name], 'Last pasted');

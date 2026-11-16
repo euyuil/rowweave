@@ -1,3 +1,4 @@
+import { closeSavedRecord, cancelDialog } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyReciprocalWorkflow(page, application) {
@@ -45,7 +46,7 @@ export async function verifyReciprocalWorkflow(page, application) {
   assert.equal(await page.getByLabel('Reverse field name', { exact: true }).inputValue(), 'Tasks');
   assert.equal((await call(`/tables/${tasks.id}`)).fields.length, 1);
   assert.equal((await call(`/tables/${projects.id}`)).fields.length, 2);
-  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   await dialog.getByRole('button', { name: 'Done', exact: true }).click();
   await add();
   await dialog.getByRole('button', { name: 'Save field', exact: true }).click();
@@ -75,7 +76,7 @@ export async function verifyReciprocalWorkflow(page, application) {
   await page.getByRole('checkbox', { name: 'Prepare release', exact: true }).waitFor();
   await page.screenshot({ path: '.artifacts/desktop-reciprocal-record.png' });
   await page.getByRole('button', { name: 'Unlink Prepare release', exact: true }).click();
-  await dialog.getByRole('button', { name: 'Save record', exact: true }).click();
+  await closeSavedRecord(page);
   await dialog.waitFor({ state: 'detached' });
   assert.deepEqual((await call(`/tables/${tasks.id}/records/${task.id}`)).values[link.id], []);
   await ready();

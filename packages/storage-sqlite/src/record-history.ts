@@ -108,6 +108,23 @@ export class RecordHistory {
 
   currentBatchId(): string { return this.db.prepare('SELECT batch_id FROM record_change_context').get()!['batch_id'] as string; }
 
+  fieldChangedSince(tableId: string, recordId: string, fieldId: string, version: number): boolean {
+    const path = `$.${JSON.stringify(fieldId)}`;
+    return !!this.db.prepare(`SELECT 1 FROM record_changes WHERE table_id = ? AND record_id = ?
+      AND ((after_version > ? AND COALESCE(before_values_json -> ?, 'null') != COALESCE(after_values_json -> ?, 'null'))
+        OR (after_version IS NULL AND before_version >= ?)) LIMIT 1`)
+      .get(tableId, recordId, version, path, path, version);
+  }
+
+  lastFieldVersion(tableId: string, recordId: string, fieldId: string): number {
+    const path = `$.${JSON.stringify(fieldId)}`;
+    const row = this.db.prepare(`SELECT COALESCE(MAX(COALESCE(after_version, before_version + 1)), 1) AS version
+      FROM record_changes WHERE table_id = ? AND record_id = ? AND (before_version IS NULL OR after_version IS NULL
+        OR COALESCE(before_values_json -> ?, 'null') != COALESCE(after_values_json -> ?, 'null'))`)
+      .get(tableId, recordId, path, path)!;
+    return row['version'] as number;
+  }
+
   list(tableId: string, recordId: string, query: RecordHistoryQuery): RecordHistoryPage {
     if (!this.db.prepare('SELECT 1 FROM records WHERE table_id = ? AND id = ?').get(tableId, recordId)
       && !this.db.prepare('SELECT 1 FROM record_changes WHERE table_id = ? AND record_id = ? LIMIT 1').get(tableId, recordId)) {

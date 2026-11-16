@@ -2,6 +2,8 @@
 
 Use Node.js 24.22.1 and npm 11.19.1. The repository uses strict TypeScript and ESM. Run commands from the repository root.
 
+See [live editing](live-editing.md) for automatic grid/record saves, workspace notifications and field-protected session undo/redo. After building and setting up Electron, `node apps/desktop/tests/live-sync.mjs` runs its focused isolated desktop regression.
+
 ```sh
 npm ci
 npm run check

@@ -1,3 +1,4 @@
+import { waitForLiveSync, closeSavedRecord } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 import { galleryArtwork } from '../../../apps/desktop/tests/gallery-workflow.mjs';
 
@@ -12,7 +13,7 @@ export async function verifyHarnessGallery(page, service) {
   const cover = table.fields[1].id, name = table.primaryFieldId;
   const file = service.uploadAttachment(table.id, { filename: 'landscape.png', mediaType: 'image/png', data: await galleryArtwork(page) });
   const record = service.createRecords(table.id, [{ values: { [name]: 'Shared collection', [cover]: [file.id] } }]).records[0];
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await page.getByText('1 record · 2 fields', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'New view', exact: true }).click();
   await dialog.getByLabel('View name', { exact: true }).fill('Collection');
@@ -25,7 +26,7 @@ export async function verifyHarnessGallery(page, service) {
   await page.waitForFunction(() => document.querySelector('.gallery-cover img')?.naturalWidth === 640);
   await gallery.locator('.gallery-title').focus(); await page.keyboard.press('Enter');
   await dialog.getByLabel('Name', { exact: true }).fill('Edited collection');
-  await dialog.getByRole('button', { name: 'Save record', exact: true }).click();
+  await closeSavedRecord(page);
   await gallery.getByRole('button', { name: 'Edited collection', exact: true }).waitFor();
   assert.equal(service.getRecord(table.id, record.id).values[name], 'Edited collection');
   assert.equal(await gallery.locator('.gallery-title').evaluate(element => element === document.activeElement), true);

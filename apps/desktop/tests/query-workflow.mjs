@@ -1,3 +1,4 @@
+import { waitForLiveSync, waitForAutosave, cancelDialog } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyQueryWorkflow(page, application) {
@@ -41,7 +42,7 @@ export async function verifyQueryWorkflow(page, application) {
     await rule(path).getByLabel('Filter field', { exact: true }).selectOption({ label: field });
     await rule(path).getByLabel('Filter operator', { exact: true }).selectOption(operator);
   };
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await page.getByText('5 records · 4 fields', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'New view', exact: true }).click();
   await page.getByLabel('View name', { exact: true }).fill('My priorities');
@@ -80,7 +81,7 @@ export async function verifyQueryWorkflow(page, application) {
   await page.mouse.click(bounds.x + 15, bounds.y + 58);
   await page.getByRole('button', { name: 'Open record', exact: true }).click();
   assert.equal(await page.getByLabel('Name', { exact: true }).inputValue(), 'B');
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   await page.getByRole('button', { name: 'View settings', exact: true }).click();
   assert.equal(await rule('1.2.1').getByLabel('Value *', { exact: true }).inputValue(), '10');
   assert.equal(await page.getByLabel('Match group 1.2', { exact: true }).inputValue(), 'or');
@@ -115,7 +116,7 @@ export async function verifyQueryWorkflow(page, application) {
   await page.keyboard.press('Enter');
   await page.getByRole('textbox', { name: 'Cell value', exact: true }).fill('Draft A');
   await page.keyboard.press('Enter');
-  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
+  await waitForAutosave(page);
   const search = page.getByRole('searchbox', { name: 'Search records', exact: true });
   await search.fill('B');
   await page.getByText('1 record · 4 fields', { exact: true }).waitFor();
@@ -149,7 +150,7 @@ export async function verifyQueryWorkflow(page, application) {
   await dialog.waitFor({ state: 'detached' });
   assert.equal((await read()).view.query.sort[0].direction, 'desc');
   await filters.getByText('On', { exact: true }).waitFor();
-  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
+  await waitForAutosave(page);
   const configuredFilter = (await read()).view.query.filter;
   await sorting.click();
   await dialog.getByLabel('Sort direction', { exact: true }).selectOption('asc');
@@ -162,7 +163,7 @@ export async function verifyQueryWorkflow(page, application) {
   await filters.click();
   const beforeCancel = (await read()).view;
   await rule('1.1').getByLabel('Value *', { exact: true }).fill('100');
-  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   assert.deepEqual((await read()).view, beforeCancel);
   assert.equal(await filters.evaluate(element => element === document.activeElement), true);
   await filters.click();
@@ -178,8 +179,8 @@ export async function verifyQueryWorkflow(page, application) {
   await dialog.getByRole('button', { name: 'Save view', exact: true }).click();
   await dialog.getByRole('alert').filter({ hasText: 'view changed' }).waitFor();
   assert.equal(await rule('1.1').getByLabel('Value *', { exact: true }).inputValue(), '30');
-  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await page.getByRole('button', { name: 'Refresh view', exact: true }).click();
+  await cancelDialog(page);
+  await waitForLiveSync(page);
   await filters.click();
   await dialog.getByRole('button', { name: 'Clear filters', exact: true }).click();
   await page.getByLabel('Match group 1', { exact: true }).selectOption('or');
@@ -197,7 +198,7 @@ export async function verifyQueryWorkflow(page, application) {
   assert.equal(await sorting.textContent(), 'Sort');
   await search.fill('');
   await page.getByText('5 records · 4 fields', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await waitForAutosave(page);
   await page.getByText('All changes saved', { exact: true }).waitFor();
   assert.equal((await read()).page.records[0].values[fixture.table.primaryFieldId], 'Draft A');
   await application.evaluate(({ BrowserWindow }, size) => BrowserWindow.getAllWindows()[0].setSize(...size), previousSize);

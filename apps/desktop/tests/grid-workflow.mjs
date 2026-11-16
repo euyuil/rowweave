@@ -1,3 +1,4 @@
+import { waitForLiveSync, waitForAutosave } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyGridWorkflow(page) {
@@ -58,10 +59,10 @@ export async function verifyGridWorkflow(page) {
     await page.locator('.rowweave-cell-editor').waitFor();
   };
   const save = async () => {
-    await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+    await waitForAutosave(page);
     await page.getByText('All changes saved', { exact: true }).waitFor();
   };
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await page.getByText('2 records · 8 fields', { exact: true }).waitFor();
 
   await open('Cost');
@@ -70,17 +71,17 @@ export async function verifyGridWorkflow(page) {
   await page.locator('.rowweave-cell-editor').getByRole('alert').waitFor();
   await select(1);
   assert.equal(await editor().inputValue(), 'not a number');
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await page.keyboard.press('Control+s');
   assert.equal(await editor().inputValue(), 'not a number');
   assert.equal(await value('Cost'), null);
   await page.screenshot({ path: '.artifacts/desktop-grid-validation.png' });
   await editor().fill('12.5');
   await page.keyboard.press('Enter');
-  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
+  await waitForAutosave(page);
   await page.keyboard.press('Control+z');
   await page.getByText('All changes saved', { exact: true }).waitFor();
   await page.keyboard.press('Control+y');
-  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
+  await waitForAutosave(page);
   await save();
   assert.equal(await value('Cost'), 12.5);
   await open('Cost');
@@ -106,7 +107,7 @@ export async function verifyGridWorkflow(page) {
   assert.equal(await statusEditor.inputValue(), field('Status').options[1].id);
   await page.getByText('Editing cell…', { exact: true }).waitFor();
   await statusEditor.press('Enter');
-  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
+  await waitForAutosave(page);
   await save();
   assert.equal(await value('Status'), field('Status').options[1].id);
   await open('Tags');
@@ -124,7 +125,7 @@ export async function verifyGridWorkflow(page) {
   await page.getByRole('tab', { name: 'Done', exact: true }).click();
   await select();
   await page.keyboard.press('Space');
-  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
+  await waitForAutosave(page);
   assert.equal(await page.locator('.rowweave-cell-editor').count(), 0);
   await save();
   assert.equal(await value('Done'), true);
@@ -155,7 +156,7 @@ export async function verifyGridWorkflow(page) {
   assert.equal(await page.locator('.rowweave-cell-editor').count(), 1);
   await editor().dispatchEvent('compositionend', { data: '中文' });
   await page.keyboard.press('Tab');
-  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
+  await waitForAutosave(page);
   await save();
   assert.equal(await value('Notes'), 'First line\nSecond line 中文');
 
@@ -163,7 +164,7 @@ export async function verifyGridWorkflow(page) {
   await select();
   await page.keyboard.press('Shift+ArrowDown');
   await page.keyboard.press('Delete');
-  await page.getByText('2 unsaved cells', { exact: true }).waitFor();
+  await waitForAutosave(page);
   await page.keyboard.press('Control+z');
   await page.getByText('All changes saved', { exact: true }).waitFor();
   assert.equal(await value('Notes'), 'First line\nSecond line 中文');

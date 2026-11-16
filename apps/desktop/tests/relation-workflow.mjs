@@ -1,3 +1,4 @@
+import { waitForLiveSync, waitForAutosave, closeSavedRecord, cancelDialog } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyRelationWorkflow(page) {
@@ -68,14 +69,14 @@ export async function verifyRelationWorkflow(page) {
   await search.fill('Project 02');
   await page.getByRole('checkbox', { name: 'Project 02', exact: true }).check();
   await page.getByRole('button', { name: 'Apply', exact: true }).click();
-  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
+  await waitForAutosave(page);
   await page.screenshot({ path: '.artifacts/desktop-linked-grid.png' });
   await page.keyboard.press('Control+s');
   await page.getByText('All changes saved', { exact: true }).waitFor();
   record = (await call(`/tables/${tasks.id}/records?offset=0&limit=10`)).records[0];
   assert.deepEqual(record.values[link.id], [targets[1].id]);
   await call(`/tables/${projects.id}/records`, 'PATCH', [{ id: targets[1].id, expectedVersion: 1, values: { [projects.primaryFieldId]: 'Renamed project' } }]);
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await select();
   await page.getByRole('button', { name: 'Open record', exact: true }).click();
   await page.getByRole('button', { name: 'Renamed project', exact: true }).waitFor();
@@ -85,12 +86,12 @@ export async function verifyRelationWorkflow(page) {
   await page.getByRole('button', { name: 'Reload records', exact: true }).click();
   await page.getByRole('checkbox', { name: 'Project 52', exact: true }).check();
   await call(`/tables/${projects.id}/records`, 'DELETE', [{ id: targets[51].id, expectedVersion: 1 }]);
-  await page.getByRole('button', { name: 'Save record', exact: true }).click();
   await page.getByRole('dialog').getByRole('alert').filter({ hasText: 'does not exist' }).waitFor();
   assert.equal(await page.getByLabel('Name', { exact: true }).inputValue(), 'Linked task');
   await page.getByRole('searchbox', { name: 'Project', exact: true }).fill('Project 03');
   await page.getByRole('checkbox', { name: 'Project 03', exact: true }).check();
-  await page.getByRole('button', { name: 'Save record', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Retry saving', exact: true }).click();
+  await closeSavedRecord(page);
   await page.getByRole('dialog').waitFor({ state: 'detached' });
   assert.deepEqual((await call(`/tables/${tasks.id}/records/${record.id}`)).values[link.id], [targets[2].id]);
 
@@ -100,7 +101,7 @@ export async function verifyRelationWorkflow(page) {
   await page.getByRole('button', { name: 'Delete table', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Delete table', exact: true }).click();
   await page.getByRole('dialog').getByRole('alert').filter({ hasText: 'linked fields' }).waitFor();
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   for (const name of ['Linked tasks', 'Linked projects']) {
     await choose(name);
     await ready();

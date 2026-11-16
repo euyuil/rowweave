@@ -1,3 +1,4 @@
+import { waitForLiveSync, cancelDialog } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyFormulaPreviewWorkflow(page) {
@@ -82,9 +83,9 @@ export async function verifyFormulaPreviewWorkflow(page) {
   await calculate(); await preview.getByRole('alert').filter({ hasText: /schema changed/ }).waitFor();
   assert.equal(await expression.inputValue(), 'LEN(["Name"]) * 3', 'A schema conflict must retain the draft.');
   assert.deepEqual((await call(path)).fields.at(-1).formula, formula.formula);
-  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   await dialog.getByRole('button', { name: 'Done', exact: true }).click();
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await page.waitForFunction(() => document.querySelector('.grid-host')?.getAttribute('aria-busy') === 'false');
   await page.getByRole('button', { name: 'Delete table', exact: true }).click();
   await dialog.getByRole('button', { name: 'Delete table', exact: true }).click();

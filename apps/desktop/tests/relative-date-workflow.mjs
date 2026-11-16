@@ -1,3 +1,4 @@
+import { waitForLiveSync, cancelDialog } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyRelativeDateWorkflow(page, app) {
@@ -27,7 +28,7 @@ export async function verifyRelativeDateWorkflow(page, app) {
     [table.primaryFieldId]: delta === null ? 'Unscheduled' : delta === 0 ? 'Today task' : `${delta} day task`,
     [due]: delta === null ? null : day(delta), [at]: delta === null ? null : `${day(delta)}T12:00:00.000Z`,
   } })));
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await page.getByText('4 records · 3 fields', { exact: true }).waitFor();
   const open = () => page.getByRole('button', { name: 'Filters', exact: true }).click();
   const save = async () => {
@@ -105,7 +106,7 @@ export async function verifyRelativeDateWorkflow(page, app) {
     assert.ok(matching.records.some(row => row.id === annualRows[delta + 1].id));
     await open();
     assert.equal(await page.getByLabel('Relative period', { exact: true }).inputValue(), period);
-    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await cancelDialog(page);
   }
   await open();
   await page.getByLabel('Relative time zone', { exact: true }).fill('Asia/Shanghai');
@@ -113,7 +114,7 @@ export async function verifyRelativeDateWorkflow(page, app) {
   await page.getByRole('button', { name: 'Save view', exact: true }).click();
   await page.getByRole('alert').filter({ hasText: 'view changed' }).waitFor();
   assert.equal(await page.getByLabel('Relative time zone', { exact: true }).inputValue(), 'Asia/Shanghai');
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   await page.getByRole('button', { name: 'Delete table', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Delete table', exact: true }).click();
   await page.getByRole('dialog').waitFor({ state: 'detached' });

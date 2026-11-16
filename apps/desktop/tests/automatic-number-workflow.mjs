@@ -1,3 +1,4 @@
+import { cancelDialog } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyAutomaticNumberWorkflow(page, application) {
@@ -29,7 +30,7 @@ export async function verifyAutomaticNumberWorkflow(page, application) {
   assert.equal(await dialog.getByLabel('Ticket', { exact: true }).textContent(), '1');
   assert.equal(await dialog.getByRole('button', { name: 'Clear Ticket', exact: true }).count(), 0);
   await page.screenshot({ path: '.artifacts/desktop-automatic-number.png' });
-  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   await select();
   await page.keyboard.press('Enter');
   await page.evaluate(() => new Promise(requestAnimationFrame));

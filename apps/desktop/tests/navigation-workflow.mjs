@@ -1,3 +1,4 @@
+import { waitForLiveSync } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyNavigationWorkflow(page, application) {
@@ -27,7 +28,7 @@ export async function verifyNavigationWorkflow(page, application) {
     }
     return names;
   });
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   const tabs = page.getByRole('tablist', { name: 'Views', exact: true });
   await tabs.getByRole('tab', { name: names.at(-1), exact: true }).waitFor({ state: 'attached' });
   await page.waitForFunction(() => document.querySelector('[role="tab"][aria-selected="true"]')?.getAttribute('aria-disabled') === 'false');

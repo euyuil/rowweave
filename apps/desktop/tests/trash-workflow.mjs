@@ -1,3 +1,4 @@
+import { waitForLiveSync } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyTrashWorkflow(page, application) {
@@ -29,7 +30,7 @@ export async function verifyTrashWorkflow(page, application) {
   await call(`${root}/records`, 'DELETE', rows.map(row => ({ id: row.id, expectedVersion: row.version })));
   const deleted = (await call(`${root}/trash/query`, 'POST', {})).records;
   const dialog = page.getByRole('dialog'), open = async () => {
-    await page.getByRole('button', { name: 'Reload', exact: true }).click();
+    await waitForLiveSync(page);
     await page.waitForFunction(() => document.querySelector('.grid-host')?.getAttribute('aria-busy') === 'false');
     await page.getByRole('button', { name: 'Trash', exact: true }).focus(); await page.keyboard.press('Enter');
     await dialog.locator('.trash-list li').first().waitFor();

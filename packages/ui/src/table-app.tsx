@@ -18,6 +18,7 @@ import { drawSelectCell } from './select-values.js';
 import { AttachmentContext } from './attachment-context.js';
 import { parseClipboard, serializeClipboard } from './clipboard.js';
 import { RecordDialog, type RecordAction } from './record-dialog.js';
+import { LiveRecordDialog } from './live-record-dialog.js';
 import { TrashDialog } from './trash-dialog.js';
 import { BatchHistoryDialog } from './batch-history-dialog.js';
 import { FieldsDialog } from './fields-dialog.js';
@@ -86,6 +87,9 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   tableId: string; model: TableModel; api: WorkspaceApi; host: TableHost; onManage(kind: 'rename' | 'delete', table: Table): void;
 }) {
   const revision = useSyncExternalStore(model.subscribe, model.getSnapshot);
+  const history = model.liveHistory;
+  useSyncExternalStore(history.subscribe, history.getSnapshot);
+  const wakeSync = useRef<() => void>(() => {});
   const queryVersion = model.queryVersion;
   const fields = model.fields;
   const [views, setViews] = useState<GridView[]>([]);
@@ -122,6 +126,8 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   const [summarizing, setSummarizing] = useState(false);
   const [notice, setNotice] = useState<string>();
   const [externalUpdate, setExternalUpdate] = useState<'pending' | 'missing'>();
+  const needsSync = useRef(false);
+  needsSync.current = externalUpdate === 'pending';
   const [preparedBoard, setPreparedBoard] = useState<{ generation: number; snapshot: BoardSnapshot }>();
   const [preparedCalendar, setPreparedCalendar] = useState<{ generation: number; snapshot: CalendarSnapshot }>();
   const [preparedGantt, setPreparedGantt] = useState<{ generation: number; snapshot: GanttSnapshot }>();
@@ -172,7 +178,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   const rootHost = useRef<HTMLElement>(null);
   const grid = useRef<DataEditorRef>(null);
   const busyRef = useRef(false);
-  const locked = busy || model.saving || offline || transfers > 0;
+  const locked = busy || model.saving || history.busy || offline || transfers > 0;
   const pending = model.pendingCells;
   const grouping = useGroupedRows(model, api, view, appliedSearch.current, visible);
   const measureLabels = useMemo(() => {
@@ -283,7 +289,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     });
     flushSync(() => {
       if (!model.commitRefresh(snapshot, { drafts: discard ? 'discard' : 'preserve' })) {
-        throw new Error('The table changed while reloading. Reload again.');
+        throw new Error('The table changed while refreshing. Try again.');
       }
       currentView.current = selected;
       appliedSearch.current = text;
@@ -435,35 +441,45 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     if (!ready || offline) return;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
+    let running = false, requested = false;
     const poll = async () => {
+      if (running) { requested = true; return; }
+      clearTimeout(timer); running = true; requested = false;
       let delay = 2_000;
       try { await checkExternal.current!(controller.signal); }
       catch (failure) {
         if (controller.signal.aborted || failure instanceof DOMException && failure.name === 'AbortError') return;
         if (failure instanceof ApiFailure && ['DATA_CHANGED', 'SCHEMA_CONFLICT', 'VIEW_CONFLICT'].includes(failure.code)) setExternalUpdate('pending');
         else { setRefreshFailure(failure instanceof Error ? failure.message : 'Could not check for updates.'); delay = 5_000; }
-      } finally { if (!controller.signal.aborted) timer = setTimeout(() => void poll(), delay); }
+      } finally { running = false; if (!controller.signal.aborted) timer = setTimeout(() => void poll(), requested ? 0 : delay); }
     };
+    wakeSync.current = () => { void poll(); };
+    const focused = () => { void poll(); };
+    window.addEventListener('focus', focused);
+    const unsubscribe = api.watchWorkspace(() => void poll(), failure => setRefreshFailure(failure.message));
     void poll();
-    return () => { controller.abort(); clearTimeout(timer); };
+    return () => { controller.abort(); clearTimeout(timer); unsubscribe(); window.removeEventListener('focus', focused); wakeSync.current = () => {}; };
   }, [api, model, tableId, ready, offline]);
 
   useEffect(() => {
     const workspace = rootHost.current!.closest('.rowweave-app')!;
     const touch = () => { interaction.current++; };
     const start = () => { touch(); pointerActive.current = true; };
-    const finish = () => { pointerActive.current = false; };
+    const finish = () => { pointerActive.current = false; if (needsSync.current) setTimeout(() => wakeSync.current(), 0); };
+    const blur = () => { if (needsSync.current) setTimeout(() => wakeSync.current(), 0); };
     const events = ['keydown', 'input', 'paste', 'copy', 'compositionstart', 'compositionend', 'wheel', 'scroll'];
     for (const event of events) workspace.addEventListener(event, touch, true);
     workspace.addEventListener('pointerdown', start, true); workspace.addEventListener('dragstart', start, true);
     const endings = ['pointerup', 'pointercancel', 'dragend', 'drop'];
     for (const event of endings) window.addEventListener(event, finish, true);
     window.addEventListener('blur', finish);
+    workspace.addEventListener('focusout', blur);
     return () => {
       for (const event of events) workspace.removeEventListener(event, touch, true);
       workspace.removeEventListener('pointerdown', start, true); workspace.removeEventListener('dragstart', start, true);
       for (const event of endings) window.removeEventListener(event, finish, true);
       window.removeEventListener('blur', finish);
+      workspace.removeEventListener('focusout', blur);
     };
   }, []);
 
@@ -483,7 +499,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     return () => { active = false; unsubscribe(); model.dispose(); };
   }, [model, host, report, loadView]);
 
-  useEffect(() => { void host.setDirty(pending > 0 || editorDirty || formDirty || transfers > 0).catch(report); }, [pending, editorDirty, formDirty, transfers, host, report]);
+  useEffect(() => { void host.setDirty(pending > 0 || editorDirty || formDirty || transfers > 0 || history.busy).catch(report); }, [pending, editorDirty, formDirty, transfers, history.busy, host, report]);
 
   useEffect(() => {
     if (!ready || !gridHost.current) return;
@@ -526,17 +542,35 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       }
       const previousBatch = model.lastSavedBatchId;
       const previousQuery = model.queryVersion;
-      await model.save();
+      await model.saveLive();
       if (model.queryVersion !== previousQuery) {
         setSelection({ columns: CompactSelection.empty(), rows: CompactSelection.empty() });
         setNotice('Changes saved. The selection was cleared; select records again before editing.');
       }
       if (model.lastSavedBatchId !== previousBatch) setSavedAction(model.lastSavedBatchId ? { batchId: model.lastSavedBatchId, redo: false } : undefined);
+      wakeSync.current();
     } catch (failure) { report(failure); }
   }, [model, offline, report]);
+  useEffect(() => {
+    if (!ready || locked || editorDirty || !pending || model.error || model.conflicted || error) return;
+    const timer = setTimeout(() => { void save(); }, 0);
+    return () => clearTimeout(timer);
+  }, [ready, locked, editorDirty, pending, revision, model, error, save]);
+  useEffect(() => {
+    if (externalUpdate === 'pending' && canRefresh.current()) wakeSync.current();
+  }, [externalUpdate, locked, editorDirty, formDirty, pending, recordAction]);
+  const moveHistory = useCallback(async (redo = false) => {
+    if (busyRef.current || model.saving || history.busy || model.pendingCells || activeEditor.current || offline) return;
+    setError(undefined);
+    try {
+      const result = await history.move(redo);
+      if (result) model.acceptSaved(result.records);
+      wakeSync.current();
+    } catch (failure) { report(failure); }
+  }, [history, model, offline, report]);
   const editorBridge = useMemo(() => ({
     save: () => { void save(); }, setDirty: setEditorDirty,
-    register: (handle: EditorHandle | undefined) => { activeEditor.current = handle; },
+    register: (handle: EditorHandle | undefined) => { activeEditor.current = handle; if (!handle && needsSync.current) setTimeout(() => wakeSync.current(), 0); },
     commit: (row: number, field: Field, value: CellValue, links?: RecordLink[]) => {
       try { model.applyEdits([{ row, fieldId: field.id, value, ...(links ? { links } : {}) }]); return undefined; }
       catch (failure) { return failure instanceof Error ? failure.message : 'The cell could not be changed.'; }
@@ -554,13 +588,14 @@ export function TableApp({ tableId, model, api, host, onManage }: {
           !(event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable="true"]')) &&
           (event.key.toLowerCase() === 'z' || event.key.toLowerCase() === 'y')) {
         event.preventDefault();
-        if (event.shiftKey || event.key.toLowerCase() === 'y') model.redo();
-        else model.undo();
+        if (model.canUndo || model.canRedo) {
+          if (event.shiftKey || event.key.toLowerCase() === 'y') model.redo(); else model.undo();
+        } else void moveHistory(event.shiftKey || event.key.toLowerCase() === 'y');
       }
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [save, model]);
+  }, [save, model, moveHistory]);
 
   const runPaste = useCallback(async (target: readonly [number, number], cells: readonly (readonly string[])[]) => {
     if (busyRef.current || model.saving || offline) return;
@@ -649,8 +684,8 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   };
   const readCurrentRecord = async (record: RowRecord) => {
     const result = await api.queryRecords(table!.id, { recordIds: [record.id], limit: 1 });
-    if (result.schemaVersion !== table!.version) throw new Error('The table schema changed. Reload before opening this record.');
-    if (!result.records.length) throw new Error('This record was deleted. Reload the table.');
+    if (result.schemaVersion !== table!.version) throw new Error('The table schema changed. Wait for the updated fields before opening this record.');
+    if (!result.records.length) throw new Error('This record was deleted. Wait for the updated table.');
     return result.records[0]!;
   };
   const openViewRecord = async (record: RowRecord) => {
@@ -769,23 +804,24 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     finally { selectionReads.current--; }
   };
 
-  const status = offline ? 'Service unavailable' : !ready ? 'Loading table…' : model.saving ? 'Saving…' : busy ? 'Loading rows…'
+  const status = offline ? 'Service unavailable' : !ready ? 'Loading table…' : model.saving || history.busy ? 'Saving…' : busy ? 'Loading rows…'
     : editorDirty ? 'Editing cell…'
     : pending ? `${pending.toLocaleString()} unsaved ${pending === 1 ? 'cell' : 'cells'}` : 'All changes saved';
   const message = error ?? model.error ?? grouping.error;
-  return <AttachmentContext.Provider value={{ table, pending: transfers > 0, transfer, saveFile: host.saveFile }}><section className="table-workspace" ref={rootHost}>
+  return <AttachmentContext.Provider value={{ table, pending: transfers > 0, transfer, saveFile: host.saveFile }}><section className="table-workspace" ref={rootHost}
+    data-table-id={tableId} data-revision={model.dataRevision} data-schema-version={table?.version} data-views-revision={knownViewsRevision.current}>
     <section className="table-heading">
       <div className="table-title"><h1>{table?.name ?? 'Loading table…'}</h1>
         <div className="table-management"><button disabled={recordActionsLocked} onClick={() => setManagingFields(true)}>Manage fields</button>
           <button disabled={!table || locked} onClick={() => onManage('rename', table!)}>Rename table</button>
           <button disabled={!table || locked || pending > 0 || editorDirty} onClick={() => onManage('delete', table!)}>Delete table</button></div></div>
       <div className="actions">
-        <button onClick={() => model.undo()} disabled={locked || !model.canUndo}>Undo</button>
-        <button onClick={() => model.redo()} disabled={locked || !model.canRedo}>Redo</button>
+        <button onClick={() => model.canUndo ? model.undo() : void moveHistory()} disabled={locked || !(model.canUndo || history.canUndo)}>Undo</button>
+        <button onClick={() => model.canRedo ? model.redo() : void moveHistory(true)} disabled={locked || !(model.canRedo || history.canRedo)}>Redo</button>
         {(pending > 0 || model.stale || externalUpdate === 'pending') && <button onClick={() => void reload(false)} disabled={locked || editorDirty}
-          title="Refresh saved data and view settings while keeping drafts. Undo history resets.">Refresh view</button>}
-        <button onClick={() => void reload()} disabled={locked}>{pending || editorDirty ? 'Discard edits' : 'Reload'}</button>
-        <button className="primary" onClick={() => void save()} disabled={locked || (!pending && !editorDirty)}>Save changes</button>
+          title="Refresh saved data and view settings while keeping drafts. Unsaved edit history resets.">Refresh view</button>}
+        {(message || refreshFailure || model.stale) && <button onClick={() => void reload()} disabled={locked}>{pending || editorDirty ? 'Discard edits' : 'Reconnect'}</button>}
+        {pending > 0 && message && <button onClick={() => void save()} disabled={locked}>Retry saving</button>}
       </div>
     </section>
     {message && <div role="alert" className="error-banner">{message}
@@ -794,7 +830,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     {notice && <div role="status" className="notice-banner"><span>{notice}</span><button onClick={() => setNotice(undefined)}>Dismiss</button></div>}
     {externalUpdate && <div role="status" className="notice-banner">{externalUpdate === 'missing'
       ? 'This table was deleted elsewhere. Visible edits are retained. Choose another table when ready.'
-      : 'Updates are available. Finish editing to load them automatically, or use Refresh view to keep cell drafts. Reload resets local undo history.'}</div>}
+      : 'Updates are available and will load automatically when editing finishes.'}</div>}
     {!offline && refreshFailure && <div role="status" className="notice-banner">Could not check for updates: {refreshFailure}</div>}
     <ViewTabs views={views} selected={view?.id} disabled={!ready || locked} panelId={`table-view-${tableId}`}
       onSelect={selected => void applyView.current!(selected)} onCreate={() => setViewAction('create')} />
@@ -941,7 +977,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
           theme={{ accentColor: '#315cbe', accentLight: '#eef3ff', bgHeader: '#f5f7fb',
             bgCell: '#ffffff', textDark: '#17243b', borderColor: '#e5eaf1', baseFontStyle: '14px',
             fontFamily: 'Segoe UI, Microsoft YaHei, sans-serif' }}
-        /></EditorContext.Provider> : <div className="loading-state" role="status">{message ? 'Could not load the table. Try Reload.' : grouping.enabled ? 'Loading groups…' : 'Opening your workspace…'}</div>}
+        /></EditorContext.Provider> : <div className="loading-state" role="status">{message ? 'Could not load the table. Try Reconnect.' : grouping.enabled ? 'Loading groups…' : 'Opening your workspace…'}</div>}
       </div>}
     </section>
     <footer><span role="status" className={pending ? 'pending-status' : ''}>{status}</span>
@@ -949,8 +985,10 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       <span>{view?.type === 'board' ? 'Move records by dragging or choosing a status' : view?.type === 'calendar'
         ? 'Arrow keys to navigate dates · Enter to browse records' : view?.type === 'gantt' ? 'Drag to adjust dates · Enter opens record details'
         : view?.type === 'gallery' ? 'Arrow keys to navigate cards · Enter opens record details'
-          : 'Enter to edit · Esc to cancel · Ctrl+C / Ctrl+V · Ctrl+S to save'}</span></footer>
-    {recordAction && table && <RecordDialog action={recordAction} table={table} api={api} setDirty={setFormDirty}
+          : 'Changes save automatically · Ctrl+Z to undo · Ctrl+Y to redo'}</span></footer>
+    {recordAction?.kind === 'edit' && table && <LiveRecordDialog original={recordAction.records[0]!} table={table} api={api} history={history} setDirty={setFormDirty}
+      onClose={() => { setRecordAction(undefined); wakeSync.current(); }} onSaved={records => { model.acceptSaved(records); wakeSync.current(); }} />}
+    {recordAction && recordAction.kind !== 'edit' && table && <RecordDialog action={recordAction} table={table} api={api} setDirty={setFormDirty}
       onClose={() => setRecordAction(undefined)} onSaved={() => { setRecordAction(undefined); void refreshAfterWrite('Records'); }} />}
     {trashOpen && table && <TrashDialog table={table} api={api} setDirty={setFormDirty} onClose={() => setTrashOpen(false)}
       onRestored={count => { setTrashOpen(false); setNotice(`${count} record${count === 1 ? '' : 's'} restored.`); void refreshAfterWrite('Restored records'); }} />}

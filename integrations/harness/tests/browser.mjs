@@ -1,3 +1,4 @@
+import { waitForLiveSync, waitForAutosave, cancelDialog, registerLiveConnection } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 import { verifyHarnessRelationPairing } from './relation-pairing-workflow.mjs';
 import { verifyHarnessChainedLookups } from './chained-lookup-workflow.mjs';
@@ -15,6 +16,7 @@ import electronPath from 'electron';
 import { SqliteRecordStore } from '../../../dist/packages/storage-sqlite/src/record-store.js';
 import { RecordService } from '../../../dist/packages/core/src/record-service.js';
 import { startServer } from '../../../dist/apps/server/src/http-server.js';
+import { createWorkspaceClient } from '../../../dist/packages/client/src/http-client.js';
 import { verifyCrossInterfaceWorkflow } from '../../../tests/cross-interface.mjs';
 import { verifyHarnessCalendar } from './calendar-workflow.mjs';
 import { verifyHarnessGantt } from './gantt-workflow.mjs';
@@ -73,6 +75,7 @@ try {
   const service = new RecordService(store);
   const token = randomBytes(32).toString('hex');
   serviceServer = await startServer({ service, token, allowedOrigins: [origin, 'null'] });
+  const liveApi = createWorkspaceClient({ url: serviceServer.url, token });
   await writeFile(join(fixtureDirectory, 'main.cjs'), `const { app, BrowserWindow } = require('electron');
 app.setPath('userData', process.env.ROWWEAVE_TEST_PROFILE);
 app.whenReady().then(() => { const window = new BrowserWindow({ width:1280,height:900,show:false,webPreferences:{sandbox:true,contextIsolation:true,offscreen:true} }); window.loadURL(process.env.ROWWEAVE_TEST_URL); });
@@ -80,6 +83,7 @@ app.on('window-all-closed', () => app.quit());`);
   application = await electron.launch({ executablePath: electronPath, args: [join(fixtureDirectory, 'main.cjs')],
     env: { ...process.env, ROWWEAVE_TEST_PROFILE: join(directory, 'profile'), ROWWEAVE_TEST_URL: origin }, timeout: 40_000 });
   const page = await application.firstWindow();
+  registerLiveConnection(page, { url: serviceServer.url, token });
   const errors = [];
   page.on('pageerror', error => { errors.push(error.message); console.error(error.message); });
   page.setDefaultTimeout(15_000);
@@ -126,8 +130,11 @@ app.on('window-all-closed', () => app.quit());`);
   await page.waitForFunction(() => document.querySelector('canvas')?.contains(document.activeElement));
   await page.keyboard.press('Enter');
   await page.getByRole('textbox', { name: 'Cell value', exact: true }).fill('Unsaved 汉字');
+  const outage = route => route.request().method() === 'PATCH'
+    ? route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: { code: 'TEST_OUTAGE', message: 'Test save unavailable' } }) }) : route.continue();
+  await page.route('**/tables/' + table.id + '/records', outage);
   await page.keyboard.press('Enter');
-  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
+  await page.getByRole('alert').filter({ hasText: 'Test save unavailable' }).waitFor();
   assert.equal(await page.evaluate(() => {
     const event = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(event);
@@ -144,7 +151,9 @@ app.on('window-all-closed', () => app.quit());`);
   await page.getByText('1 unsaved cell', { exact: true }).waitFor();
   assert.equal(await page.evaluate(() => window.harnessTest.inspect().active), 'rowweave');
   assert.equal(records()[0].values[nameId], 'Original');
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await page.unroute('**/tables/' + table.id + '/records', outage);
+  await page.getByRole('button', { name: 'Retry saving', exact: true }).click();
+  await waitForAutosave(page);
   await page.getByText('All changes saved', { exact: true }).waitFor();
   assert.equal(records()[0].values[nameId], 'Unsaved 汉字');
   await page.getByRole('navigation').getByRole('button', { name: 'Conversation', exact: true }).click();
@@ -176,8 +185,8 @@ app.on('window-all-closed', () => app.quit());`);
   await page.getByLabel('Service token', { exact: true }).fill('incorrect'.repeat(8));
   await page.getByRole('button', { name: 'Connect', exact: true }).click();
   await page.getByRole('alert').filter({ hasText: 'Could not connect' }).waitFor();
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await cancelDialog(page);
+  await waitForLiveSync(page);
   await page.getByText('2 records · 2 fields', { exact: true }).waitFor();
   await page.waitForFunction(() => document.querySelector('.grid-host')?.getAttribute('aria-busy') === 'false');
   const hostDraft = page.getByRole('textbox', { name: 'Harness draft', exact: true });
@@ -188,44 +197,44 @@ app.on('window-all-closed', () => app.quit());`);
   await hostDraft.fill('Host draft 中文');
   for (const value of [17.25, 12.5]) {
     const current = records()[0];
-    service.updateBatch([{ id: current.id, expectedVersion: current.version, values: { [budgetId]: value } }], table.id);
+    await liveApi.updateRecords(table.id, [{ id: current.id, expectedVersion: current.version, values: { [budgetId]: value } }]);
     await page.waitForFunction(value => document.querySelector('canvas [aria-rowindex="2"] [role="gridcell"][aria-colindex="2"]')?.textContent === String(value), value, { polling: 100 });
     assert.equal(await hostDraft.inputValue(), 'Host draft 中文');
     assert.equal(await hostDraft.evaluate(element => element === document.activeElement), true);
   }
-  let catalogTable = service.createTable({ name: 'Harness external table' });
+  let catalogTable = await liveApi.createTable({ name: 'Harness external table' });
   const tableNavigation = page.getByRole('navigation', { name: 'Tables', exact: true });
   await tableNavigation.getByRole('button', { name: catalogTable.name, exact: true }).waitFor();
-  catalogTable = service.updateTable(catalogTable.id, { name: 'Harness renamed table', expectedVersion: catalogTable.version });
+  catalogTable = await liveApi.updateTable(catalogTable.id, { name: 'Harness renamed table', expectedVersion: catalogTable.version });
   await tableNavigation.getByRole('button', { name: catalogTable.name, exact: true }).waitFor();
-  service.deleteTable(catalogTable.id, { expectedVersion: catalogTable.version });
+  await liveApi.deleteTable(catalogTable.id, catalogTable.version);
   await tableNavigation.getByRole('button', { name: catalogTable.name, exact: true }).waitFor({ state: 'detached' });
   assert.equal(await hostDraft.inputValue(), 'Host draft 中文');
   assert.equal(await hostDraft.evaluate(element => element === document.activeElement), true);
   await page.screenshot({ path: '.artifacts/desktop-harness-workspace.png' });
   let groupedTable = service.getTable(table.id);
-  groupedTable = service.createField(table.id, { expectedVersion: groupedTable.version, name: 'Done', type: 'checkbox' });
+  groupedTable = await liveApi.createField(table.id, { expectedVersion: groupedTable.version, name: 'Done', type: 'checkbox' });
   const done = groupedTable.fields.at(-1).id;
-  service.updateBatch(records().map((record, index) => ({ id: record.id, expectedVersion: record.version, values: { [done]: index === 1 } })), table.id);
+  await liveApi.updateRecords(table.id, records().map((record, index) => ({ id: record.id, expectedVersion: record.version, values: { [done]: index === 1 } })));
   const groupedView = service.listViews(table.id)[0];
-  service.updateView(table.id, groupedView.id, { expectedVersion: groupedView.version, groupBy: done });
+  await liveApi.updateView(table.id, groupedView.id, { expectedVersion: groupedView.version, groupBy: done });
   await page.waitForFunction(() => document.querySelector('canvas [aria-rowindex="2"] [role="gridcell"][aria-colindex="1"]')?.textContent === '▾ Unchecked · 1 record', undefined, { polling: 100 });
   const moved = records()[0];
-  service.updateBatch([{ id: moved.id, expectedVersion: moved.version, values: { [done]: true } }], table.id);
+  await liveApi.updateRecords(table.id, [{ id: moved.id, expectedVersion: moved.version, values: { [done]: true } }]);
   await page.waitForFunction(() => document.querySelector('canvas [aria-rowindex="2"] [role="gridcell"][aria-colindex="1"]')?.textContent === '▾ Unchecked · 0 records' &&
     document.querySelector('canvas [aria-rowindex="3"] [role="gridcell"][aria-colindex="1"]')?.textContent === '▾ Checked · 2 records', undefined, { polling: 100 });
   assert.equal(await hostDraft.inputValue(), 'Host draft 中文');
   assert.equal(await hostDraft.evaluate(element => element === document.activeElement), true);
   await page.screenshot({ path: '.artifacts/desktop-harness-group-refresh.png' });
   let currentGroupedView = service.listViews(table.id)[0];
-  currentGroupedView = service.updateView(table.id, currentGroupedView.id, { expectedVersion: currentGroupedView.version, groupBy: budgetId });
+  currentGroupedView = await liveApi.updateView(table.id, currentGroupedView.id, { expectedVersion: currentGroupedView.version, groupBy: budgetId });
   const budget = records()[0].values[budgetId];
   await page.waitForFunction(value => document.querySelector('canvas [aria-rowindex="2"] [role="gridcell"][aria-colindex="1"]')?.textContent ===
     '▾ ' + value + ' · 1 record', String(budget), { polling: 100 });
   assert.equal(await hostDraft.inputValue(), 'Host draft 中文');
   assert.equal(await hostDraft.evaluate(element => element === document.activeElement), true);
   await page.screenshot({ path: '.artifacts/desktop-harness-scalar-groups.png' });
-  currentGroupedView = service.updateView(table.id, currentGroupedView.id, { expectedVersion: currentGroupedView.version,
+  currentGroupedView = await liveApi.updateView(table.id, currentGroupedView.id, { expectedVersion: currentGroupedView.version,
     groupMeasures: [{ fieldId: budgetId, operation: 'sum' }] });
   const measureHeading = '▾ ' + String(budget) + ' · 1 record · Sum ' + groupedTable.fields.find(field => field.id === budgetId).name + ': ' +
     budget.toLocaleString(undefined, { maximumSignificantDigits: 15 });
@@ -234,7 +243,7 @@ app.on('window-all-closed', () => app.quit());`);
   assert.equal(await hostDraft.inputValue(), 'Host draft 中文');
   assert.equal(await hostDraft.evaluate(element => element === document.activeElement), true);
   await page.screenshot({ path: '.artifacts/desktop-harness-group-measures.png' });
-  currentGroupedView = service.updateView(table.id, currentGroupedView.id, { expectedVersion: currentGroupedView.version, groupBy: [budgetId, done] });
+  currentGroupedView = await liveApi.updateView(table.id, currentGroupedView.id, { expectedVersion: currentGroupedView.version, groupBy: [budgetId, done] });
   const nestedHeading = '　▾ Checked · 1 record · Sum ' + groupedTable.fields.find(field => field.id === budgetId).name + ': ' +
     budget.toLocaleString(undefined, { maximumSignificantDigits: 15 });
   await page.waitForFunction(text => document.querySelector('canvas [aria-rowindex="3"] [role="gridcell"][aria-colindex="1"]')?.textContent === text,
@@ -242,29 +251,29 @@ app.on('window-all-closed', () => app.quit());`);
   assert.equal(await hostDraft.inputValue(), 'Host draft 中文');
   assert.equal(await hostDraft.evaluate(element => element === document.activeElement), true);
   await page.screenshot({ path: '.artifacts/desktop-harness-nested-groups.png' });
-  service.updateView(table.id, currentGroupedView.id, { expectedVersion: currentGroupedView.version, groupBy: null });
-  service.deleteField(table.id, done, { expectedVersion: groupedTable.version });
+  await liveApi.updateView(table.id, currentGroupedView.id, { expectedVersion: currentGroupedView.version, groupBy: null });
+  await liveApi.deleteField(table.id, done, groupedTable.version);
   await page.getByRole('button', { name: 'Collapse all', exact: true }).waitFor({ state: 'detached' });
   let boardTable = service.getTable(table.id);
-  boardTable = service.createField(table.id, { expectedVersion: boardTable.version, name: 'Status', type: 'singleSelect',
+  boardTable = await liveApi.createField(table.id, { expectedVersion: boardTable.version, name: 'Status', type: 'singleSelect',
     options: [{ id: 'first', name: 'First' }, { id: 'second', name: 'Second' }] });
   const status = boardTable.fields.at(-1).id;
-  service.updateBatch(records().map((record, index) => ({ id: record.id, expectedVersion: record.version, values: { [status]: index ? 'second' : 'first' } })), table.id);
+  await liveApi.updateRecords(table.id, records().map((record, index) => ({ id: record.id, expectedVersion: record.version, values: { [status]: index ? 'second' : 'first' } })));
   const beforeBoard = service.listViews(table.id)[0];
-  service.updateView(table.id, beforeBoard.id, { expectedVersion: beforeBoard.version, type: 'board', groupBy: status });
+  await liveApi.updateView(table.id, beforeBoard.id, { expectedVersion: beforeBoard.version, type: 'board', groupBy: status });
   const firstLane = page.getByRole('region', { name: 'First column', exact: true });
   const secondLane = page.getByRole('region', { name: 'Second column', exact: true });
   await firstLane.getByRole('button', { name: 'Unsaved 汉字', exact: true }).waitFor();
   const boardMoved = records()[0];
-  service.updateBatch([{ id: boardMoved.id, expectedVersion: boardMoved.version, values: { [status]: 'second' } }], table.id);
+  await liveApi.updateRecords(table.id, [{ id: boardMoved.id, expectedVersion: boardMoved.version, values: { [status]: 'second' } }]);
   await secondLane.getByRole('button', { name: 'Unsaved 汉字', exact: true }).waitFor();
   await secondLane.getByLabel('2 records', { exact: true }).waitFor();
   assert.equal(await hostDraft.inputValue(), 'Host draft 中文');
   assert.equal(await hostDraft.evaluate(element => element === document.activeElement), true);
   await page.screenshot({ path: '.artifacts/desktop-harness-board-refresh.png' });
   const currentBoard = service.listViews(table.id)[0];
-  service.updateView(table.id, currentBoard.id, { expectedVersion: currentBoard.version, type: 'grid', groupBy: null });
-  service.deleteField(table.id, status, { expectedVersion: boardTable.version });
+  await liveApi.updateView(table.id, currentBoard.id, { expectedVersion: currentBoard.version, type: 'grid', groupBy: null });
+  await liveApi.deleteField(table.id, status, boardTable.version);
   await page.getByRole('region', { name: 'First column', exact: true }).waitFor({ state: 'detached' });
   assert.equal(await hostDraft.evaluate(element => element === document.activeElement), true);
   await verifyCrossInterfaceWorkflow({ url: serviceServer.url, token }, page, table.id, process.argv.includes('--packaged'));

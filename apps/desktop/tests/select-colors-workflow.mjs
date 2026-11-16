@@ -1,3 +1,4 @@
+import { waitForLiveSync, waitForAutosave, cancelDialog } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifySelectColorsWorkflow(page) {
@@ -26,7 +27,7 @@ export async function verifySelectColorsWorkflow(page) {
   const count = await add({ name: 'Related count', type: 'lookup', lookup: { relationFieldId: relation.id, fieldId: amount.id, operation: 'count' } });
   let record = (await call(`/tables/${table.id}/records`, 'POST', [{ values: { [table.primaryFieldId]: 'Review release', [status.id]: 'ready', [tags.id]: ['review', 'priority'], [amount.id]: 1 } }])).records[0];
   record = (await call(`/tables/${table.id}/records`, 'PATCH', [{ id: record.id, expectedVersion: record.version, values: { [relation.id]: [record.id] } }])).records[0];
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await page.getByText('1 record · 7 fields', { exact: true }).waitFor(); await ready();
   await page.waitForFunction(() => {
     const canvas = document.querySelector('canvas'), { data } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
@@ -52,23 +53,22 @@ export async function verifySelectColorsWorkflow(page) {
   await page.keyboard.press('Enter');
   await editor.getByLabel('Cell value', { exact: true }).selectOption('done');
   await page.keyboard.press('Tab');
-  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
+  await waitForAutosave(page);
   await page.keyboard.press('Enter');
   await editor.getByLabel('Cell value', { exact: true }).selectOption(['priority', 'review']);
   assert.equal(await editor.locator('.select-value').count(), 2);
   await page.keyboard.press('Escape');
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await waitForAutosave(page);
   await page.getByText('All changes saved', { exact: true }).waitFor();
   await ready();
-  assert.equal(await page.getByRole('button', { name: 'Open record', exact: true }).isEnabled(), false);
-  await page.locator('.dvn-scroller').click({ position: { x: 100, y: 58 } });
+  assert.equal(await page.getByRole('button', { name: 'Open record', exact: true }).isEnabled(), true);
   await page.getByRole('button', { name: 'Open record', exact: true }).click();
   assert.deepEqual(await colors(dialog.getByLabel('Status', { exact: true })), { background: 'rgb(255, 238, 0)', text: 'rgb(0, 0, 0)' });
   assert.deepEqual(await colors(dialog.locator('.select-value').filter({ hasText: '<Review>' })), { background: 'rgb(0, 119, 68)', text: 'rgb(255, 255, 255)' });
   assert.equal(await dialog.getByLabel('Related statuses', { exact: true }).textContent(), 'Done');
   assert.equal(await dialog.getByLabel('Related count', { exact: true }).textContent(), '1');
   await page.screenshot({ path: '.artifacts/desktop-select-colors-form.png' });
-  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   await page.getByRole('button', { name: 'New view', exact: true }).click();
   await page.getByLabel('View name', { exact: true }).fill('Colored board');
   await page.getByLabel('View type', { exact: true }).selectOption('board');

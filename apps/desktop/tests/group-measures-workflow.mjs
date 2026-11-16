@@ -1,3 +1,4 @@
+import { waitForLiveSync, waitForAutosave, cancelDialog } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyGroupMeasures(page) {
@@ -32,7 +33,7 @@ export async function verifyGroupMeasures(page) {
   const records = (await call(root + '/records', 'POST', Array.from({ length: 507 }, (_, index) => ({ values: {
     [table.primaryFieldId]: 'Task ' + index, [status]: index < 501 ? 'planned' : index < 506 ? 'done' : null, [amount]: index,
   } })))).records;
-  await page.getByRole('button', { name: 'Reload', exact: true }).click(); await ready();
+  await waitForLiveSync(page); await ready();
   await page.getByRole('button', { name: 'Groups', exact: true }).click();
   await page.getByLabel('Grid group field', { exact: true }).selectOption(status);
   await page.getByRole('button', { name: 'Add measure', exact: true }).click();
@@ -52,7 +53,7 @@ export async function verifyGroupMeasures(page) {
   await page.getByRole('button', { name: 'View settings', exact: true }).click();
   assert.equal(await page.getByLabel('Measure 1 field', { exact: true }).inputValue(), amount);
   assert.equal(await page.getByLabel('Measure 2 calculation', { exact: true }).inputValue(), 'average');
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   table = await call(root + '/fields/' + amount, 'PATCH', { expectedVersion: table.version, name: 'Budget' });
   await heading(0, 'Sum Budget: 125,250');
   await call(root + '/records', 'PATCH', [{ id: records[0].id, expectedVersion: records[0].version, values: { [amount]: 5 } }]);
@@ -63,9 +64,7 @@ export async function verifyGroupMeasures(page) {
   if (!await page.locator('.rowweave-cell-editor').count()) await page.keyboard.press('Enter');
   await page.getByLabel('Cell value', { exact: true }).fill('900');
   await page.keyboard.press('Enter');
-  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
-  await heading(1, 'Sum Budget: 2,515');
-  await page.keyboard.press('Control+s');
+  await waitForAutosave(page);
   await page.getByText('All changes saved', { exact: true }).waitFor(); await ready();
   await heading(1, 'Sum Budget: 2,914 · Average Budget: 582.8');
   assert.equal((await call(root + '/records/' + records[501].id)).values[amount], 900);

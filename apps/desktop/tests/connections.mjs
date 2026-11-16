@@ -1,3 +1,4 @@
+import { waitForAutosave, cancelDialog } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { randomBytes, createHash } from 'node:crypto';
@@ -62,7 +63,7 @@ async function createRecord(name) {
   await page.getByRole('dialog').waitFor({ state: 'detached' });
   await page.waitForFunction(() => document.querySelector('.grid-host')?.getAttribute('aria-busy') === 'false');
 }
-async function editFirstCell(value) {
+async function editFirstCell(value, saving = true) {
   const cell = page.locator('.dvn-scroller');
   const position = { x: 100, y: 58 };
   // The grid receives pointer input through its scroll overlay. Wait for its layout and selection.
@@ -71,7 +72,7 @@ async function editFirstCell(value) {
   await cell.dblclick({ position });
   await page.getByRole('textbox', { name: 'Cell value', exact: true }).fill(value);
   await page.keyboard.press('Enter');
-  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
+  if (saving) await waitForAutosave(page);
 }
 
 try {
@@ -114,9 +115,9 @@ try {
 
   await editFirstCell('Keep this draft');
   await page.getByRole('button', { name: 'Connection', exact: true }).click();
-  await page.getByText('Save or discard your workspace edits before changing the connection.', { exact: true }).waitFor();
-  assert.equal(await page.getByRole('dialog').count(), 0);
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await page.getByRole('dialog').waitFor();
+  await cancelDialog(page);
+  await waitForAutosave(page);
   await page.getByText('All changes saved', { exact: true }).waitFor();
 
   await settings(remoteUrl, 'incorrect'.repeat(8));
@@ -140,7 +141,7 @@ try {
   assert.equal(await localProcesses(), 1);
   await assert.rejects(readFile(settingsPath), { code: 'ENOENT' });
   await application.evaluate(({ safeStorage }) => { safeStorage.encryptStringAsync = globalThis.originalEncryptToken; });
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   await settings();
   await page.screenshot({ path: '.artifacts/desktop-connection-settings.png' });
   await connect();
@@ -171,14 +172,14 @@ try {
   assert.equal(await readFile(settingsPath, 'utf8'), saved);
   assert.equal((await page.evaluate(() => window.rowweave.connectionState())).mode, 'remote');
   assert.equal(await localProcesses(), 0);
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await editFirstCell('Retained during outage');
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await cancelDialog(page);
+  await editFirstCell('Retained during outage', false);
   await page.getByRole('alert').filter({ hasText: 'Failed to fetch' }).waitFor();
   await page.getByText('1 unsaved cell', { exact: true }).waitFor();
   assert.equal(service.queryRecords(table.id, {}).records[0].values[table.primaryFieldId], 'Saved through the remote desktop 🌱');
   remote = await startServer({ service, token, port: remotePort });
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await page.getByRole('button', { name: 'Retry saving', exact: true }).click();
+  await waitForAutosave(page);
   await page.getByText('All changes saved', { exact: true }).waitFor();
   assert.equal(service.queryRecords(table.id, {}).records[0].values[table.primaryFieldId], 'Retained during outage');
 

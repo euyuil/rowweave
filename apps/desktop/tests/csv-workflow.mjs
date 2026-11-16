@@ -1,3 +1,4 @@
+import { waitForLiveSync, waitForAutosave } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -22,7 +23,7 @@ export async function verifyCsvWorkflow(page, application, directory) {
   const [name, count, notes] = table.fields.map(field => field.id);
   const records = async () => (await call(`/tables/${table.id}/records?offset=0&limit=20`)).records;
   const reload = async () => {
-    await page.getByRole('button', { name: 'Reload', exact: true }).click();
+    await waitForLiveSync(page);
     await page.waitForFunction(() => document.querySelector('.grid-host')?.getAttribute('aria-busy') === 'false');
   };
   await reload();
@@ -165,10 +166,12 @@ export async function verifyCsvWorkflow(page, application, directory) {
   await page.getByRole('textbox', { name: 'Cell value', exact: true }).fill('Unsaved');
   await page.getByText('Editing cell…', { exact: true }).waitFor();
   assert.equal(await page.getByRole('textbox', { name: 'Cell value', exact: true }).inputValue(), 'Unsaved');
-  await page.getByRole('textbox', { name: 'Cell value', exact: true }).press('Enter');
-  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
   assert.equal(await page.getByRole('button', { name: 'Import CSV', exact: true }).isDisabled(), true);
   assert.equal(await page.getByRole('button', { name: 'Export CSV', exact: true }).isDisabled(), true);
+  await page.getByRole('textbox', { name: 'Cell value', exact: true }).press('Enter');
+  await waitForAutosave(page);
+  assert.equal(await page.getByRole('button', { name: 'Import CSV', exact: true }).isEnabled(), true);
+  assert.equal(await page.getByRole('button', { name: 'Export CSV', exact: true }).isEnabled(), true);
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   await page.getByText('All changes saved', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Delete table', exact: true }).click();

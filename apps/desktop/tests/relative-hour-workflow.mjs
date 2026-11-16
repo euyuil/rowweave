@@ -1,3 +1,4 @@
+import { waitForLiveSync, cancelDialog } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyRelativeHourWorkflow(page, application) {
@@ -23,7 +24,7 @@ export async function verifyRelativeHourWorkflow(page, application) {
   const records = (await call(root + '/records', 'POST', [-3, -1, 1, 3].map(hours => ({ values: {
     [table.primaryFieldId]: `${hours} hours`, [at]: new Date(origin + hours * 3_600_000).toISOString(),
   } })))).records;
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await page.getByText('4 records · 3 fields', { exact: true }).waitFor();
   const view = (await call(root + '/views'))[0];
   const open = () => page.getByRole('button', { name: 'Filters', exact: true }).click();
@@ -55,7 +56,7 @@ export async function verifyRelativeHourWorkflow(page, application) {
     await open();
     assert.equal(await page.getByLabel('Elapsed hours', { exact: true }).inputValue(), '2');
   }
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
 
   // Simulate an expired context response; service-clock expiration is covered by SQLite tests.
   let expired = false, queries = 0;
@@ -85,7 +86,7 @@ export async function verifyRelativeHourWorkflow(page, application) {
     expired = false;
     // Keep a real external change pending after the simulated clock boundary.
     await call(root + '/records', 'POST', [{ values: { [table.primaryFieldId]: 'Another future record', [at]: new Date(Date.now() + 3_600_000).toISOString() } }]);
-    await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+    await cancelDialog(page);
     await page.getByText('2 records · 3 fields', { exact: true }).waitFor();
     assert.ok(queries > 0);
   } finally { await page.unroute('**/workspace/state', stateRoute); page.off('request', queryObserved); }

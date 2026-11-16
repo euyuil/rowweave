@@ -1,3 +1,4 @@
+import { waitForLiveSync, closeSavedRecord, cancelDialog } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyConnectedFormulaWorkflow(page) {
@@ -35,7 +36,7 @@ export async function verifyConnectedFormulaWorkflow(page) {
   }
   const subtotal = orders.fields[2].id, array = orders.fields[3].id;
   const order = (await call(`/tables/${orders.id}/records`, 'POST', [{ values: { [orders.primaryFieldId]: 'Estimate', [link]: [item.id] } }])).records[0];
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await page.getByText('1 record · 4 fields', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Manage fields', exact: true }).click();
   await page.getByRole('button', { name: 'Add field', exact: true }).click();
@@ -58,20 +59,21 @@ export async function verifyConnectedFormulaWorkflow(page) {
   await select();
   await page.getByRole('button', { name: 'Open record', exact: true }).click();
   assert.equal(await page.getByLabel('Total', { exact: true }).textContent(), '$50.00');
+  await page.getByLabel('Name', { exact: true }).dispatchEvent('compositionstart');
   await page.getByLabel('Name', { exact: true }).fill('Retained draft');
   await call(`/tables/${items.id}/records`, 'PATCH', [{ id: item.id, expectedVersion: item.version, values: { [amount]: 40 } }]);
-  await page.getByRole('button', { name: 'Save record', exact: true }).click();
-  await page.getByRole('alert').filter({ hasText: 'changed' }).waitFor();
   assert.equal(await page.getByLabel('Name', { exact: true }).inputValue(), 'Retained draft');
+  await page.getByLabel('Name', { exact: true }).dispatchEvent('compositionend');
+  await closeSavedRecord(page);
   assert.equal((await call(`/tables/${orders.id}/records/${order.id}`)).values[total], 80);
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  assert.equal((await call(`/tables/${orders.id}/records/${order.id}`)).values[orders.primaryFieldId], 'Retained draft');
+  await waitForLiveSync(page);
   await select();
   await page.getByRole('button', { name: 'Open record', exact: true }).click();
   assert.equal(await page.getByLabel('Total', { exact: true }).textContent(), '$80.00');
   await page.getByRole('checkbox', { name: 'Line item', exact: true }).waitFor();
   await page.screenshot({ path: '.artifacts/desktop-connected-formula-result.png' });
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   for (const name of ['Calculation orders', 'Calculation items']) {
     await page.getByRole('navigation', { name: 'Tables', exact: true }).getByRole('button', { name, exact: true }).click();
     await page.getByRole('heading', { name, exact: true }).waitFor();

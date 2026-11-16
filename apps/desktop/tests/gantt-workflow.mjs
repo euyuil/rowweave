@@ -1,3 +1,4 @@
+import { waitForLiveSync, closeSavedRecord, cancelDialog } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export function ganttApi(page) {
@@ -23,7 +24,7 @@ export async function verifyGanttWorkflow(page, application) {
   await page.getByRole('button', { name: 'New view', exact: true }).click();
   await dialog.getByLabel('View type', { exact: true }).selectOption('gantt');
   assert.equal(await dialog.getByRole('button', { name: 'Create view', exact: true }).isDisabled(), true);
-  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   let table = (await call('/tables')).find(table => table.name === 'Gantt lab');
   const root = '/tables/' + table.id, name = table.primaryFieldId;
   for (const field of [{ name: 'Start', type: 'date' }, { name: 'End', type: 'date' }, { name: 'At', type: 'datetime' },
@@ -37,7 +38,7 @@ export async function verifyGanttWorkflow(page, application) {
     { values: { [name]: 'Unscheduled task' } }, { values: { [name]: 'Reversed range', [start]: '2024-02-29', [end]: '2024-02-27' } },
     { values: { [name]: 'Timed task', [at]: '2024-02-28T18:30:00.000Z' } },
   ])).records;
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await page.getByText('56 records · 6 fields', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'New view', exact: true }).click();
   await dialog.getByLabel('View name', { exact: true }).fill('Project plan');
@@ -96,18 +97,18 @@ export async function verifyGanttWorkflow(page, application) {
   await bar(0).focus(); await page.keyboard.press('Enter');
   assert.equal(await dialog.getByLabel('Hidden', { exact: true }).inputValue(), 'Complete details 0');
   await dialog.getByLabel('Name', { exact: true }).fill('Edited timeline task');
-  await dialog.getByRole('button', { name: 'Save record', exact: true }).click();
+  await closeSavedRecord(page);
   await row(0).getByRole('button', { name: 'Edited timeline task', exact: true }).waitFor();
   assert.equal(await timeline.getByLabel('Timeline start', { exact: true }).inputValue(), '2024-02-26');
   await timeline.getByRole('button', { name: 'Next records', exact: true }).click();
   await timeline.getByText('51–56 of 56 records', { exact: true }).waitFor();
   await row(53).getByRole('button', { name: 'Set a start date', exact: true }).click();
   await dialog.getByLabel('Start', { exact: true }).fill('2024-02-29');
-  await dialog.getByRole('button', { name: 'Save record', exact: true }).click();
+  await closeSavedRecord(page);
   await bar(53).waitFor();
   await row(54).getByRole('button', { name: 'Check date range', exact: true }).click();
   await dialog.getByLabel('End', { exact: true }).fill('2024-03-01');
-  await dialog.getByRole('button', { name: 'Save record', exact: true }).click();
+  await closeSavedRecord(page);
   await bar(54).waitFor();
   const search = page.getByRole('searchbox', { name: 'Search records', exact: true });
   await search.fill('Edited timeline task');
@@ -162,7 +163,7 @@ export async function verifyGanttAfterRestart(page, fixture) {
   assert.equal(await dialog.getByLabel('Gantt end field', { exact: true }).inputValue(), fixture.end);
   assert.equal(await dialog.getByLabel('Gantt time zone', { exact: true }).inputValue(), 'Asia/Shanghai');
   assert.equal(await dialog.getByLabel('Gantt scale', { exact: true }).inputValue(), 'day');
-  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   await page.getByRole('button', { name: 'Delete table', exact: true }).click();
   await dialog.getByRole('button', { name: 'Delete table', exact: true }).click();
   await dialog.waitFor({ state: 'detached' });

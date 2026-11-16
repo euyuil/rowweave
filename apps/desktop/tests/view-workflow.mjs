@@ -1,3 +1,4 @@
+import { waitForLiveSync, waitForAutosave, cancelDialog } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 import { waitForResponse } from './wait-for-response.mjs';
 
@@ -42,7 +43,7 @@ export async function verifyViewWorkflow(page) {
     if (await page.getByRole('textbox', { name: 'Cell value' }).count()) await page.keyboard.press('Escape');
     await page.waitForFunction(() => document.querySelector('canvas')?.contains(document.activeElement));
   };
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await page.getByText('3 records · 2 fields', { exact: true }).waitFor();
   const tabs = page.getByRole('tablist', { name: 'Views', exact: true });
   await page.waitForFunction(() => document.querySelector('[role="tab"][aria-selected="true"]')?.getAttribute('aria-disabled') === 'false');
@@ -99,13 +100,13 @@ export async function verifyViewWorkflow(page) {
   await page.getByRole('button', { name: 'Open record', exact: true }).click();
   assert.equal(await page.getByLabel('Name', { exact: true }).inputValue(), 'A');
   assert.equal(await page.getByLabel('Notes', { exact: true }).inputValue(), 'alpha');
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   await selectCell();
   await page.keyboard.press('Enter');
   await page.getByRole('textbox', { name: 'Cell value' }).fill('draft alpha');
   await page.getByText('Editing cell…', { exact: true }).waitFor();
   await page.keyboard.press('Enter');
-  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
+  await waitForAutosave(page);
   await page.evaluate(async ({ id, view }) => {
     const connection = await window.rowweave.connection();
     const response = await fetch(`${connection.url}/tables/${id}/views/${view.id}`, {
@@ -114,15 +115,15 @@ export async function verifyViewWorkflow(page) {
     });
     if (!response.ok) throw new Error('Could not prepare the concurrent column update.');
   }, { id: fixture.table.id, view: reordered });
-  await page.getByRole('button', { name: 'Refresh view', exact: true }).click();
-  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
+  await waitForLiveSync(page);
+  await waitForAutosave(page);
   await page.getByRole('tab', { name: 'Reverse', exact: true }).click();
   await page.getByText('3 records · 2 fields', { exact: true }).waitFor();
   await selectCell(2, 1);
   await page.keyboard.press('Enter');
   assert.equal(await page.getByRole('textbox', { name: 'Cell value' }).inputValue(), 'draft alpha');
   await page.keyboard.press('Escape');
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await waitForAutosave(page);
   await page.getByText('All changes saved', { exact: true }).waitFor();
   assert.equal((await read()).records.find(record => record.id === fixture.records[0].id).values[fixture.notes], 'draft alpha');
   const search = page.getByRole('searchbox', { name: 'Search records', exact: true });
@@ -157,10 +158,10 @@ export async function verifyViewWorkflow(page) {
   await page.getByRole('button', { name: 'Save view', exact: true }).click();
   await page.getByRole('dialog').getByRole('alert').filter({ hasText: 'view changed' }).waitFor();
   assert.equal(await page.getByLabel('View name', { exact: true }).inputValue(), 'Keep my view draft');
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await cancelDialog(page);
+  await waitForLiveSync(page);
   await page.getByRole('button', { name: 'Delete view', exact: true }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   assert.equal((await read()).views.length, 3);
   await page.getByRole('button', { name: 'Delete view', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Delete view', exact: true }).click();

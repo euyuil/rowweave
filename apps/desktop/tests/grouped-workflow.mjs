@@ -1,3 +1,4 @@
+import { waitForLiveSync, waitForAutosave, closeSavedRecord, cancelDialog } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyGroupedWorkflow(page, app) {
@@ -43,7 +44,7 @@ export async function verifyGroupedWorkflow(page, app) {
   const records = (await call(`/tables/${table.id}/records`, 'POST', Array.from({ length: 506 }, (_, index) => ({ values: {
     [table.primaryFieldId]: `Task ${index}`, [status]: index < 501 ? 'planned' : index < 503 ? 'doing' : index < 505 ? 'done' : null, [effort]: index,
   } })))).records;
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await page.getByText('506 records · 3 fields', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Groups', exact: true }).click();
   await page.getByLabel('Grid group field', { exact: true }).selectOption(status);
@@ -68,13 +69,13 @@ export async function verifyGroupedWorkflow(page, app) {
   await select(3);
   await page.evaluate(() => navigator.clipboard.writeText('Doing draft\nDone draft'));
   await page.keyboard.press('Control+v');
-  await page.getByText('2 unsaved cells', { exact: true }).waitFor();
+  await waitForAutosave(page);
   await page.getByRole('button', { name: 'Collapse all', exact: true }).click();
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   await page.getByText('All changes saved', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Redo', exact: true }).click();
-  await page.getByText('2 unsaved cells', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await waitForAutosave(page);
+  await waitForAutosave(page);
   await page.getByText('All changes saved', { exact: true }).waitFor();
   await ready();
   assert.equal((await call(`/tables/${table.id}/records/${records[502].id}`)).values[table.primaryFieldId], 'Doing draft');
@@ -85,23 +86,24 @@ export async function verifyGroupedWorkflow(page, app) {
   await page.keyboard.press('Enter');
   await page.getByLabel('Cell value', { exact: true }).selectOption('done');
   await page.getByRole('button', { name: 'Apply', exact: true }).click();
-  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
+  await waitForAutosave(page);
   await page.keyboard.press('Control+s');
   await page.getByText('All changes saved', { exact: true }).waitFor();
   await ready();
   assert.equal((await call(`/tables/${table.id}/records/${records[501].id}`)).values[status], 'done');
+  await waitForLiveSync(page);
   await select(2);
   await copy('Doing draft');
   await page.getByRole('button', { name: 'Open record', exact: true }).click();
   assert.equal(await page.getByLabel('Name', { exact: true }).inputValue(), 'Doing draft');
   await page.getByLabel('Effort', { exact: true }).fill('42');
-  await page.getByRole('button', { name: 'Save record', exact: true }).click();
+  await closeSavedRecord(page);
   await page.getByRole('dialog').waitFor({ state: 'detached' });
   assert.equal((await call(`/tables/${table.id}/records/${records[502].id}`)).values[effort], 42);
   await ready();
   await select(2, 2);
   await page.keyboard.press('Delete');
-  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
+  await waitForAutosave(page);
   await page.keyboard.press('Control+z');
   await page.getByText('All changes saved', { exact: true }).waitFor();
   await select(2);
@@ -113,27 +115,16 @@ export async function verifyGroupedWorkflow(page, app) {
   assert.equal(await page.locator('.rowweave-cell-editor').count(), 1);
   await editor.dispatchEvent('compositionend', { data: '中文' });
   await page.keyboard.press('Tab');
-  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
+  await waitForAutosave(page);
   const current = await call(`/tables/${table.id}/records/${records[502].id}`);
   await call(`/tables/${table.id}/records`, 'PATCH', [{ id: current.id, expectedVersion: current.version, values: { [effort]: 99 } }]);
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
-  await page.getByRole('alert').filter({ hasText: 'changed' }).waitFor();
-  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Refresh view', exact: true }).click();
+  await waitForLiveSync(page);
   await ready();
   await select(2);
   await copy('中文分组草稿');
-  assert.equal((await call(`/tables/${table.id}/records/${records[502].id}`)).values[table.primaryFieldId], 'Doing draft');
-  await app.evaluate(({ dialog }) => {
-    globalThis.groupedPreviousDialog = dialog.showMessageBox;
-    dialog.showMessageBox = async () => ({ response: 1, checkboxChecked: false });
-  });
-  try {
-    await page.getByRole('button', { name: 'Discard edits', exact: true }).click();
-    await page.getByText('All changes saved', { exact: true }).waitFor();
-    await ready();
-  }
-  finally { await app.evaluate(({ dialog }) => { dialog.showMessageBox = globalThis.groupedPreviousDialog; delete globalThis.groupedPreviousDialog; }); }
+  const independentlyUpdated = await call(`/tables/${table.id}/records/${records[502].id}`);
+  assert.equal(independentlyUpdated.values[table.primaryFieldId], '中文分组草稿');
+  assert.equal(independentlyUpdated.values[effort], 99);
   await page.getByLabel('Search records', { exact: true }).fill('Task 505');
   await page.getByText('1 record · 3 fields', { exact: true }).waitFor();
   await ready();
@@ -142,7 +133,7 @@ export async function verifyGroupedWorkflow(page, app) {
   await copy('Task 505');
   await page.getByLabel('Search records', { exact: true }).fill('');
   await page.getByText('506 records · 3 fields', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await ready();
   await page.getByRole('button', { name: 'Groups', exact: true }).click();
   assert.equal(await page.getByLabel('Grid group field', { exact: true }).inputValue(), status);
@@ -152,8 +143,8 @@ export async function verifyGroupedWorkflow(page, app) {
   await page.getByRole('button', { name: 'Save view', exact: true }).click();
   await page.getByRole('alert').filter({ hasText: 'view changed' }).waitFor();
   assert.equal(await page.getByLabel('Grid group field', { exact: true }).inputValue(), '');
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await cancelDialog(page);
+  await waitForLiveSync(page);
   await ready();
   await page.getByRole('button', { name: 'Groups', exact: true }).click();
   await page.getByLabel('Grid group field', { exact: true }).selectOption('');

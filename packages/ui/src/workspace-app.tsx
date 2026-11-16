@@ -68,7 +68,10 @@ export function WorkspaceApp({ api, host, workspaceLabel = 'Local workspace', on
     if (!loaded || offline) return;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
+    let running = false, requested = false;
     const poll = async () => {
+      if (running) { requested = true; return; }
+      clearTimeout(timer); running = true; requested = false;
       let delay = 2_000;
       const mutation = catalogMutation.current;
       try {
@@ -83,15 +86,20 @@ export function WorkspaceApp({ api, host, workspaceLabel = 'Local workspace', on
       } catch (error) {
         if (controller.signal.aborted) return;
         setCatalogError(message(error)); delay = 5_000;
-      } finally { if (!controller.signal.aborted) timer = setTimeout(() => void poll(), delay); }
+      } finally { running = false; if (!controller.signal.aborted) timer = setTimeout(() => void poll(), requested ? 0 : delay); }
     };
-    timer = setTimeout(() => void poll(), 2_000);
-    return () => { controller.abort(); clearTimeout(timer); };
+    const unsubscribe = api.watchWorkspace(() => void poll(), error => setCatalogError(message(error)));
+    void poll();
+    return () => { controller.abort(); clearTimeout(timer); unsubscribe(); };
   }, [api, loaded, offline]);
 
   const select = async (id: string) => {
     if (id === selected) return;
-    if (model?.saving) { setError('Wait for the current save to finish before switching tables.'); return; }
+    if (model && (model.saving || model.liveHistory.busy || model.pendingCells && !model.error && !model.conflicted)) {
+      try { await model.waitForWrite(); if (model.pendingCells && !model.error && !model.conflicted) await model.saveLive(); }
+      catch (error) { setError(message(error)); return; }
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
     if (dirty.current.table && !await host.confirmDiscard()) return;
     await tableHost.setDirty(false);
     setSelected(id);
