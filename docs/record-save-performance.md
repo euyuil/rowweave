@@ -1,6 +1,6 @@
 # Record-save performance
 
-The final-candidate benchmark exposed a large-table save regression. This report preserves the failed gate and the independently useful history-query correction. The final-candidate acceptance target remains **2 seconds for an atomic 1,000 × 10 save**; the correction below does not yet meet that target on the large dataset.
+The final-candidate benchmark exposed a large-table save regression. This report preserves the failed gate, the history-query correction and subsequent background checkpoint measurements. The final-candidate acceptance target remains **2 seconds for an atomic 1,000 × 10 save**. Managed HTTP saves now take 520–610 ms on the large dataset; current packaged renderer measurements remain required.
 
 ## Production baseline
 
@@ -41,8 +41,27 @@ The script never updates the input databases. It records source identity, dirty 
 
 Reference machine: Windows 11 x64 `10.0.22631`, Intel Core i7-8700K with 12 logical CPUs, 31.95 GiB RAM. The test volume reports `ST6000NM0115-1YZ110` on a RAID bus. Node 24.22.1 and SQLite 3.53.4 execute the service; the production renderer uses Electron 45.3.0 and embedded Node 24.22.2. The desktop run used 1920 × 1080 at 100% scaling/60 Hz; display settings do not apply to service-only timings. No other local test suite or download ran concurrently; ordinary desktop activity was not isolated.
 
-## Remaining commit and memory gates
+## Background workspace checkpoints
 
-An isolated diagnostic disabled automatic checkpointing while retaining the existing synchronous setting, then explicitly checkpointed after three writes. Saves took 497.5, 394.8 and 431.9 ms; the subsequent passive checkpoint took 3079.2 ms for 18,008 WAL pages. This demonstrates the checkpoint cost on this workload. **The diagnostic setting is not a shipped change** and leaving checkpointing disabled is not an acceptable solution. [SQLite documents](https://www.sqlite.org/wal.html#performance_considerations) the distinction between durable WAL commit and checkpointing, including checkpoint work on a separate thread. Any follow-up must preserve durable commits, bounded maintenance, concurrent reads, error reporting and clean shutdown.
+An isolated diagnostic disabled automatic checkpointing while retaining the existing synchronous setting, then explicitly checkpointed after three writes. Saves took 497.5, 394.8 and 431.9 ms; the subsequent passive checkpoint took 3079.2 ms for 18,008 WAL pages. This demonstrates the checkpoint cost on this workload. Leaving checkpointing disabled without maintenance is not an acceptable solution. [SQLite documents](https://www.sqlite.org/wal.html#performance_considerations) the distinction between durable WAL commit and checkpointing, including checkpoint work on a separate thread.
 
-The separate production memory run stayed bounded, with last-three-circuit spreads of 3.2 and 9.9 MiB. The large dataset reached 653.5 MiB in summed process working sets, slightly above the 650 MiB target; service working sets were 241.8–246.2 MiB. Shared pages can be counted more than once. This remains an unresolved final-candidate gate, alongside the save target and final native/package verification. The overall goal stays active.
+The managed workspace now retains `synchronous = FULL` and moves passive checkpoint work to its existing calculation worker. A ready handshake precedes HTTP startup. Only committed transactions schedule maintenance, concurrent requests coalesce, and the minute clock tick requests another attempt after pinned readers release their snapshots. A partial checkpoint does not enter a busy retry loop. Checkpoint failures and unexpected worker exit close the service visibly; shutdown drains accepted work and the worker before closing the main connection. No extra process/worker or data-format migration is introduced. Direct storage consumers keep automatic checkpointing.
+
+Clean source `8096908ae95551646a4f71935e416e151743faf2` passed all 465 Node tests, the production build and strict checking. Eight new regressions cover FULL durability configuration, post-commit notifications, rollback without notification/history changes, pinned readers, coalesced requests, graceful drain, startup/worker/command failures and recovery after process termination. The crash case pins an older reader, confirms acknowledged data remains uncheckpointed, kills the standalone service, and checks exact values, versions and before/after history after restart. This verifies process-crash recovery, not physical power-loss behavior.
+
+The same generated datasets were copied with SQLite backup and measured through the managed workspace and shared HTTP client. Each size uses three separate service lifetimes; startup calculations finish before timing. Saves include request/response handling and the complete durable transaction. Correctness assertions, a following projected 100-record read, receipt pagination, stale-batch rollback and restart are outside save timing. No renderer or SQL/checkpoint instrumentation runs.
+
+| Managed HTTP samples, ms | 10,000 × 20 | 100,000 × 100 |
+| --- | --- | --- |
+| Save | 283.0, 290.5, 271.3 | 610.2, 520.0, 553.0 |
+| Read immediately after save | 5.6, 4.4, 4.5 | 24.4, 22.7, 18.1 |
+
+Every correctness and restart assertion passed. Checkpoint overlap with the following reads is not instrumented, so these timings do not independently prove overlap. Environment is unchanged from the reference machine above. Raw data, source identity and dataset provenance are in `.artifacts/batch-save-worktree/.artifacts/record-save-performance-VRQJ1d/results.json`; all samples are retained. The first sandboxed invocation failed to launch Git before any measurement and is not counted as a run.
+
+```sh
+node scripts/benchmark-record-saves.mjs PATH_TO_DESKTOP_BENCHMARK_RESULTS_JSON --workspace
+```
+
+## Remaining renderer and memory gates
+
+The separate baseline production memory run stayed bounded, with last-three-circuit spreads of 3.2 and 9.9 MiB. The large dataset reached 653.5 MiB in summed process working sets, slightly above the 650 MiB target; service working sets were 241.8–246.2 MiB. Shared pages can be counted more than once. This remains an unresolved final-candidate gate, alongside packaged renderer save measurements and final native/package verification. Current calendar-query remeasurement is also required: a later cache diagnostic exceeded the historical 500 ms query target. The overall goal stays active.
