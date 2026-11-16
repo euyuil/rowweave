@@ -55,13 +55,14 @@ export class RecordHistory {
   }
 
   end(): void {
+    // The single current context bounds both receipts to this transaction's changes.
     this.db.exec(`INSERT INTO record_batches (id, changed_at, record_count, record_write, undo_of)
       SELECT context.batch_id, context.changed_at, COUNT(c.id), context.record_write, context.undo_of
-      FROM record_change_context context JOIN record_changes c ON c.batch_id = context.batch_id
+      FROM record_change_context context CROSS JOIN record_changes c ON c.batch_id = context.batch_id
       GROUP BY context.batch_id;
       INSERT INTO record_batch_tables (table_id, batch_id, sequence)
       SELECT c.table_id, b.id, b.sequence FROM record_change_context context
-      JOIN record_batches b ON b.id = context.batch_id JOIN record_changes c ON c.batch_id = b.id
+      CROSS JOIN record_batches b ON b.id = context.batch_id CROSS JOIN record_changes c ON c.batch_id = b.id
       GROUP BY c.table_id, b.id;
       DELETE FROM record_change_context;`);
   }
