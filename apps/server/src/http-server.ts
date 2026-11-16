@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import type { Socket } from 'node:net';
 import { timingSafeEqual } from 'node:crypto';
 import { RecordService, ServiceError } from '../../../packages/core/src/record-service.js';
 import { networkPolicy, type NetworkOptions } from './network.js';
@@ -20,7 +21,9 @@ export async function startServer({ service, token, calculations: suppliedCalcul
   const headers = ['authorization', 'content-type'];
   const expectedAuth = Buffer.from(`Bearer ${token}`);
   const calculations = suppliedCalculations ?? new Calculations({ refresh: async () => service.refreshCalculations(), close: async () => {} }, false);
+  const unrequestedSockets = new Set<Socket>();
   const server = createServer((request, response) => {
+    unrequestedSockets.delete(request.socket);
     void handle(request, response).catch(error => {
       if (!response.headersSent) {
         const failure = error instanceof ServiceError
@@ -30,6 +33,10 @@ export async function startServer({ service, token, calculations: suppliedCalcul
         response.destroy();
       }
     });
+  });
+  server.on('connection', socket => {
+    unrequestedSockets.add(socket);
+    socket.once('close', () => unrequestedSockets.delete(socket));
   });
 
   function send(response: ServerResponse, status: number, body: unknown): void {
@@ -249,7 +256,10 @@ export async function startServer({ service, token, calculations: suppliedCalcul
     close: async () => {
       calculations.stop();
       server.closeIdleConnections();
-      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+      const closed = new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+      // HTTP idle cleanup does not cover connections that have never sent complete headers.
+      for (const socket of unrequestedSockets) socket.destroy();
+      await closed;
       await calculations.close();
     },
   };
