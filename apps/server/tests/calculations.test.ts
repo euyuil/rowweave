@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { setImmediate } from 'node:timers/promises';
 import { Calculations, type CalculationRunner } from '../src/calculations.js';
-import { CalculationWorker } from '../src/calculation-runner.js';
+import { WorkspaceWorker } from '../src/workspace-runner.js';
 import { fixture } from '../../../packages/storage-sqlite/tests/helpers.js';
 import { RecordService } from '../../../packages/core/src/record-service.js';
 import type { CalculationRefresh } from '../../../packages/contracts/src/index.js';
@@ -88,7 +88,7 @@ test('the calculation worker refreshes the real SQLite workspace and closes its 
   let table = service.createTable({ name: 'Worker clock' });
   table = service.createField(table.id, { expectedVersion: table.version, name: 'Now', type: 'formula', formula: { expression: 'NOW()', resultType: 'datetime' } });
   const field = table.fields[1]!.id, record = service.createRecords(table.id, [{ values: {} }]).records[0]!;
-  const calculations = new Calculations(new CalculationWorker(data.path), false);
+  const calculations = new Calculations(new WorkspaceWorker(data.path), false);
   try {
     const refreshed = await calculations.refresh();
     assert.equal(refreshed.changedRecords, 1);
@@ -101,7 +101,7 @@ test('the calculation worker refreshes the real SQLite workspace and closes its 
 test('a worker startup failure is reported after exit and a later explicit request can reopen the repaired database', async t => {
   const data = fixture(t, null);
   writeFileSync(data.path, 'Not a SQLite database');
-  const calculations = new Calculations(new CalculationWorker(data.path), false);
+  const calculations = new Calculations(new WorkspaceWorker(data.path), false);
   try {
     await assert.rejects(calculations.refresh(), { code: 'CALCULATION_FAILED' });
     assert.equal(calculations.status().running, false); assert.ok(calculations.status().lastError);

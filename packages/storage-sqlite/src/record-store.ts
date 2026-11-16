@@ -48,6 +48,8 @@ export interface SeedOptions {
   columns: number;
 }
 
+export interface CheckpointResult { busy: number; log: number; checkpointed: number }
+
 interface StoredTable {
   id: string;
   name: string;
@@ -80,6 +82,7 @@ export class SqliteRecordStore implements RecordStore {
   private readonly recordTimes: RecordTimes;
   private readonly attachments: Attachments;
   private transactionTime: Date | undefined;
+  private onCommit: (() => void) | undefined;
 
   constructor(path: string, seed: SeedOptions | null = null, private readonly clock: () => Date = () => new Date()) {
     if (seed && (!Number.isSafeInteger(seed.rows) || seed.rows < 1 || seed.rows > 100_000 ||
@@ -107,17 +110,29 @@ export class SqliteRecordStore implements RecordStore {
 
   private transaction<T>(operation: () => T, mode: 'IMMEDIATE' | 'DEFERRED' = 'IMMEDIATE', context: HistoryContext | null = {}): T {
     this.db.exec(`BEGIN ${mode}`);
+    let result: T;
     try {
       this.transactionTime = this.clock();
       if (mode === 'IMMEDIATE' && context !== null) this.history.begin(this.transactionTime.toISOString(), context);
-      const result = operation();
+      result = operation();
       if (mode === 'IMMEDIATE' && context !== null) this.history.end();
       this.db.exec('COMMIT');
-      return result;
     } catch (error) {
       this.db.exec('ROLLBACK');
       throw error;
     } finally { this.transactionTime = undefined; }
+    // Maintenance is scheduled only after the durable transaction has completed.
+    if (mode === 'IMMEDIATE') this.onCommit?.();
+    return result;
+  }
+
+  useBackgroundCheckpoints(onCommit: () => void): void {
+    this.db.exec('PRAGMA synchronous = FULL; PRAGMA wal_autocheckpoint = 0;');
+    this.onCommit = onCommit;
+  }
+
+  checkpoint(): CheckpointResult {
+    return this.db.prepare('PRAGMA wal_checkpoint(PASSIVE)').get() as unknown as CheckpointResult;
   }
 
   refreshCalculations() {
