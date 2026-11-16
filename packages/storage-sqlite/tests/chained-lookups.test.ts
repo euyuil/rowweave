@@ -84,6 +84,23 @@ test('chained lookup schemas reject pure and mixed cycles while allowing table c
   tables().forEach((table, index) => assert.equal(table.version, before[index]!.version + 1));
 });
 
+test('same-table lookup cycles return domain errors without mutating schema or records', t => {
+  const { service, leaf, add } = setup(t);
+  const amount = add(leaf.id, { name: 'Amount', type: 'number' });
+  const link = add(leaf.id, { name: 'Related', type: 'relation', relation: { tableId: leaf.id, multiple: true } });
+  const first = add(leaf.id, { name: 'First', type: 'lookup', lookup: { relationFieldId: link.id, fieldId: amount.id } });
+  const second = add(leaf.id, { name: 'Second', type: 'lookup', lookup: { relationFieldId: link.id, fieldId: first.id } });
+  const item = service.createRecords(leaf.id, [{ values: { [amount.id]: 5 } }]).records[0]!;
+  service.createRecords(leaf.id, [{ values: { [link.id]: [item.id] } }]);
+  const schema = service.getTable(leaf.id), page = service.queryRecords(leaf.id, {});
+  for (const fieldId of [first.id, second.id]) {
+    assert.throws(() => service.updateField(leaf.id, first.id, { expectedVersion: schema.version,
+      lookup: { relationFieldId: link.id, fieldId } }), code('INVALID_FORMULA'));
+    assert.deepEqual(service.getTable(leaf.id), schema);
+    assert.deepEqual(service.queryRecords(leaf.id, {}), page);
+  }
+});
+
 test('changing an intermediate lookup operation updates result shape, formulas and saved summary queries', t => {
   const { service, leaf, middle, root, add, innerLink, outerLink, inner, outer } = setup(t);
   const amount = add(leaf.id, { name: 'Amount', type: 'number' }), first = inner(amount.id), second = outer(first.id), sum = outer(first.id, 'sum');

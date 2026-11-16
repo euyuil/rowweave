@@ -162,7 +162,6 @@ export class Lookups {
       if (!target || target.type === 'relation') {
         throw new ServiceError('INVALID_SCHEMA', `${field.name}: choose a non-linked field in the target table.`);
       }
-      field.lookupResult = target;
     }
     this.resolve(table, table);
     for (const field of table.fields) {
