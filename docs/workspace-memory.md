@@ -50,7 +50,24 @@ The complete clean-source 80 MiB standard calendar suite passed every correctnes
 | Busy timestamp day page | 403.5 |
 | Invalid-interval page | 385.5 |
 
-All six workloads use the [existing generation and independent validation method](calendar-performance.md#workload-and-method), with two warm-ups and twenty measured calls. The maximum individual sample was 495.6 ms. All raw samples are retained in `.artifacts/batch-save-worktree/.artifacts/calendar-performance-dv6twg/results.json`. Final packaged startup, input, paste, save and scrolling measurements remain required. Service-only cache probes do not establish renderer performance or native input behavior.
+All six workloads use the [existing generation and independent validation method](calendar-performance.md#workload-and-method), with two warm-ups and twenty measured calls. The maximum individual sample was 495.6 ms. All raw samples are retained in `.artifacts/batch-save-worktree/.artifacts/calendar-performance-dv6twg/results.json`. Service-only cache probes do not establish renderer performance or native input behavior.
+
+## Complete packaged timing check
+
+The same clean package subsequently passed the complete production desktop timing workload with newly generated typed datasets. Each size ran three application launches, 110 keyboard inputs per launch (ten discarded warm-ups), a 1,000 × 10 paste and save, five query workloads (two warm-ups and twenty measured calls), and five scrolling circuits. The display was 1920 × 1080 at 100% scaling and 60 Hz; the renderer viewport was 1204 × 781. All six application lifetimes shut down normally.
+
+| Measured result, ms | 10,000 × 20 | 100,000 × 100 | Target |
+| --- | ---: | ---: | ---: |
+| Median startup to populated grid | 843.9 | 938.1 | ≤ 2,000 |
+| Highest input-to-next-frame p95 across three trials | 16.9 | 15.6 | ≤ 50 |
+| Paste, all three samples | 80.1 / 76.5 / 79.1 | 303.7 / 300.8 / 286.8 | ≤ 500 |
+| Save, all three samples | 417.5 / 936.9 / 447.9 | 961.3 / 947.9 / 940.6 | ≤ 2,000 |
+| Highest prepared-query p95 | 10.0 | 46.8 | ≤ 500 |
+| Scrolling frame-interval p95 | 18.3 | 16.8 | ≤ 25 |
+
+The small scrolling run recorded 4,010 frames, a 21.0 ms maximum and no frames above 25 ms. The large run recorded 4,056 frames, a 34.5 ms maximum, one frame above 25 ms and none above 50 ms. Query index preparation is separate from prepared-query latency: the large workload took 282–1,540 ms to prepare each query. These figures are measured on the reference machine, not universal latency guarantees.
+
+Input-to-animation-frame and frame intervals are renderer paint proxies, not hardware input latency. Paste uses a DOM clipboard event and does not prove Excel interoperability or native IME behavior. Renderer instrumentation changes memory behavior, so memory acceptance uses the independent debugger-free run above. No other local benchmark or test ran concurrently; a roughly 3 MB CI screenshot artifact download happened during large-dataset generation before that dataset's timed phases. Raw timings, environment, dataset identities, preparation costs and all individual samples are retained in `.artifacts/batch-save-worktree/.artifacts/benchmarks/2026-11-16T11-27-54-563Z/results.json`.
 
 Run the memory check after generating production datasets and packaging a clean source tree:
 

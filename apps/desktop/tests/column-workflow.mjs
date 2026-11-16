@@ -106,18 +106,28 @@ export async function verifyColumnWorkflow(page) {
   assert.equal(await page.getByRole('button', { name: 'Hide in this view', exact: true }).isDisabled(), true);
   assert.equal(await page.getByRole('button', { name: 'Move left', exact: true }).isDisabled(), true);
   await page.keyboard.press('Escape');
-  await page.evaluate(async ({ tableId, view }) => {
+  const renameView = async name => page.evaluate(async ({ tableId, view, name }) => {
     const connection = await window.rowweave.connection();
     const response = await fetch(`${connection.url}/tables/${tableId}/views/${view.id}`, {
       method: 'PATCH', headers: { Authorization: `Bearer ${connection.token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ expectedVersion: view.version, name: 'Updated elsewhere' }),
+      body: JSON.stringify({ expectedVersion: view.version, name }),
     });
     if (!response.ok) throw new Error('Could not change the view fixture.');
-  }, { tableId: table.id, view: await readView() });
+  }, { tableId: table.id, view: await readView(), name });
+  await renameView('Updated elsewhere');
+  await page.getByRole('tab', { name: 'Updated elsewhere', exact: true }).waitFor();
   await menu(0);
-  await page.getByRole('button', { name: 'Sort descending', exact: true }).click();
+  await action('Sort descending');
+  assert.equal((await readView()).query.sort[0].direction, 'desc');
+  await menu(0);
+  await renameView('Changed with menu open');
+  await page.waitForFunction(() => [...document.querySelectorAll('.notice-banner')].some(element => element.textContent.includes('Updates are available')));
+  assert.equal(await page.getByRole('tab', { name: 'Updated elsewhere', exact: true }).count(), 1);
+  await page.getByRole('button', { name: 'Sort ascending', exact: true }).click();
   await page.getByRole('dialog').getByRole('alert').filter({ hasText: 'view changed' }).waitFor();
-  assert.equal((await readView()).query.sort[0].direction, 'asc');
+  const unchanged = await readView();
+  assert.equal(unchanged.query.sort[0].direction, 'desc');
+  assert.equal(unchanged.name, 'Changed with menu open');
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   await page.getByRole('button', { name: 'Reload', exact: true }).click();
   await page.getByText('1 record · 1 field', { exact: true }).waitFor();
