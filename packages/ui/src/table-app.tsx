@@ -56,7 +56,7 @@ export interface TableHost {
 }
 
 function gridCell(record: RowRecord | undefined, field: Field | undefined, readonly: boolean, row: number, gridRow: number): GridCell {
-  if (!record || !field) return { kind: GridCellKind.Loading, allowOverlay: false };
+  if (!record || !field) return { kind: GridCellKind.Loading, allowOverlay: false, skeletonWidth: 42, skeletonHeight: 8 };
   readonly ||= isReadOnlyField(field);
   if (record.formulaErrors?.[field.id]) return { kind: GridCellKind.Text, data: '#ERROR: ' + record.formulaErrors[field.id],
     displayData: '#ERROR: ' + record.formulaErrors[field.id], allowOverlay: false, readonly: true };
@@ -98,7 +98,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   const [queryAnchor, setQueryAnchor] = useState<DialogAnchor>();
   const currentView = useRef<GridView>();
   const appliedSearch = useRef('');
-  const viewRequest = useRef(0);
+  const applyView = useRef<(selected: GridView, text?: string) => Promise<void>>();
   const columns = useMemo(() => {
     const widths = new Map(view?.columns.map(column => [column.fieldId, column.width]));
     return fields.map(field => ({ id: field.id, title: field.name, width: widths.get(field.id) ?? 180, hasMenu: true }));
@@ -298,27 +298,47 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     });
   }, [api, model, tableId]);
 
-  const applyView = useCallback(async (selected: GridView, text = selected.query.search ?? '') => {
-    if (model.saving) return;
+  applyView.current = async (selected, text = selected.query.search ?? '') => {
+    if (busyRef.current || model.saving) return;
     if (activeEditor.current) {
       if (!activeEditor.current.finish(true)) return;
       await new Promise(resolve => setTimeout(resolve, 0));
+      if (busyRef.current || model.saving) return;
     }
-    const request = ++viewRequest.current;
+    const initialSearch = searchDraft.current;
     busyRef.current = true;
     setBusy(true);
     setError(undefined);
-    currentView.current = selected;
-    appliedSearch.current = text;
-    setView(selected);
-    setSearch(text);
-    setSelection({ columns: CompactSelection.empty(), rows: CompactSelection.empty() });
+    const count = Math.min(maxBatchRecords, Math.ceil(size.height / selected.rowHeight) + 5);
+    let groups: Awaited<ReturnType<typeof grouping.prepareRefresh>> | undefined;
     try {
-      await model.setQuery(queryForView(selected, text));
+      const snapshot = await model.prepareRefresh(queryForView(selected, text), {
+        count,
+        ...(selected.type === 'grid' && selected.groupBy ? { selectRows: async (table: Table, first: QueryPage, signal: AbortSignal) => {
+          groups = await grouping.prepareRefresh(table, selected, first, text, signal, 0, count);
+          return groups.rows.indices(0, count);
+        } } : {}),
+      });
+      flushSync(() => {
+        if (!model.commitRefresh(snapshot, { drafts: 'preserve' })) throw new Error('The table changed while loading the view. Try again.');
+        if (groups) { grouping.commitRefresh(groups, selected, text); groups = undefined; }
+        grid.current?.scrollTo(0, 0, 'vertical', 0, 0, { vAlign: 'start' });
+        currentView.current = selected;
+        appliedSearch.current = text;
+        setView(selected);
+        if (searchDraft.current === initialSearch) setSearch(text);
+        setSelection({ columns: CompactSelection.empty(), rows: CompactSelection.empty() });
+      });
       localStorage.setItem(`rowweave.view.${selected.tableId}`, selected.id);
-    } catch (failure) { if (request === viewRequest.current) report(failure); }
-    finally { if (request === viewRequest.current) { busyRef.current = false; setBusy(false); } }
-  }, [model, report]);
+    } catch (failure) {
+      if (selected.id === currentView.current?.id && searchDraft.current === text) setSearch(appliedSearch.current);
+      report(failure);
+    } finally {
+      groups?.reader.dispose();
+      busyRef.current = false;
+      setBusy(false);
+    }
+  };
 
   checkExternal.current = async signal => {
     const previousView = currentView.current;
@@ -449,9 +469,9 @@ export function TableApp({ tableId, model, api, host, onManage }: {
 
   useEffect(() => {
     if (!ready || offline || busy || model.saving || searchComposing || search === appliedSearch.current || !currentView.current) return;
-    const timer = setTimeout(() => { void applyView(currentView.current!, search); }, 200);
+    const timer = setTimeout(() => { void applyView.current!(currentView.current!, search); }, 200);
     return () => clearTimeout(timer);
-  }, [search, searchComposing, ready, offline, busy, model.saving, applyView]);
+  }, [search, searchComposing, ready, offline, busy, model.saving]);
 
   useEffect(() => {
     let active = true;
@@ -475,20 +495,26 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     return () => observer.disconnect();
   }, [ready, view?.type]);
 
+  // Align ungrouped reads to pages and keep the next page ready for scrolling.
+  const viewportStart = grouping.enabled ? visible.y : Math.floor(visible.y / model.pageSize) * model.pageSize;
+  const viewportEnd = grouping.enabled ? visible.y + visible.height + 5
+    : (Math.ceil((visible.y + visible.height) / model.pageSize) + 1) * model.pageSize;
   useEffect(() => {
-    if (!ready || offline || view?.type !== 'grid' || (grouping.enabled && (!grouping.reader || grouping.pending))) return;
+    if (!ready || offline || busy || view?.type !== 'grid' || (grouping.enabled && (!grouping.reader || grouping.pending))) return;
     const controller = new AbortController(), reader = grouping.reader, generation = model.queryVersion;
-    const timer = setTimeout(() => {
+    const load = () => {
       void (async () => {
-        const count = Math.min(visible.height + 5, maxBatchRecords);
-        const rows = reader ? await reader.readWindow(visible.y, count, controller.signal) : undefined;
+        const count = Math.min(viewportEnd - viewportStart, maxBatchRecords);
+        const rows = reader ? await reader.readWindow(viewportStart, count, controller.signal) : undefined;
         if (controller.signal.aborted || generation !== model.queryVersion) return;
-        await model.readViewport(rows ? rows.indices(visible.y, count) : Array.from({ length: count }, (_, index) => visible.y + index));
+        await model.readViewport(rows ? rows.indices(viewportStart, count) : Array.from({ length: count }, (_, index) => viewportStart + index));
         if (!controller.signal.aborted && generation === model.queryVersion && reader && rows) grouping.commitWindow(reader, rows);
       })().catch(failure => { if (!controller.signal.aborted) report(failure); });
-    }, 30);
+    };
+    const timer = reader ? setTimeout(load, 30) : undefined;
+    if (!reader) load();
     return () => { controller.abort(); clearTimeout(timer); };
-  }, [ready, offline, visible, model, report, queryVersion, view?.type, grouping.reader, grouping.pending, grouping.enabled]);
+  }, [ready, offline, busy, viewportStart, viewportEnd, model, report, queryVersion, view?.type, grouping.reader, grouping.pending, grouping.enabled]);
 
   const save = useCallback(async () => {
     if (busyRef.current || offline || model.saving) return;
@@ -618,7 +644,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     }
     const saved = await api.updateView(tableId, view!.id, update);
     setViews(current => current.map(item => item.id === saved.id ? saved : item));
-    await applyView(saved, appliedSearch.current);
+    await applyView.current!(saved, appliedSearch.current);
     setColumnAction(undefined);
   };
   const readCurrentRecord = async (record: RowRecord) => {
@@ -771,7 +797,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       : 'Updates are available. Finish editing to load them automatically, or use Refresh view to keep cell drafts. Reload resets local undo history.'}</div>}
     {!offline && refreshFailure && <div role="status" className="notice-banner">Could not check for updates: {refreshFailure}</div>}
     <ViewTabs views={views} selected={view?.id} disabled={!ready || locked} panelId={`table-view-${tableId}`}
-      onSelect={selected => void applyView(selected)} onCreate={() => setViewAction('create')} />
+      onSelect={selected => void applyView.current!(selected)} onCreate={() => setViewAction('create')} />
     <section className="table-panel" id={`table-view-${tableId}`} role="tabpanel" aria-label={view?.name ?? 'Loading view'}>
     <div className="record-toolbar">
       <button className="primary" disabled={recordActionsLocked} onClick={() => void openRecord('create')}>+ New record</button>

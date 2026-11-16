@@ -34,6 +34,19 @@ test('a prepared refresh keeps the current rows visible until one atomic commit'
   assert.equal(model.commitRefresh(snapshot), false, 'A committed candidate cannot be applied twice.');
 });
 
+test('an old viewport can finish loading while the next view is being prepared', async t => {
+  const { api } = setup(t), model = new TableModel(api, 5, 3);
+  await model.initialize();
+  const snapshot = await model.prepareRefresh({ sort: [{ fieldId: 'field_1', direction: 'desc' }] });
+  const revision = model.getSnapshot();
+  await model.readViewport([10, 11]);
+  assert.ok(model.getSnapshot() > revision);
+  assert.equal(model.getRecord(10)!.id, 'record_11');
+  assert.equal(model.commitRefresh(snapshot, { drafts: 'preserve' }), true);
+  assert.equal(model.getRecord(0)!.id, snapshot.first.records[0]!.id);
+  assert.equal(model.getRecord(10), undefined);
+});
+
 test('manual refresh publishes schema and data together while preserving or explicitly discarding drafts', async t => {
   const { service, api } = setup(t), model = new TableModel(api);
   await model.initialize();

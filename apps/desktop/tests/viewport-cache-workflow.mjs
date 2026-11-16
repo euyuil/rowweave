@@ -34,6 +34,15 @@ export async function verifyViewportCache(page, application) {
       values: { [name]: option.name + ' record ' + index, [field.id]: option.id },
     }))))).records;
     const view = (await call(root + '/views'))[0];
+    const nextPage = page.waitForResponse(response => new URL(response.url()).pathname === root + '/views/' + view.id + '/query' &&
+      response.ok() && response.request().postDataJSON()?.offset === 100);
+    await page.getByRole('button', { name: 'Reload', exact: true }).click();
+    await nextPage;
+    const scroller = page.locator('.dvn-scroller');
+    assert.equal(await scroller.evaluate(element => element.scrollTop), 0, 'The next page should load before scrolling.');
+    await scroller.evaluate(element => { element.scrollTop = 98 * 36; });
+    await cell(100).filter({ hasText: /^Visible 0 record 0$/ }).waitFor({ state: 'attached' });
+    await scroller.evaluate(element => { element.scrollTop = 0; });
     await call(root + '/views/' + view.id, 'PATCH', { expectedVersion: view.version, groupBy: field.id });
     await page.getByRole('button', { name: 'Reload', exact: true }).click();
     await ready();
