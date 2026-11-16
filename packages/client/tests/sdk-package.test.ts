@@ -39,6 +39,9 @@ test('the packed SDK installs offline outside the repository, exposes usable typ
   await writeFile(join(consumer, 'consumer.ts'), `
 import { createWorkspaceClient, ApiFailure, type RecordQuery, type CsvPreview, type Table, type GroupLayout } from '@rowweave/sdk';
 const api = createWorkspaceClient({ url: 'http://127.0.0.1:4317', token: 'provided-at-runtime' });
+const paired: Promise<Table> = api.pairRelationFields('source', 'link', { expectedVersion: 1, targetFieldId: 'reverse', expectedTargetVersion: 2 });
+// @ts-expect-error Pairing requires the target table schema version too.
+void api.pairRelationFields('source', 'link', { expectedVersion: 1, targetFieldId: 'reverse' });
 const calendar = { startFieldId: 'start', endFieldId: 'end', timeZone: 'Asia/Shanghai' };
 void api.createView('table', { name: 'Schedule', type: 'calendar', calendar });
 void api.createView('table', { name: 'Timeline', type: 'gantt', gantt: { ...calendar, scale: 'week' } });
@@ -78,7 +81,7 @@ void api.updateRecords('table', [{ id: 'record', expectedVersion: 'stale', value
 // @ts-expect-error Field types are a closed set.
 void api.createField('table', { expectedVersion: 1, name: 'Unknown', type: 'unsupported' });
 const code: string = new ApiFailure('VERSION_CONFLICT', 'Conflict', 409).code;
-void [tables, preview, groups, code];
+void [tables, preview, groups, code, paired];
 `);
   await run(process.execPath, [resolve('node_modules/typescript/bin/tsc'), '-p', join(consumer, 'tsconfig.json')]);
   const service = new RecordService(fixture(t, null).open());
@@ -129,7 +132,18 @@ assert.deepEqual((await api.queryGroups(table.id, { groupBy: cost, window: 'expa
 assert.equal((await api.queryRecords(table.id, { groupBy: cost, offset: groups.groups[0].recordOffset,
   expectedRevision: groups.revision })).total, 2);
 assert.equal((await api.getRecord(table.id, created.id)).version, changed.version);
-await api.deleteRecords(table.id, rows.map(row => ({ id: row.id, expectedVersion: row.version })));
+table = await api.createField(table.id, { expectedVersion: table.version, name: 'Outgoing', type: 'relation', relation: { tableId: table.id, multiple: true } });
+const outgoing = table.fields.at(-1).id;
+table = await api.createField(table.id, { expectedVersion: table.version, name: 'Incoming', type: 'relation', relation: { tableId: table.id, multiple: true } });
+const incoming = table.fields.at(-1).id;
+await api.updateRecords(table.id, [{ id: rows[0].id, expectedVersion: rows[0].version, values: { [outgoing]: [rows[1].id] } }]);
+table = await api.pairRelationFields(table.id, outgoing, { expectedVersion: table.version, expectedTargetVersion: table.version, targetFieldId: incoming });
+assert.equal(table.fields.find(field => field.id === outgoing).relation.inverseFieldId, incoming);
+const reverse = await api.getRecord(table.id, rows[1].id);
+assert.deepEqual(reverse.values[incoming], [rows[0].id]);
+assert.equal(reverse.version, rows[1].version + 1);
+const pairedRows = (await api.queryRecords(table.id, {})).records;
+await api.deleteRecords(table.id, pairedRows.map(row => ({ id: row.id, expectedVersion: row.version })));
 await api.deleteTable(table.id, table.version);
 assert.deepEqual(await api.listTables(), []);
 console.log('SDK consumer passed.');

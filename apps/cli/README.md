@@ -65,6 +65,7 @@ History queries accept `{ limit?, before? }`; use returned `nextBefore` for cont
 | `tables delete` | Table ID | `{ expectedVersion }` |
 | `fields create` | Table ID | Field definition plus `expectedVersion` |
 | `fields update` | Table ID, field ID | Changed configuration plus `expectedVersion` |
+| `fields pair` | Table ID, field ID | `{ expectedVersion, targetFieldId, expectedTargetVersion }`; [pair existing linked fields](../../docs/relation-pairing.md) |
 | `fields delete` | Table ID, field ID | `{ expectedVersion }` |
 | `fields preview-conversion`, `fields apply-conversion` | Table ID, field ID | `{ expectedVersion, field: definition }` |
 | `records get` | Table ID, record ID | None |

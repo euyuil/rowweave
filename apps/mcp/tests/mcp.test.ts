@@ -527,6 +527,44 @@ test('MCP and CLI create paired fields and update the same relationship from eit
   assert.equal((await call('records_update', { tableId: source.id, records: [{ id: task.id, expectedVersion: 1, values: { [link.id]: [project.id] } }] })).isError, true);
 });
 
+test('SDK, CLI and MCP pair existing fields without losing links and share version conflicts', async t => {
+  const { server, token, environment, service } = await setup(t);
+  const sdk = createWorkspaceClient({ url: server.url, token }), { json, call } = await connect(t, environment);
+  const directory = await mkdtemp(join(tmpdir(), 'rowweave-pair-cli-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  for (const writer of ['sdk', 'cli', 'mcp']) {
+    let source = await sdk.createTable({ name: writer + ' source' }), target = await sdk.createTable({ name: writer + ' target' });
+    source = await sdk.createField(source.id, { expectedVersion: source.version, name: 'Targets', type: 'relation', relation: { tableId: target.id, multiple: true } });
+    target = await sdk.createField(target.id, { expectedVersion: target.version, name: 'Sources', type: 'relation', relation: { tableId: source.id, multiple: true } });
+    const link = source.fields[1]!.id, inverse = target.fields[1]!.id;
+    const a = (await sdk.createRecords(source.id, [{ values: {} }, { values: {} }])).records;
+    const b = (await sdk.createRecords(target.id, [{ values: {} }, { values: { [inverse]: [a[1]!.id] } }])).records;
+    await sdk.updateRecords(source.id, [{ id: a[0]!.id, expectedVersion: 1, values: { [link]: [b[0]!.id] } }]);
+    const input = { expectedVersion: source.version, expectedTargetVersion: target.version, targetFieldId: inverse };
+    const path = join(directory, writer + '.json'); await writeFile(path, JSON.stringify(input));
+    const args = [resolve('apps/cli/dist/rowweave.js'), 'fields', 'pair', source.id, link, '--input', path];
+    const request = { tableId: source.id, fieldId: link, input };
+    if (writer === 'sdk') source = await sdk.pairRelationFields(source.id, link, input);
+    else if (writer === 'mcp') source = await json<Table>('fields_pair', request);
+    else source = JSON.parse((await runFile(process.execPath, args, { env: { ...process.env, ...environment } })).stdout) as Table;
+    assert.equal(source.fields[1]!.relation!.inverseFieldId, inverse);
+    assert.deepEqual((await sdk.getRecord(source.id, a[1]!.id)).values[link], [b[1]!.id]);
+    assert.deepEqual((await json<RowRecord>('records_get', { tableId: target.id, recordId: b[0]!.id })).values[inverse], [a[0]!.id]);
+    const before = service.listTables();
+    await assert.rejects(sdk.pairRelationFields(source.id, link, input), { code: 'SCHEMA_CONFLICT' });
+    assert.match(text(await call('fields_pair', request)), /SCHEMA_CONFLICT/);
+    await assert.rejects(runFile(process.execPath, args, { env: { ...process.env, ...environment } }),
+      error => /SCHEMA_CONFLICT/.test(String((error as { stderr: string }).stderr)));
+    assert.deepEqual(service.listTables(), before);
+    const invalid = await call('fields_pair', { ...request, input: { ...input, expectedTargetVersion: 'old' } });
+    assert.equal(invalid.isError, true);
+    const forbidden = await fetch(server.url + '/tables/' + source.id + '/fields/' + link + '/pair', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+    });
+    assert.equal(forbidden.status, 401);
+  }
+});
+
 test('MCP saves grouped grids and exposes matching records, summaries and removable grouping', async t => {
   const { environment } = await setup(t);
   const { json, call } = await connect(t, environment);
@@ -822,7 +860,7 @@ test('MCP discovers all operations and runs versioned schema, records, views and
   const { service, environment } = await setup(t);
   const { client, call, json, used, stderr } = await connect(t, environment);
   const tools = (await client.listTools()).tools;
-  assert.equal(tools.length, 46);
+  assert.equal(tools.length, 47);
   assert.equal(tools.find(tool => tool.name === 'workspace_state')!.annotations!.readOnlyHint, true);
   assert.deepEqual(await json('workspace_state'), service.workspaceState({}));
   assert.equal(tools.find(tool => tool.name === 'formulas_preview')!.annotations!.readOnlyHint, true);
@@ -834,6 +872,8 @@ test('MCP discovers all operations and runs versioned schema, records, views and
   assert.equal(tools.find(tool => tool.name === 'records_reschedule')!.annotations!.readOnlyHint, false);
   assert.equal(tools.find(tool => tool.name === 'records_reschedule')!.annotations!.idempotentHint, false);
   assert.equal(tools.find(tool => tool.name === 'records_create')!.annotations!.idempotentHint, false);
+  assert.equal(tools.find(tool => tool.name === 'fields_pair')!.annotations!.idempotentHint, false);
+  assert.equal(tools.find(tool => tool.name === 'fields_pair')!.annotations!.destructiveHint, true);
   assert.equal((await client.listResourceTemplates()).resourceTemplates.length, 2);
   assert.equal((await client.listResources()).resources.length, 2);
   const usage = await client.readResource({ uri: 'rowweave://usage' });
@@ -843,6 +883,8 @@ test('MCP discovers all operations and runs versioned schema, records, views and
   assert.equal((await json<CalculationStatus>('calculations_status')).running, false);
   assert.equal(tools.find(tool => tool.name === 'calculations_status')!.annotations!.readOnlyHint, true);
   let table = await json<Table>('tables_create', { name: 'MCP projects' });
+  assert.match(text(await call('fields_pair', { tableId: table.id, fieldId: table.primaryFieldId,
+    input: { expectedVersion: table.version, expectedTargetVersion: table.version, targetFieldId: table.primaryFieldId } })), /INVALID_SCHEMA/);
   let calendarTable = await json<Table>('tables_create', { name: 'Calendar discovery' });
   calendarTable = await json<Table>('fields_create', { tableId: calendarTable.id, input: { expectedVersion: calendarTable.version, name: 'Day', type: 'date' } });
   const calendar = { startFieldId: calendarTable.fields[1]!.id, timeZone: 'UTC' };

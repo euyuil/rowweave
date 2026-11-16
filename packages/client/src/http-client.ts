@@ -5,7 +5,7 @@ import type { CalendarLayoutRequest, CalendarRecordsRequest, CalendarLayout, Cal
 import type { RecordSchedule } from '../../contracts/src/index.js';
 import {
   tableId, type BatchResult, type ConversionPreview, type DeleteResult, type FieldConversion,
-  type FieldCreate, type FieldUpdate, type GridView, type QueryPage, type RecordCreate, type RecordDelete,
+  type FieldCreate, type FieldUpdate, type RelationPair, type GridView, type QueryPage, type RecordCreate, type RecordDelete,
   type RecordQuery, type RecordUpdate, type RowRecord, type Table, type TableCreate, type TableUpdate,
   type ViewCreate, type ViewPage, type ViewPageRequest, type ViewUpdate,
   type CsvImportRequest, type CsvPreview, type CsvImportResult, type CsvExportRequest,
@@ -81,6 +81,7 @@ export function createWorkspaceClient(connection: Connection, request: typeof fe
     previewFormula: (id: string, input: FormulaPreviewRequest) => write<FormulaPreview>(`${root(id)}/formulas/preview`, 'POST', input),
     createField: (id: string, input: FieldCreate) => write<Table>(`${root(id)}/fields`, 'POST', input),
     updateField: (id: string, fieldId: string, input: FieldUpdate) => write<Table>(field(id, fieldId), 'PATCH', input),
+    pairRelationFields: (id: string, fieldId: string, input: RelationPair) => write<Table>(`${field(id, fieldId)}/pair`, 'POST', input),
     deleteField: (id: string, fieldId: string, expectedVersion: number) => write<Table>(field(id, fieldId), 'DELETE', { expectedVersion }),
     previewConversion: (id: string, fieldId: string, input: FieldConversion) => write<ConversionPreview>(`${field(id, fieldId)}/conversion/preview`, 'POST', input),
     applyConversion: (id: string, fieldId: string, input: FieldConversion) => write<Table>(`${field(id, fieldId)}/conversion/apply`, 'POST', input),

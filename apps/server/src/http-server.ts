@@ -201,6 +201,11 @@ export async function startServer({ service, token, calculations: suppliedCalcul
       send(response, 200, service.previewFormula(formulaPreview[1]!, await readJson(request)));
       return;
     }
+    const pair = url.pathname.match(/^\/tables\/([^/]+)\/fields\/([^/]+)\/pair$/);
+    if (pair && request.method === 'POST') {
+      send(response, 200, await writeJson(request, input => service.pairRelationFields(pair[1]!, pair[2]!, input)));
+      return;
+    }
     const conversion = url.pathname.match(/^\/tables\/([^/]+)\/fields\/([^/]+)\/conversion\/(preview|apply)$/);
     if (conversion && request.method === 'POST') {
       const input = await readJson(request);

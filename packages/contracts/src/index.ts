@@ -3,6 +3,7 @@ export type CellValue = ScalarValue | ScalarValue[];
 
 export const maxAttachmentBytes = 8 * 1024 * 1024;
 export const maxAttachmentsPerCell = 20;
+export const maxLinkedRecords = 200;
 export interface AttachmentUpload { filename: string; mediaType: string; data: string }
 export interface Attachment {
   id: string;
@@ -95,6 +96,11 @@ export interface FieldCreate extends SchemaWrite {
 }
 
 export type FieldUpdate = SchemaWrite & Partial<Omit<FieldCreate, 'expectedVersion' | 'precision' | 'reverseField'>> & { precision?: number | null };
+
+export interface RelationPair extends SchemaWrite {
+  targetFieldId: string;
+  expectedTargetVersion: number;
+}
 
 export interface FieldConversion extends SchemaWrite {
   field: Omit<FieldCreate, 'expectedVersion' | 'reverseField'>;
