@@ -16,6 +16,7 @@ import { startServer } from '../../../dist/apps/server/src/http-server.js';
 import { verifyCrossInterfaceWorkflow } from '../../../tests/cross-interface.mjs';
 import { verifyHarnessCalendar } from './calendar-workflow.mjs';
 import { verifyHarnessGantt } from './gantt-workflow.mjs';
+import { verifyHarnessGallery } from './gallery-workflow.mjs';
 
 const runFile = promisify(execFile);
 const directory = await mkdtemp(join(tmpdir(), 'rowweave-harness-'));
@@ -326,6 +327,7 @@ app.on('window-all-closed', () => app.quit());`);
   await page.evaluate(() => { window.open = window.originalUrlOpener; delete window.originalUrlOpener; delete window.openedUrls; });
   await verifyHarnessCalendar(page, service);
   await verifyHarnessGantt(page, service);
+  await verifyHarnessGallery(page, service);
   assert.equal(await page.evaluate(value => document.body.innerText.includes(value) || Object.values(localStorage).some(item => item.includes(value)), token), false);
   await page.evaluate(() => window.harnessTest.redeclare());
   assert.deepEqual(await page.evaluate(() => window.harnessTest.inspect()), { main: ['conversation', 'rowweave'], sidebar: ['rowweave'], active: null });

@@ -42,6 +42,8 @@ const api = createWorkspaceClient({ url: 'http://127.0.0.1:4317', token: 'provid
 const calendar = { startFieldId: 'start', endFieldId: 'end', timeZone: 'Asia/Shanghai' };
 void api.createView('table', { name: 'Schedule', type: 'calendar', calendar });
 void api.createView('table', { name: 'Timeline', type: 'gantt', gantt: { ...calendar, scale: 'week' } });
+void api.createView('table', { name: 'Collection', type: 'gallery', gallery: { cardSize: 'large', coverFit: 'contain', coverFieldId: 'files' } });
+void api.updateView('table', 'gallery', { expectedVersion: 1, gallery: { cardSize: 'small', coverFit: 'cover' } });
 void api.rescheduleRecord('table', 'calendar-view', 'record', { expectedVersion: 1, expectedViewVersion: 1, action: 'move', days: 2 });
 void api.queryCalendar('table', { viewId: 'calendar-view', from: '2026-11-01', toExclusive: '2026-12-01' });
 void api.queryCalendarRecords('table', { viewId: 'calendar-view', bucket: { kind: 'unscheduled' } });

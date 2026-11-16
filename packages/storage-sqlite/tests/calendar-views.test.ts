@@ -106,11 +106,11 @@ test('calendar migration preserves earlier workspaces and saved calendars surviv
   const view = reopened.createView(table.id, { name: 'Backed-up schedule', type: 'calendar', calendar });
   const backup = data.path + '.backup', restored = data.path + '.restored';
   t.after(async () => { await Promise.all([backup, restored].map(path => rm(path, { force: true }))); });
-  assert.equal((await backupWorkspace(data.path, backup)).version, 36);
+  assert.equal((await backupWorkspace(data.path, backup)).version, 37);
   await restoreWorkspace(backup, restored);
   const db = new DatabaseSync(restored);
   try {
-    assert.equal(db.prepare('PRAGMA user_version').get()!['user_version'], 36);
+    assert.equal(db.prepare('PRAGMA user_version').get()!['user_version'], 37);
     const config = JSON.parse(db.prepare('SELECT config_json FROM views WHERE id = ?').get(view.id)!['config_json'] as string);
     assert.equal(config.type, 'calendar'); assert.deepEqual(config.calendar, calendar);
   } finally { db.close(); }

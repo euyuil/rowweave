@@ -503,7 +503,7 @@ export class SqliteRecordStore implements RecordStore {
       name = excluded.name, version = excluded.version, config_json = excluded.config_json`)
       .run(view.id, view.tableId, view.name, view.version, JSON.stringify({ query: view.query, columns: view.columns,
         rowHeight: view.rowHeight, frozenColumns: view.frozenColumns, type: view.type, groupBy: view.groupBy, groupMeasures: view.groupMeasures,
-        calendar: view.calendar, gantt: view.gantt }));
+        calendar: view.calendar, gantt: view.gantt, gallery: view.gallery }));
   }
 
   private syncViews(table: Table): void {

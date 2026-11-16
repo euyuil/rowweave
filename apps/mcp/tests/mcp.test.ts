@@ -777,6 +777,47 @@ test('saved Gantt views share configuration, filtered reads and scheduling acros
   assert.match(text(await call('views_create', { tableId: table.id, input: { ...input, gantt: { ...input.gantt, scale: 'month' } } })), /scale/);
 });
 
+test('saved galleries share attachment projection, filters and versioned configuration across SDK, CLI and MCP', async t => {
+  const { service, server, token, environment } = await setup(t), { json, call } = await connect(t, environment);
+  const sdk = createWorkspaceClient({ url: server.url, token });
+  let table = await sdk.createTable({ name: 'Gallery interfaces' });
+  table = await sdk.createField(table.id, { expectedVersion: table.version, name: 'Files', type: 'attachment' });
+  const cover = table.fields[1]!.id, name = table.primaryFieldId;
+  const bytes = Buffer.from('Shared file'), file = await sdk.uploadAttachment(table.id, { filename: 'cover.png', mediaType: 'image/png', data: bytes.toString('base64') });
+  const rows = (await sdk.createRecords(table.id, [{ values: { [name]: 'Included', [cover]: [file.id] } }, { values: { [name]: 'Excluded' } }])).records;
+  const directory = await mkdtemp(join(tmpdir(), 'rowweave-gallery-cli-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const inputFile = join(directory, 'input.json');
+  const cli = async (args: string[], input: unknown) => {
+    await writeFile(inputFile, JSON.stringify(input));
+    return JSON.parse((await runFile(process.execPath, [resolve('apps/cli/dist/rowweave.js'), ...args, '--input', inputFile],
+      { env: { ...process.env, ...environment } })).stdout);
+  };
+  const input = { name: 'Collection', type: 'gallery' as const, gallery: { coverFieldId: cover, cardSize: 'large' as const, coverFit: 'contain' as const },
+    columns: table.fields.map(field => ({ fieldId: field.id, width: 180, hidden: field.id === cover })),
+    query: { filter: { conjunction: 'and' as const, conditions: [{ fieldId: name, operator: 'eq' as const, value: 'Included' }] } } };
+  const views = [await sdk.createView(table.id, input), await json<GridView>('views_create', { tableId: table.id, input }),
+    await cli(['views', 'create', table.id], input) as GridView];
+  for (const view of views) {
+    assert.equal(view.type, 'gallery'); assert.deepEqual(view.gallery, input.gallery);
+    const query = { limit: 1, fields: [name, cover], expectedViewVersion: view.version };
+    const expected = service.queryView(table.id, view.id, query);
+    assert.equal(expected.total, 1); assert.equal(expected.records[0]!.id, rows[0]!.id);
+    assert.deepEqual(expected.records[0]!.attachments![cover], [file]);
+    assert.deepEqual(await sdk.queryView(table.id, view.id, query), expected);
+    assert.deepEqual(await json('views_query', { tableId: table.id, viewId: view.id, query }), expected);
+    assert.deepEqual(await cli(['views', 'query', table.id, view.id], query), expected);
+  }
+  assert.deepEqual(Buffer.from(await sdk.downloadAttachment(file.tableId, file.id)), bytes);
+  const view = views[1]!;
+  const changed = await json<GridView>('views_update', { tableId: table.id, viewId: view.id,
+    input: { expectedVersion: view.version, gallery: { cardSize: 'small', coverFit: 'cover' } } });
+  assert.equal(changed.gallery?.coverFieldId, undefined);
+  await assert.rejects(sdk.queryView(table.id, view.id, { expectedViewVersion: view.version }), { code: 'VIEW_CONFLICT' });
+  assert.match(text(await call('views_create', { tableId: table.id, input: { ...input, gallery: { ...input.gallery, cardSize: 'huge' } } })), /cardSize/);
+  assert.match(text(await call('views_create', { tableId: table.id, input: { ...input, gallery: { ...input.gallery, coverFieldId: name } } })), /INVALID_VIEW/);
+});
+
 test('MCP discovers all operations and runs versioned schema, records, views and CSV workflows over stdio', async t => {
   const { service, environment } = await setup(t);
   const { client, call, json, used, stderr } = await connect(t, environment);

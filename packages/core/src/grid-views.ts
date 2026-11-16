@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { type FieldFilter, type FilterGroup, type GridView, type RecordQuery, type RowHeight, type Table, type ViewQuery } from '../../contracts/src/index.js';
+import { supportsGalleryCover, type FieldFilter, type FilterGroup, type GridView, type RecordQuery, type RowHeight, type Table, type ViewQuery } from '../../contracts/src/index.js';
 import { parseQuery } from './record-query.js';
 import { parseSummary } from './record-summary.js';
 import { parseCalendar } from './calendar-query.js';
@@ -14,9 +14,10 @@ export function defaultView(table: Pick<Table, 'id' | 'fields'>): GridView {
 export function parseView(table: Table, input: unknown, previous = defaultView(table)): GridView {
   const item = schemaObject(input);
   const type = item['type'] === undefined ? previous.type : item['type'];
-  if (type !== 'grid' && type !== 'board' && type !== 'calendar' && type !== 'gantt') throw new ServiceError('INVALID_VIEW', 'Choose a grid, board, calendar or Gantt view.');
+  if (type !== 'grid' && type !== 'board' && type !== 'calendar' && type !== 'gantt' && type !== 'gallery') throw new ServiceError('INVALID_VIEW', 'Choose a grid, board, calendar, Gantt or gallery view.');
   let calendar: GridView['calendar'];
   let gantt: GridView['gantt'];
+  let gallery: GridView['gallery'];
   if (type === 'calendar' || type === 'gantt') {
     try {
       const settings = schemaObject(item[type] === undefined ? previous[type] : item[type]);
@@ -33,10 +34,27 @@ export function parseView(table: Table, input: unknown, previous = defaultView(t
       throw error;
     }
   }
+  if (type === 'gallery') {
+    try {
+      const settings = schemaObject(item['gallery'] === undefined ? previous.gallery ?? { cardSize: 'medium', coverFit: 'cover' } : item['gallery']);
+      const cardSize = settings['cardSize'], coverFit = settings['coverFit'], coverFieldId = settings['coverFieldId'];
+      if (cardSize !== 'small' && cardSize !== 'medium' && cardSize !== 'large') throw new ServiceError('INVALID_VIEW', 'Choose small, medium or large gallery cards.');
+      if (coverFit !== 'cover' && coverFit !== 'contain') throw new ServiceError('INVALID_VIEW', 'Choose crop or fit for gallery covers.');
+      if (coverFieldId !== undefined) {
+        const field = table.fields.find(field => field.id === coverFieldId);
+        if (!field || !supportsGalleryCover(field)) throw new ServiceError('INVALID_VIEW', 'Choose an attachment field for gallery covers.');
+      }
+      gallery = { cardSize, coverFit, ...(coverFieldId === undefined ? {} : { coverFieldId: coverFieldId as string }) };
+    } catch (error) {
+      if (error instanceof ServiceError) throw new ServiceError('INVALID_VIEW', error.message);
+      throw error;
+    }
+  }
   if (type !== 'calendar' && item['calendar'] !== undefined) throw new ServiceError('INVALID_VIEW', 'Calendar settings require a calendar view.');
   if (type !== 'gantt' && item['gantt'] !== undefined) throw new ServiceError('INVALID_VIEW', 'Gantt settings require a Gantt view.');
+  if (type !== 'gallery' && item['gallery'] !== undefined) throw new ServiceError('INVALID_VIEW', 'Gallery settings require a gallery view.');
   const grouping = item['groupBy'] === undefined ? (type === previous.type ? previous.groupBy : undefined) : item['groupBy'];
-  if ((type === 'calendar' || type === 'gantt') && grouping != null) throw new ServiceError('INVALID_VIEW', 'Calendar and Gantt views do not use record grouping.');
+  if (type !== 'grid' && type !== 'board' && grouping != null) throw new ServiceError('INVALID_VIEW', 'This view does not use record grouping.');
   if (type === 'board' && (typeof grouping !== 'string' || !table.fields.some(field => field.id === grouping && field.type === 'singleSelect'))) {
     throw new ServiceError('INVALID_VIEW', 'A board needs a single-select grouping field. Choose another field or change the view to a grid.');
   }
@@ -80,10 +98,11 @@ export function parseView(table: Table, input: unknown, previous = defaultView(t
   if (!Number.isInteger(frozenColumns) || (frozenColumns as number) < 0 || (frozenColumns as number) > visible) {
     throw new ServiceError('INVALID_VIEW', 'Freeze a whole number of leading columns, up to the number of visible fields.');
   }
-  const { groupBy: _previousGroup, groupMeasures: _previousMeasures, calendar: _previousCalendar, gantt: _previousGantt, ...base } = previous;
+  const { groupBy: _previousGroup, groupMeasures: _previousMeasures, calendar: _previousCalendar, gantt: _previousGantt, gallery: _previousGallery, ...base } = previous;
   return { ...base, name: item['name'] === undefined ? previous.name : schemaName(item['name']), query: saved, columns,
     rowHeight: rowHeight as RowHeight, frozenColumns: frozenColumns as number,
     ...(type === 'board' ? { type, groupBy: groupBy as string } : type === 'calendar' ? { type, calendar: calendar! } : type === 'gantt' ? { type, gantt: gantt! }
+      : type === 'gallery' ? { type, gallery: gallery! }
       : { type, ...(groupBy === undefined ? {} : { groupBy }) }),
     ...(measures.length ? { groupMeasures: measures } : {}) };
 }

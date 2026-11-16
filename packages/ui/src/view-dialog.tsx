@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { groupFieldIds, maxGroupLevels, supportsScalarGrouping, valueField, type GridView, type RowHeight, type SortRule, type SummaryMeasure, type Table, type ViewColumn } from '../../contracts/src/index.js';
+import { groupFieldIds, maxGroupLevels, supportsGalleryCover, supportsScalarGrouping, valueField, type GalleryConfig, type GridView, type RowHeight, type SortRule, type SummaryMeasure, type Table, type ViewColumn } from '../../contracts/src/index.js';
 import type { WorkspaceApi } from '../../client/src/http-client.js';
 import { Dialog, type DialogAnchor } from './dialog.js';
 import { QueryEditor } from './query-editor.js';
@@ -16,6 +16,7 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
   const [rowHeight, setRowHeight] = useState<RowHeight>(view.rowHeight);
   const [frozenColumns, setFrozenColumns] = useState(view.frozenColumns);
   const [type, setType] = useState(view.type);
+  const [gallery, setGallery] = useState<GalleryConfig>(view.gallery ?? { cardSize: 'medium', coverFit: 'cover' });
   const calendarFields = table.fields.filter(field => ['date', 'datetime'].includes(valueField(field).type));
   const dateSettings = view.calendar ?? view.gantt;
   const [calendarStart, setCalendarStart] = useState(dateSettings?.startFieldId ?? calendarFields[0]?.id ?? '');
@@ -61,7 +62,7 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
       setError(undefined);
       void (async () => {
         let result: GridView | undefined;
-        const display = { columns, rowHeight, frozenColumns: Math.min(frozenColumns, visibleCount) };
+        const display = { columns, rowHeight, frozenColumns: Math.min(frozenColumns, visibleCount), ...(type === 'gallery' ? { gallery } : {}) };
         const groups = { groupBy: groupBy.length > 1 ? groupBy : groupBy[0] ?? null,
           groupMeasures: type === 'grid' && groupBy.length ? groupMeasures : [] };
         const dates = { startFieldId: calendarStart, ...(calendarEnd ? { endFieldId: calendarEnd } : {}), timeZone: calendarZone };
@@ -83,7 +84,7 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
             const boardGroup = table.fields.find(field => field.type === 'singleSelect');
             setGroupBy(event.target.value === 'board' && boardGroup ? [boardGroup.id] : []);
           }}>
-            <option value="grid">Grid</option><option value="board">Board</option><option value="calendar">Calendar</option><option value="gantt">Gantt</option>
+            <option value="grid">Grid</option><option value="board">Board</option><option value="calendar">Calendar</option><option value="gantt">Gantt</option><option value="gallery">Gallery</option>
           </select></label>
           {type === 'board' && <label className="form-field">Group by<select aria-label="Board group field" required value={groupBy[0] ?? ''} onChange={event => setGroupBy([event.target.value])}>
             <option value="" disabled>Choose a single-select field</option>{table.fields.filter(field => field.type === 'singleSelect').map(field => <option key={field.id} value={field.id}>{field.name}</option>)}
@@ -148,6 +149,16 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
         <QueryEditor fields={table.fields} filter={filter} sort={sort} section={queryOnly ? kind : undefined}
           onFilter={value => { setFilter(value); setDirty(true); }} onSort={value => { setSort(value); setDirty(true); }} /></>}
         {!queryOnly && !groupOnly && <><h3>Display</h3>
+        {type === 'gallery' && <><div className="form-row">
+          <label className="form-field">Card size<select aria-label="Gallery card size" value={gallery.cardSize} onChange={event => setGallery({ ...gallery, cardSize: event.target.value as GalleryConfig['cardSize'] })}>
+            <option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select></label>
+          <label className="form-field">Cover field<select aria-label="Gallery cover field" value={gallery.coverFieldId ?? ''} onChange={event => {
+            const { coverFieldId: _cover, ...settings } = gallery;
+            setGallery({ ...settings, ...(event.target.value ? { coverFieldId: event.target.value } : {}) });
+          }}><option value="">No cover</option>{table.fields.filter(supportsGalleryCover).map(field => <option key={field.id} value={field.id}>{field.name}</option>)}</select></label>
+          <label className="form-field">Cover fit<select aria-label="Gallery cover fit" value={gallery.coverFit} onChange={event => setGallery({ ...gallery, coverFit: event.target.value as GalleryConfig['coverFit'] })}>
+            <option value="cover">Crop to fill</option><option value="contain">Fit entire image</option></select></label>
+        </div><p className="form-note">Covers use the first supported image in an attachment field or attachment lookup. Other files show their filename. The title and cover remain available even when hidden below.</p></>}
         {type === 'grid' && <><div className="form-row">
           <label className="form-field">Row density<select aria-label="Row density" value={rowHeight} onChange={event => setRowHeight(Number(event.target.value) as RowHeight)}>
             <option value={36}>Compact</option><option value={48}>Comfortable</option><option value={64}>Spacious</option>
@@ -159,7 +170,8 @@ export function ViewDialog({ kind, view, search, table, api, setDirty, onClose, 
         </div>
         <p className="form-note">Keep leading columns visible while you scroll horizontally. These settings apply only to this view.</p></>}
         <h3>{type === 'grid' ? 'Columns' : 'Card fields'}</h3>
-        <p className="form-note">{type === 'gantt' ? 'Timeline labels use the primary display field and the first three visible fields besides the configured dates. Open a record to see every field.'
+        <p className="form-note">{type === 'gallery' ? 'Cards show the primary display field as their title and the first six visible fields besides the title and cover. Open a card to see every field.'
+          : type === 'gantt' ? 'Timeline labels use the primary display field and the first three visible fields besides the configured dates. Open a record to see every field.'
           : type === 'calendar' ? 'Calendar previews use the primary display field as their title. The record list shows the first three visible fields besides the title and calendar dates. Open a record to see every field.'
           : type === 'board' ? 'Cards show the first three visible fields besides their title and grouping field. Open a card to see every field.'
           : 'Choose the fields and their order in this view. Hidden fields remain in each record.'}</p>

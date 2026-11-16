@@ -218,7 +218,11 @@ Grouped grids may save `groupMeasures: [{ fieldId, operation }]`, using up to 12
 
 View updates replace supplied query/columns configurations; `{ query: {} }` clears conditions. View queries default to visible columns and the saved search; request `search` temporarily overrides it. Pass `expectedViewVersion` and `expectedRevision` when paging. Schema changes reconcile view columns/deleted predicates atomically; incompatible remaining filters prevent conversion/option removal until the view is changed.
 
-`type` is `grid` (the default) or `board`. A board also requires `groupBy`, the ID of a single-select field in this table. Board queries accept `lane` as a current option ID or `null` for unset values, combined with the saved filter/search. Omit it to query the full view. Invalid options and lane queries on grids return `INVALID_QUERY`. The SDK's existing `GridView` type represents both layouts. Deleting/converting the grouping field returns `VIEW_DEPENDENCY`; reconfigure/delete the view first. Updating to `{ type: 'grid', expectedVersion }` removes grouping. Move records with ordinary versioned record updates; no separate mutation or retry path is used.
+`type` is `grid` (the default), `board`, `calendar`, `gantt` or `gallery`. The SDK's existing `GridView` union represents these saved layouts. [Calendar](calendar-queries.md), [Gantt](gantt-views.md) and [gallery](gallery-views.md) guides define their type-specific configuration and query semantics. Switching types removes the previous type's settings.
+
+A board requires `groupBy`, the ID of a single-select field in this table. Board queries accept `lane` as a current option ID or `null` for unset values, combined with the saved filter/search. Omit it to query the full view. Invalid options and lane queries on non-board views return `INVALID_QUERY`. Deleting/converting the grouping field returns `VIEW_DEPENDENCY`; reconfigure/delete the view first. Updating to `{ type: 'grid', expectedVersion }` removes grouping. Move records with ordinary versioned record updates; no separate mutation or retry path is used.
+
+Gallery accepts `gallery: { cardSize: 'small' | 'medium' | 'large', coverFit: 'cover' | 'contain', coverFieldId?: string }`. The optional cover must be attachment-valued. View queries support explicit projection of hidden cover/title fields and return attachment metadata through the normal record shape. Configuration uses the same view-version checks as other layouts; it adds no separate write or execution service.
 
 ## CSV
 

@@ -211,6 +211,10 @@ export function supportsScalarGrouping(field: Field): boolean {
   return !['multiSelect', 'relation', 'lookup', 'attachment'].includes(valueField(field).type);
 }
 
+export function supportsGalleryCover(field: Field): boolean {
+  return field.type === 'attachment' || (field.type === 'lookup' && !isLookupSummary(field) && field.lookupResult?.type === 'attachment');
+}
+
 export function isReadOnlyField(field: Pick<Field, 'type'>): boolean {
   return field.type === 'lookup' || field.type === 'formula' || field.type === 'autoNumber' || field.type === 'createdTime' || field.type === 'updatedTime';
 }
@@ -342,6 +346,7 @@ export const maxCalendarDays = 62;
 export const maxCalendarPreview = 5;
 export interface CalendarConfig { startFieldId: string; endFieldId?: string; timeZone: string }
 export interface GanttConfig extends CalendarConfig { scale: 'day' | 'week' }
+export interface GalleryConfig { cardSize: 'small' | 'medium' | 'large'; coverFit: 'cover' | 'contain'; coverFieldId?: string }
 export interface CalendarQuery extends Pick<RecordQuery, 'filter' | 'sort' | 'search' | 'fields' | 'expectedRevision' | 'expectedDateContext'> {
   calendar?: CalendarConfig;
   viewId?: string;
@@ -387,10 +392,11 @@ interface ViewDefinition {
 }
 
 export type GridView = ViewDefinition & (
-  { type: 'grid'; groupBy?: string | string[]; calendar?: never; gantt?: never } |
-  { type: 'board'; groupBy: string; calendar?: never; gantt?: never } |
-  { type: 'calendar'; calendar: CalendarConfig; groupBy?: never; gantt?: never } |
-  { type: 'gantt'; gantt: GanttConfig; groupBy?: never; calendar?: never }
+  { type: 'grid'; groupBy?: string | string[]; calendar?: never; gantt?: never; gallery?: never } |
+  { type: 'board'; groupBy: string; calendar?: never; gantt?: never; gallery?: never } |
+  { type: 'calendar'; calendar: CalendarConfig; groupBy?: never; gantt?: never; gallery?: never } |
+  { type: 'gantt'; gantt: GanttConfig; groupBy?: never; calendar?: never; gallery?: never } |
+  { type: 'gallery'; gallery: GalleryConfig; groupBy?: never; calendar?: never; gantt?: never }
 );
 
 export interface ViewCreate {
@@ -399,9 +405,10 @@ export interface ViewCreate {
   columns?: ViewColumn[];
   rowHeight?: RowHeight;
   frozenColumns?: number;
-  type?: 'grid' | 'board' | 'calendar' | 'gantt';
+  type?: 'grid' | 'board' | 'calendar' | 'gantt' | 'gallery';
   calendar?: CalendarConfig;
   gantt?: GanttConfig;
+  gallery?: GalleryConfig;
   groupBy?: string | string[] | null;
   groupMeasures?: SummaryMeasure[];
 }
