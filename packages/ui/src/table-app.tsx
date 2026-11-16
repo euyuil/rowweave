@@ -32,6 +32,8 @@ import { captureBoardFocus } from './board-focus.js';
 import { CalendarView } from './calendar-view.js';
 import { captureCalendarFocus } from './calendar-focus.js';
 import { GanttView } from './gantt-view.js';
+import { GalleryView, captureGalleryFocus } from './gallery-view.js';
+import { prepareGallerySnapshot, type GallerySnapshot, type GalleryWindow } from '../../client/src/gallery-refresh.js';
 import { captureGanttFocus } from './gantt-focus.js';
 import { prepareGanttSnapshot, type GanttSnapshot, type GanttWindow } from '../../client/src/gantt-refresh.js';
 import type { GanttConfig, RecordSchedule } from '../../contracts/src/index.js';
@@ -123,6 +125,13 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   const [preparedBoard, setPreparedBoard] = useState<{ generation: number; snapshot: BoardSnapshot }>();
   const [preparedCalendar, setPreparedCalendar] = useState<{ generation: number; snapshot: CalendarSnapshot }>();
   const [preparedGantt, setPreparedGantt] = useState<{ generation: number; snapshot: GanttSnapshot }>();
+  const [preparedGallery, setPreparedGallery] = useState<{ generation: number; snapshot: GallerySnapshot }>();
+  const galleryWindow = useRef<GalleryWindow>();
+  const galleryWindowRevision = useRef(0);
+  const galleryWindowChanged = useCallback((window: GalleryWindow | undefined) => {
+    if (window?.offset === galleryWindow.current?.offset) return;
+    galleryWindow.current = window; galleryWindowRevision.current++;
+  }, []);
   const ganttWindow = useRef<GanttWindow>();
   const ganttWindowRevision = useRef(0), ganttDragging = useRef(false);
   const ganttWindowChanged = useCallback((window: GanttWindow | undefined) => {
@@ -253,8 +262,14 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     const text = currentView.current?.id === selected.id ? appliedSearch.current : selected.query.search ?? '';
     let calendarRefresh: CalendarSnapshot | undefined;
     let ganttRefresh: GanttSnapshot | undefined;
+    let galleryRefresh: GallerySnapshot | undefined;
     const snapshot = await model.prepareRefresh(queryForView(selected, text), {
-      ...(selected.type === 'calendar' || selected.type === 'gantt' ? { selectRows: async (table: Table, first: QueryPage, signal: AbortSignal) => {
+      ...(selected.type === 'calendar' || selected.type === 'gantt' || selected.type === 'gallery' ? { selectRows: async (table: Table, first: QueryPage, signal: AbortSignal) => {
+        if (selected.type === 'gallery') {
+          const window = currentView.current?.id === selected.id && galleryWindow.current ? galleryWindow.current : { offset: 0 };
+          galleryRefresh = await prepareGallerySnapshot(api, table, selected, first, text, window, signal);
+          return [];
+        }
         if (selected.type === 'gantt') {
           const window = currentView.current?.id === selected.id && ganttWindow.current ? ganttWindow.current : { offset: 0 };
           ganttRefresh = await prepareGanttSnapshot(api, table, selected, first, text, window, signal);
@@ -276,6 +291,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       if (searchDraft.current === initialSearch) setSearch(text);
       setPreparedCalendar(calendarRefresh ? { generation: model.queryVersion, snapshot: calendarRefresh } : undefined);
       setPreparedGantt(ganttRefresh ? { generation: model.queryVersion, snapshot: ganttRefresh } : undefined);
+      setPreparedGallery(galleryRefresh ? { generation: model.queryVersion, snapshot: galleryRefresh } : undefined);
       knownViewsRevision.current = state.table?.viewsRevision;
       setExternalUpdate(undefined);
       localStorage.setItem(`rowweave.view.${tableId}`, selected.id);
@@ -328,11 +344,18 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     let boardRefresh: BoardSnapshot | undefined;
     let calendarRefresh: CalendarSnapshot | undefined;
     let ganttRefresh: GanttSnapshot | undefined;
+    let galleryRefresh: GallerySnapshot | undefined;
     const windowRevision = boardWindowRevision.current;
     const calendarRevision = calendarWindowRevision.current;
     const ganttRevision = ganttWindowRevision.current;
+    const galleryRevision = galleryWindowRevision.current;
     const snapshot = await model.prepareRefresh(queryForView(selected, text), { start: visible.y, count: visible.height + 5, signal,
-      ...(selected.groupBy || selected.type === 'calendar' || selected.type === 'gantt' ? { selectRows: async (table: Table, first: QueryPage, signal: AbortSignal) => {
+      ...(selected.groupBy || selected.type === 'calendar' || selected.type === 'gantt' || selected.type === 'gallery' ? { selectRows: async (table: Table, first: QueryPage, signal: AbortSignal) => {
+        if (selected.type === 'gallery') {
+          const window = previousView.type === 'gallery' && previousView.id === selected.id && galleryWindow.current ? galleryWindow.current : { offset: 0 };
+          galleryRefresh = await prepareGallerySnapshot(api, table, selected, first, text, window, signal);
+          return [];
+        }
         if (selected.type === 'gantt') {
           const window = previousView.type === 'gantt' && previousView.id === selected.id && ganttWindow.current ? ganttWindow.current : { offset: 0 };
           ganttRefresh = await prepareGanttSnapshot(api, table, selected, first, text, window, signal);
@@ -358,11 +381,12 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     if (previousView.type === 'board' && windowRevision !== boardWindowRevision.current) return;
     if (previousView.type === 'calendar' && calendarRevision !== calendarWindowRevision.current) return;
     if (previousView.type === 'gantt' && ganttRevision !== ganttWindowRevision.current) return;
+    if (previousView.type === 'gallery' && galleryRevision !== galleryWindowRevision.current) return;
     const retained = previousView.type === 'grid' && selected.type === 'grid'
       ? refreshSelection(selection, model, snapshot, grouping.rows, groupRefresh?.rows)
       : { selection: { columns: CompactSelection.empty(), rows: CompactSelection.empty() }, cleared: false };
     const wasStale = model.stale;
-    const restoreCardFocus = captureBoardFocus(rootHost.current!) ?? captureCalendarFocus(rootHost.current!) ?? captureGanttFocus(rootHost.current!);
+    const restoreCardFocus = captureBoardFocus(rootHost.current!) ?? captureCalendarFocus(rootHost.current!) ?? captureGanttFocus(rootHost.current!) ?? captureGalleryFocus(rootHost.current!);
     // External-store notifications and view state must render together to keep the content mounted.
     flushSync(() => {
       if (!model.commitRefresh(snapshot)) return;
@@ -370,6 +394,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       setPreparedBoard(boardRefresh ? { generation: model.queryVersion, snapshot: boardRefresh } : undefined);
       setPreparedCalendar(calendarRefresh ? { generation: model.queryVersion, snapshot: calendarRefresh } : undefined);
       setPreparedGantt(ganttRefresh ? { generation: model.queryVersion, snapshot: ganttRefresh } : undefined);
+      setPreparedGallery(galleryRefresh ? { generation: model.queryVersion, snapshot: galleryRefresh } : undefined);
       currentView.current = selected;
       appliedSearch.current = text;
       knownViewsRevision.current = state.table!.viewsRevision;
@@ -382,7 +407,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     if (restoreCardFocus?.()) setNotice('Changes were loaded. The focused record is outside the visible view.');
     if (restoreCardFocus && selected.type === 'grid') grid.current?.focus();
     if (restoreCardFocus && selected.type !== 'grid' && previousView.type !== selected.type) {
-      rootHost.current?.querySelector<HTMLElement>('.board-view, .calendar-view, .gantt-view')?.focus({ preventScroll: true });
+      rootHost.current?.querySelector<HTMLElement>('.board-view, .calendar-view, .gantt-view, .gallery-view')?.focus({ preventScroll: true });
     }
   };
 
@@ -762,6 +787,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
         : view?.type === 'board' ? 'Open a card to edit, or move it to another group.'
           : view?.type === 'calendar' ? 'Choose a date to browse its records, or open a preview to edit.'
           : view?.type === 'gantt' ? 'Adjust dates on the timeline or open a record to edit its details.'
+          : view?.type === 'gallery' ? 'Browse cards and open a record to edit its details.'
           : selectedCount === undefined ? 'Loading selection…' : selectedCount ? `${selectedCount.toLocaleString()} selected` : 'Select a row or cell to open a record.'}</span>
     </div>
       <div className="view-toolbar">
@@ -803,6 +829,10 @@ export function TableApp({ tableId, model, api, host, onManage }: {
           prepared={preparedGantt?.generation === queryVersion ? preparedGantt.snapshot : undefined}
           disabled={recordActionsLocked} onWindow={ganttWindowChanged} onDragChange={ganttDragChanged} onOpen={record => void openViewRecord(record)}
           onSchedule={scheduleGanttRecord} onScale={changeGanttScale} onRefresh={() => void reload()} />
+        : ready && table && view?.type === 'gallery' ? <GalleryView key={view.id} table={table} view={view} search={appliedSearch.current}
+          generation={queryVersion} revision={model.dataRevision!} dateContext={model.dateContext} total={model.rowCount} api={api}
+          prepared={preparedGallery?.generation === queryVersion ? preparedGallery.snapshot : undefined}
+          disabled={recordActionsLocked} recordOpen={!!recordAction} onWindow={galleryWindowChanged} onOpen={record => void openViewRecord(record)} onRefresh={() => void reload()} />
         : <div className="grid-host" aria-busy={locked || !ready || grouping.pending} ref={gridHost} onCopyCapture={event => {
         if (!gridHost.current?.querySelector('canvas')?.contains(document.activeElement)) return;
         event.preventDefault();
@@ -892,6 +922,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       <span>{table ? `${model.rowCount.toLocaleString()} ${model.rowCount === 1 ? 'record' : 'records'} · ${fields.length} ${fields.length === 1 ? 'field' : 'fields'}` : 'Loading records…'}</span>
       <span>{view?.type === 'board' ? 'Move records by dragging or choosing a status' : view?.type === 'calendar'
         ? 'Arrow keys to navigate dates · Enter to browse records' : view?.type === 'gantt' ? 'Drag to adjust dates · Enter opens record details'
+        : view?.type === 'gallery' ? 'Arrow keys to navigate cards · Enter opens record details'
           : 'Enter to edit · Esc to cancel · Ctrl+C / Ctrl+V · Ctrl+S to save'}</span></footer>
     {recordAction && table && <RecordDialog action={recordAction} table={table} api={api} setDirty={setFormDirty}
       onClose={() => setRecordAction(undefined)} onSaved={() => { setRecordAction(undefined); void refreshAfterWrite('Records'); }} />}
