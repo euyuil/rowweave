@@ -24,6 +24,23 @@ test('live edits support consecutive undo and redo without undoing another field
   assert.equal(history.canRedo, false);
 });
 
+test('unchanged typed values neither write nor interrupt the undo and redo chain', async t => {
+  const service = new RecordService(fixture(t).open()), table = service.getTable();
+  let writes = 0;
+  const history = new LiveHistory(async updates => { writes++; return service.updateBatch(updates); });
+  const read = () => service.getRecord(table.id, 'record_1');
+  await history.commit(table, [{ record: read(), values: { field_1: 'One' } }]);
+  await history.commit(table, [{ record: read(), values: { field_1: 'One' } }]);
+  assert.equal(writes, 1);
+  await history.move();
+  const original = read();
+  await history.commit(table, [{ record: original, values: { field_1: original.values['field_1']! } }]);
+  assert.equal(history.canRedo, true);
+  await history.move(true);
+  assert.equal(read().values['field_1'], 'One');
+  assert.equal(writes, 3);
+});
+
 test('same-cell conflicts, including change-and-change-back, reject an entire undo batch', async t => {
   const service = new RecordService(fixture(t).open()), table = service.getTable();
   const history = new LiveHistory(async updates => service.updateBatch(updates));

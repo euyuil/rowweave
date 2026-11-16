@@ -27,10 +27,14 @@ export class LiveHistory {
   }
   async commit(table: Table, changes: Change[]): Promise<BatchResult> {
     if (this.busy) throw new Error('Wait for the current change to finish.');
-    const updates = changes.map(({ record, values, expectedFieldVersions }) => ({ id: record.id, expectedVersion: record.version,
-      expectedSchemaVersion: table.version, values,
-      ...(expectedFieldVersions ? { expectedFieldVersions } : {}),
-      expectedValues: Object.fromEntries(Object.keys(values).map(id => [id, record.values[id] ?? null])) }));
+    const updates = changes.flatMap(({ record, values, expectedFieldVersions }) => {
+      const entries = Object.entries(values).filter(([id, value]) => JSON.stringify(value) !== JSON.stringify(record.values[id] ?? null));
+      if (!entries.length) return [];
+      return [{ id: record.id, expectedVersion: record.version, expectedSchemaVersion: table.version, values: Object.fromEntries(entries),
+        ...(expectedFieldVersions ? { expectedFieldVersions: Object.fromEntries(entries.map(([id]) => [id, expectedFieldVersions[id]!])) } : {}),
+        expectedValues: Object.fromEntries(entries.map(([id]) => [id, record.values[id] ?? null])) }];
+    });
+    if (!updates.length) return { records: changes.map(change => change.record) };
     this.busy = true; this.emit();
     try {
       const result = await this.write(updates);

@@ -10,11 +10,16 @@ export async function waitForLiveSync(page) {
   assert.equal(response.status, 200);
   const { table } = await response.json();
   await requestLiveSync(page);
-  await page.waitForFunction(table => {
-    const workspace = document.querySelector('.table-workspace');
-    return Number(workspace?.dataset.revision) >= table.dataRevision && Number(workspace?.dataset.schemaVersion) >= table.schemaVersion &&
-      Number(workspace?.dataset.viewsRevision) >= table.viewsRevision;
-  }, table);
+  try {
+    await page.waitForFunction(table => {
+      const workspace = document.querySelector('.table-workspace');
+      return Number(workspace?.dataset.revision) >= table.dataRevision && Number(workspace?.dataset.schemaVersion) >= table.schemaVersion &&
+        Number(workspace?.dataset.viewsRevision) >= table.viewsRevision;
+    }, table);
+  } catch (error) {
+    const rendered = await page.locator('.table-workspace').evaluate(element => ({ ...element.dataset }));
+    throw new Error(`Live sync did not reach ${JSON.stringify(table)}; rendered ${JSON.stringify(rendered)}.`, { cause: error });
+  }
 }
 export async function waitForAutosave(page) {
   if (await page.getByRole('textbox', { name: 'Cell value', exact: true }).count()) await page.keyboard.press('Control+s');

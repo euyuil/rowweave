@@ -162,7 +162,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   }, []);
   const boardDragChanged = useCallback((active: boolean) => { boardDragging.current = active; }, []);
   const [refreshFailure, setRefreshFailure] = useState<string>();
-  const knownViewsRevision = useRef<number>();
+  const [knownViewsRevision, setKnownViewsRevision] = useState<number>();
   const interaction = useRef(0);
   const pointerActive = useRef(false);
   const selectionReads = useRef(0);
@@ -298,7 +298,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       setPreparedCalendar(calendarRefresh ? { generation: model.queryVersion, snapshot: calendarRefresh } : undefined);
       setPreparedGantt(ganttRefresh ? { generation: model.queryVersion, snapshot: ganttRefresh } : undefined);
       setPreparedGallery(galleryRefresh ? { generation: model.queryVersion, snapshot: galleryRefresh } : undefined);
-      knownViewsRevision.current = state.table?.viewsRevision;
+      setKnownViewsRevision(state.table?.viewsRevision);
       setExternalUpdate(undefined);
       localStorage.setItem(`rowweave.view.${tableId}`, selected.id);
     });
@@ -356,12 +356,12 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     setRefreshFailure(undefined);
     if (!state.table) { setExternalUpdate('missing'); return; }
     const changed = state.table.schemaVersion !== model.table?.version || state.table.dataRevision !== model.dataRevision ||
-      state.table.viewsRevision !== knownViewsRevision.current || state.table.view?.version !== previousView.version ||
+      state.table.viewsRevision !== knownViewsRevision || state.table.view?.version !== previousView.version ||
       state.table.view?.dateContext !== model.dateContext;
     if (!changed) { setExternalUpdate(undefined); return; }
     setExternalUpdate('pending');
     if (!canRefresh.current()) return;
-    const loaded = state.table.viewsRevision === knownViewsRevision.current ? views : await api.listViews(tableId, signal);
+    const loaded = state.table.viewsRevision === knownViewsRevision ? views : await api.listViews(tableId, signal);
     const selected = loaded.find(view => view.id === previousView.id) ?? loaded[0]!;
     const text = selected.id === previousView.id && appliedSearch.current !== (previousView.query.search ?? '')
       ? appliedSearch.current : selected.query.search ?? '';
@@ -423,7 +423,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       setPreparedGallery(galleryRefresh ? { generation: model.queryVersion, snapshot: galleryRefresh } : undefined);
       currentView.current = selected;
       appliedSearch.current = text;
-      knownViewsRevision.current = state.table!.viewsRevision;
+      setKnownViewsRevision(state.table!.viewsRevision);
       setViews(loaded); setView(selected); setSearch(text); setSelection(retained.selection);
       setExternalUpdate(undefined);
       if (wasStale) setError(undefined);
@@ -809,7 +809,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     : pending ? `${pending.toLocaleString()} unsaved ${pending === 1 ? 'cell' : 'cells'}` : 'All changes saved';
   const message = error ?? model.error ?? grouping.error;
   return <AttachmentContext.Provider value={{ table, pending: transfers > 0, transfer, saveFile: host.saveFile }}><section className="table-workspace" ref={rootHost}
-    data-table-id={tableId} data-revision={model.dataRevision} data-schema-version={table?.version} data-views-revision={knownViewsRevision.current}>
+    data-table-id={tableId} data-revision={model.dataRevision} data-schema-version={table?.version} data-views-revision={knownViewsRevision}>
     <section className="table-heading">
       <div className="table-title"><h1>{table?.name ?? 'Loading table…'}</h1>
         <div className="table-management"><button disabled={recordActionsLocked} onClick={() => setManagingFields(true)}>Manage fields</button>
