@@ -62,6 +62,6 @@ Every correctness and restart assertion passed. Checkpoint overlap with the foll
 node scripts/benchmark-record-saves.mjs PATH_TO_DESKTOP_BENCHMARK_RESULTS_JSON --workspace
 ```
 
-## Remaining renderer and memory gates
+## Renderer and memory follow-up
 
-The separate baseline production memory run stayed bounded, with last-three-circuit spreads of 3.2 and 9.9 MiB. The large dataset reached 653.5 MiB in summed process working sets, slightly above the 650 MiB target; service working sets were 241.8–246.2 MiB. Shared pages can be counted more than once. This remains an unresolved final-candidate gate, alongside packaged renderer save measurements and final native/package verification. Current calendar-query remeasurement is also required: a later cache diagnostic exceeded the historical 500 ms query target. The overall goal stays active.
+The separate baseline production memory run stayed bounded, with last-three-circuit spreads of 3.2 and 9.9 MiB. The large dataset reached 653.5 MiB in summed process working sets, slightly above the 650 MiB target; service working sets were 241.8–246.2 MiB. Shared pages can be counted more than once. The subsequent [80 MiB cache correction](workspace-memory.md) passed five complete circuits at a 648.2 MiB maximum and repeated all six calendar workloads below 500 ms p95. Its clean portable package then passed the complete renderer workload, including large-table saves of 961.3, 947.9 and 940.6 ms. That report retains every sample, failed/interrupted measurements and the narrow measured memory margin. Final native/package verification remains required; the overall goal stays active.

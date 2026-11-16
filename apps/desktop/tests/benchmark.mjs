@@ -21,7 +21,7 @@ const report = {
     (timingsOnly ? 'This run skips scrolling. ' : 'The first trial includes five nominal 12-second scrolling circuits and a separate forced-GC diagnostic. ') +
     '110 keyboard inputs per trial (10 warm-up, 100 measured); input-to-rAF and frame intervals are paint proxies, not hardware latency. ' +
     'A DOM paste event exercises the real parser and staging path without replacing the system clipboard. ' +
-    'Query timings include authenticated HTTP and JSON decoding. Use benchmark:memory to measure without a renderer debugger.',
+    'Query timings include authenticated HTTP and JSON decoding. A temporary Electron display-sleep blocker covers each test application lifetime. Use benchmark:memory to measure without a renderer debugger.',
   datasets: [],
 };
 const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
@@ -47,10 +47,12 @@ for (const [rows, columns] of [[10_000, 20], [100_000, 100]]) {
   for (let trial = 0; trial < 3; trial++) {
     let application;
     let page;
+    let sleepBlocker;
     try {
       const started = performance.now();
       application = await electron.launch({ executablePath: packaged.executable, args: [],
         env: { ...process.env, ROWWEAVE_DATA_DIR: dataDirectory }, timeout: 60_000 });
+      sleepBlocker = await application.evaluate(({ powerSaveBlocker }) => powerSaveBlocker.start('prevent-display-sleep'));
       page = await application.firstWindow();
       page.setDefaultTimeout(30_000);
       const errors = [];
@@ -200,6 +202,7 @@ for (const [rows, columns] of [[10_000, 20], [100_000, 100]]) {
       throw error;
     } finally {
       if (application) {
+        if (sleepBlocker !== undefined) await application.evaluate(({ powerSaveBlocker }, id) => powerSaveBlocker.stop(id), sleepBlocker).catch(() => {});
         await application.evaluate(({ dialog }) => { dialog.showMessageBox = async () => ({ response: 1, checkboxChecked: false }); }).catch(() => {});
         const exited = once(application.process(), 'exit');
         await application.evaluate(({ app }) => app.quit());

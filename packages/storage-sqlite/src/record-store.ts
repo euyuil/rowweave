@@ -95,7 +95,7 @@ export class SqliteRecordStore implements RecordStore {
     this.lookups = new Lookups(this.db);
     try {
       // Retain large-query index pages within a fixed per-connection cache budget.
-      this.db.exec('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA cache_size = -98304;');
+      this.db.exec('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA cache_size = -81920;');
       const fresh = migrate(this.db);
       this.automaticNumbers = new AutomaticNumbers(this.db);
       this.history = new RecordHistory(this.db);

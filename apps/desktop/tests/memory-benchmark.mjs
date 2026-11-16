@@ -9,14 +9,23 @@ const packaged = JSON.parse(await readFile('release/latest.json', 'utf8'));
 const reportPath = join(dirname(input), 'memory-without-renderer-debugger.json');
 const report = process.argv.includes('--resume') ? JSON.parse(await readFile(reportPath, 'utf8')) : {
   measuredAt: new Date().toISOString(), package: packaged,
-  method: 'Main-process Node inspector only; no renderer debugger or network-response recording. Five 120-step scrolling circuits, 100 ms between steps, no forced GC.', datasets: [] };
+  method: 'Main-process Node inspector only; no renderer debugger or network-response recording. Five 120-step scrolling circuits, 100 ms between steps, no forced GC. A temporary Electron display-sleep blocker covers each test application lifetime.', datasets: [] };
 if (report.package.sha256 !== packaged.sha256) throw new Error('Cannot resume measurements from a different application package.');
 for (const dataset of previous.datasets) {
-  if (report.datasets.some(result => result.rows === dataset.rows && result.columns === dataset.columns && result.cycles.length === 5)) continue;
+  const prior = report.datasets.findIndex(result => result.rows === dataset.rows && result.columns === dataset.columns);
+  if (prior !== -1) {
+    const shutdown = report.shutdowns?.filter(result => result.rows === dataset.rows && result.columns === dataset.columns).at(-1);
+    if (report.datasets[prior].summary?.passed && shutdown?.exitCode === 0 && !shutdown.forced) continue;
+    report.previousAttempts ??= [];
+    report.previousAttempts.push(report.datasets.splice(prior, 1)[0]);
+  }
   const child = spawn(packaged.executable, ['--inspect=0'], {
     env: { ...process.env, ROWWEAVE_DATA_DIR: dirname(dataset.seed.database) }, stdio: ['ignore', 'pipe', 'pipe'],
   });
   const exited = new Promise(resolve => child.once('close', resolve));
+  let processOutput = '', completed = false;
+  child.stdout.on('data', chunk => { processOutput += chunk; });
+  child.stderr.on('data', chunk => { processOutput += chunk; });
   let socket;
   let evaluate;
   try {
@@ -44,7 +53,7 @@ for (const dataset of previous.datasets) {
     });
     evaluate = expression => new Promise((resolve, reject) => {
       const id = ++sequence;
-      const timer = setTimeout(() => { pending.delete(id); reject(new Error('Inspector evaluation timed out.')); }, 30_000);
+      const timer = setTimeout(() => { pending.delete(id); reject(new Error('Inspector evaluation timed out: ' + expression.slice(0, 240))); }, 30_000);
       pending.set(id, message => {
         clearTimeout(timer);
         pending.delete(id);
@@ -65,6 +74,7 @@ for (const dataset of previous.datasets) {
     if (!electronReady) throw new Error('Electron did not finish initializing its main-process API.');
     await evaluate(`(async () => {
       await memoryTestElectron.app.whenReady();
+      globalThis.memoryTestBlocker = memoryTestElectron.powerSaveBlocker.start('prevent-display-sleep');
       for (let attempt = 0; attempt < 100; attempt++) {
         const window = memoryTestElectron.BrowserWindow.getAllWindows()[0];
         if (window && !window.webContents.isLoadingMainFrame() && await window.webContents.executeJavaScript('!!document.querySelector("canvas")')) return true;
@@ -78,9 +88,16 @@ for (const dataset of previous.datasets) {
       privateMiB: (metric.memory.privateBytes ?? 0) / 1024,
       cpuPercent: metric.cpu.percentCPUUsage
     }))`);
-    const result = { rows: dataset.rows, columns: dataset.columns, memoryAtLoad: await metrics(), cycles: [] };
+    const windowState = () => evaluate(`(() => {
+      const window = memoryTestElectron.BrowserWindow.getAllWindows()[0];
+      return { visible: window.isVisible(), minimized: window.isMinimized(), focused: window.isFocused() };
+    })()`);
+    const result = { rows: dataset.rows, columns: dataset.columns, memoryAtLoad: await metrics(), cycles: [], windowStates: [], cycleDurationsMs: [] };
     report.datasets.push(result);
+    await writeFile(reportPath, JSON.stringify(report, null, 2) + '\n');
     for (let cycle = 0; cycle < 5; cycle++) {
+      result.windowStates.push(await windowState());
+      await writeFile(reportPath, JSON.stringify(report, null, 2) + '\n');
       const renderer = `(async () => {
         const element = document.querySelector('.dvn-scroller');
         for (let step = 0; step < 120; step++) {
@@ -89,19 +106,38 @@ for (const dataset of previous.datasets) {
         }
         return true;
       })()`;
+      const started = performance.now();
       await evaluate(`memoryTestElectron.BrowserWindow.getAllWindows()[0].webContents.executeJavaScript(${JSON.stringify(renderer)})`);
+      result.cycleDurationsMs.push(performance.now() - started);
       const snapshot = await metrics();
       result.cycles.push(snapshot);
+      await writeFile(reportPath, JSON.stringify(report, null, 2) + '\n');
       console.log(`${dataset.rows} × ${dataset.columns}, cycle ${cycle + 1}: ${snapshot.reduce((sum, metric) => sum + metric.workingSetMiB, 0).toFixed(1)} MiB total working sets.`);
     }
+    const totals = result.cycles.map(snapshot => snapshot.reduce((sum, metric) => sum + metric.workingSetMiB, 0));
+    const maximumMiB = Math.max(...totals), lastThreeSpreadMiB = Math.max(...totals.slice(-3)) - Math.min(...totals.slice(-3));
+    result.summary = { maximumMiB, lastThreeSpreadMiB, passed: maximumMiB < 650 && lastThreeSpreadMiB <= 50 };
     await writeFile(reportPath, JSON.stringify(report, null, 2) + '\n');
+    if (!result.summary.passed) throw new Error('Memory acceptance failed: ' + JSON.stringify(result.summary));
+    completed = true;
+  } catch (error) {
+    report.failures ??= [];
+    report.failures.push({ rows: dataset.rows, columns: dataset.columns, message: error.message, processOutput });
+    await writeFile(reportPath, JSON.stringify(report, null, 2) + '\n');
+    throw error;
   } finally {
     if (evaluate && socket?.readyState === WebSocket.OPEN) {
-      await evaluate('if (memoryTestElectron?.app) setTimeout(() => memoryTestElectron.app.quit(), 0); true').catch(() => {});
+      await evaluate(`if (globalThis.memoryTestBlocker !== undefined) memoryTestElectron.powerSaveBlocker.stop(memoryTestBlocker);
+        if (memoryTestElectron?.app) setTimeout(() => memoryTestElectron.app.quit(), 0); true`).catch(() => {});
       socket.close();
     }
-    const timer = setTimeout(() => child.kill(), 5_000);
-    await exited;
+    let forced = false;
+    const timer = setTimeout(() => { forced = true; child.kill(); }, 5_000);
+    const exitCode = await exited;
     clearTimeout(timer);
+    report.shutdowns ??= [];
+    report.shutdowns.push({ rows: dataset.rows, columns: dataset.columns, exitCode, forced });
+    await writeFile(reportPath, JSON.stringify(report, null, 2) + '\n');
+    if (completed && (forced || exitCode !== 0)) throw new Error('The measured application did not exit normally. See the recorded shutdown result.');
   }
 }
