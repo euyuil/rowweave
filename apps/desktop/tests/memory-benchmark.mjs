@@ -9,7 +9,7 @@ const packaged = JSON.parse(await readFile('release/latest.json', 'utf8'));
 const reportPath = join(dirname(input), 'memory-without-renderer-debugger.json');
 const report = process.argv.includes('--resume') ? JSON.parse(await readFile(reportPath, 'utf8')) : {
   measuredAt: new Date().toISOString(), package: packaged,
-  method: 'Main-process Node inspector only; no renderer debugger or network-response recording. Five 120-step scrolling circuits, 100 ms between steps, no forced GC.', datasets: [] };
+  method: 'Main-process Node inspector only; no renderer debugger or network-response recording. Five 120-step scrolling circuits, 100 ms between steps, no forced GC. A temporary Electron display-sleep blocker covers each test application lifetime.', datasets: [] };
 if (report.package.sha256 !== packaged.sha256) throw new Error('Cannot resume measurements from a different application package.');
 for (const dataset of previous.datasets) {
   const prior = report.datasets.findIndex(result => result.rows === dataset.rows && result.columns === dataset.columns);
@@ -74,6 +74,7 @@ for (const dataset of previous.datasets) {
     if (!electronReady) throw new Error('Electron did not finish initializing its main-process API.');
     await evaluate(`(async () => {
       await memoryTestElectron.app.whenReady();
+      globalThis.memoryTestBlocker = memoryTestElectron.powerSaveBlocker.start('prevent-display-sleep');
       for (let attempt = 0; attempt < 100; attempt++) {
         const window = memoryTestElectron.BrowserWindow.getAllWindows()[0];
         if (window && !window.webContents.isLoadingMainFrame() && await window.webContents.executeJavaScript('!!document.querySelector("canvas")')) return true;
@@ -126,7 +127,8 @@ for (const dataset of previous.datasets) {
     throw error;
   } finally {
     if (evaluate && socket?.readyState === WebSocket.OPEN) {
-      await evaluate('if (memoryTestElectron?.app) setTimeout(() => memoryTestElectron.app.quit(), 0); true').catch(() => {});
+      await evaluate(`if (globalThis.memoryTestBlocker !== undefined) memoryTestElectron.powerSaveBlocker.stop(memoryTestBlocker);
+        if (memoryTestElectron?.app) setTimeout(() => memoryTestElectron.app.quit(), 0); true`).catch(() => {});
       socket.close();
     }
     let forced = false;
