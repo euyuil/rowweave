@@ -14,7 +14,13 @@ const paired = await api.pairRelationFields(source.id, sourceField.id, {
 
 The target table is the source field's existing `relation.tableId`. The result is the complete updated source `Table`; read the target again to obtain its new schema version. Both fields now expose the other's stable `relation.inverseFieldId`. For a self-table pair, supply the same current table version twice.
 
-HTTP uses `POST /tables/:tableId/fields/:fieldId/pair` with the same input. CLI uses `rowweave fields pair TABLE_ID FIELD_ID --input pair.json`. MCP uses `fields_pair` with `{ tableId, fieldId, input }`. This delivery adds the shared operation; the desktop configuration action is tracked separately in the [active inventory](gap-closure-plan.md).
+HTTP uses `POST /tables/:tableId/fields/:fieldId/pair` with the same input. CLI uses `rowweave fields pair TABLE_ID FIELD_ID --input pair.json`. MCP uses `fields_pair` with `{ tableId, fieldId, input }`.
+
+## Desktop and Harness
+
+Open **Manage fields**, choose **Pair existing field** on an unpaired linked-record field, select an existing reverse field and choose **Pair fields**. The chooser reads both current schemas and offers only unpaired fields that point back to the source table. A self-table pair uses two distinct fields. Duplicate names include field IDs so the choice remains unambiguous. Pairing is a separate action; save or cancel unrelated field configuration edits first.
+
+The dialog explains link preservation and both record limits before writing. Loading, empty choices and failures have explicit states. A failed or uncertain write retains the selected field and requires **Read current fields** before another attempt. Reading never repeats the mutation. If the selected field disappears, it remains visibly unavailable until another field is chosen; if pairing already succeeded, readback reports that state. Closing field management after a newer schema was read refreshes the main table before subsequent operations. Cancelling restores focus to the original action; successful pairing restores it to **Configure** on the same field, now marked **Two-way**.
 
 ## Keep both sets of links
 
@@ -32,4 +38,4 @@ The durable journal captures changed records in one schema-operation batch (`rec
 
 ## Verification
 
-SQLite regressions cover union/order preservation, defaults, future reciprocal writes, schema/version conflicts, atomic rollback, capacity limits, self-table pairing, connected calculations, history/restore, empty records, restart and backup. Real SDK/CLI/MCP tests exercise the same operation and stale-version errors through authenticated HTTP. Installed SDK typing requires both schema versions. Desktop configuration and final-candidate acceptance remain separate delivery gates.
+SQLite regressions cover union/order preservation, defaults, future reciprocal writes, schema/version conflicts, atomic rollback, capacity limits, self-table pairing, connected calculations, history/restore, empty records, restart and backup. Real SDK/CLI/MCP tests exercise the same operation and stale-version errors through authenticated HTTP. Installed SDK typing requires both schema versions. Automated desktop coverage exercises the chooser, conflicts, preserved selection and data, lost-response recovery, keyboard focus, restart and reverse-side editing. Installed Harness acceptance uses the same shared configuration action. Final-candidate/native acceptance remains a separate delivery gate.

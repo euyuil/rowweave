@@ -12,6 +12,7 @@ import { verifyQueryWorkflow } from './query-workflow.mjs';
 import { verifyGridWorkflow } from './grid-workflow.mjs';
 import { verifyRelationWorkflow } from './relation-workflow.mjs';
 import { verifyReciprocalWorkflow } from './reciprocal-workflow.mjs';
+import { verifyRelationPairing, verifyRelationPairingAfterRestart } from './relation-pairing-workflow.mjs';
 import { verifyLookupWorkflow } from './lookup-workflow.mjs';
 import { verifyCsvWorkflow } from './csv-workflow.mjs';
 import { verifySummaryWorkflow } from './summary-workflow.mjs';
@@ -292,6 +293,7 @@ try {
   await verifyGridWorkflow(page);
   await verifyRelationWorkflow(page);
   await verifyReciprocalWorkflow(page, application);
+  const relationPairing = await verifyRelationPairing(page, application);
   await verifyLookupWorkflow(page);
   await verifyCsvWorkflow(page, application, dataDirectory);
   await verifySummaryWorkflow(page);
@@ -345,6 +347,7 @@ try {
   await verifyCalendarAfterRestart(page, calendar);
   await verifyGanttAfterRestart(page, gantt);
   await verifyGalleryAfterRestart(page, gallery);
+  await verifyRelationPairingAfterRestart(page, relationPairing);
   for (const name of ['Projects 项目', 'Tasks']) {
     await choose(name);
     await page.getByRole('heading', { name, exact: true }).waitFor();

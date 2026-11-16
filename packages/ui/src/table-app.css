@@ -206,7 +206,7 @@
 .rowweave-app .schema-field { padding: 14px 0; border-bottom: 1px solid #e5eaf1; }
 .rowweave-app .schema-field-name { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; overflow-wrap: anywhere; }
 .rowweave-app .schema-field-name small { color: #738098; flex-shrink: 0; }
-.rowweave-app .schema-field-actions { display: flex; gap: 7px; }
+.rowweave-app .schema-field-actions { display: flex; flex-wrap: wrap; gap: 7px; }
 .rowweave-app .schema-field-actions button { font-size: 12px; padding: 6px 10px; }
 .rowweave-app .conversion-preview { padding: 14px; background: #f0f4fb; border-radius: 8px; font-size: 12px; overflow-wrap: anywhere; }
 .rowweave-app .formula-preview { padding: 14px; background: #f0f4fb; border-radius: 8px; overflow-wrap: anywhere; }
