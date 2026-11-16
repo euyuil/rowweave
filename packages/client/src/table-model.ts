@@ -49,6 +49,7 @@ export class TableModel {
   conflicted = false;
   lastSavedBatchId: string | undefined;
   private revision = 0;
+  private stateRevision = 0;
   private generation = 0;
   private disposed = false;
   private queryRevision: number | undefined;
@@ -90,8 +91,10 @@ export class TableModel {
       ? this.query.fields.flatMap(id => fields.has(id) ? [fields.get(id)!] : []) : this.table?.fields ?? [];
   }
 
-  private emit(): void {
+  private emit(change: 'state' | 'cache' = 'state'): void {
     this.revision++;
+    // Loading another page redraws the grid without changing the basis for a prepared refresh.
+    if (change === 'state') this.stateRevision++;
     for (const listener of this.listeners) listener();
   }
 
@@ -194,7 +197,7 @@ export class TableModel {
         }
       }
       this.edits = { ...this.edits, rows };
-      this.emit();
+      this.emit('cache');
       return page;
     }).catch(error => {
       if (generation !== this.generation && !this.disposed) return this.loadPage(index);
@@ -220,7 +223,7 @@ export class TableModel {
       visible.set(index, record);
     }
     this.visibleRows = visible;
-    this.emit();
+    this.emit('cache');
   }
 
   async readRange(start: number, count: number): Promise<RowRecord[]> {
@@ -442,7 +445,7 @@ export class TableModel {
     const controller = new AbortController();
     this.refreshRequest = controller;
     const signal = callerSignal ? AbortSignal.any([callerSignal, controller.signal]) : controller.signal;
-    const generation = this.generation, sourceRevision = this.revision;
+    const generation = this.generation, sourceRevision = this.stateRevision;
     const { expectedRevision: _revision, expectedDateContext: _date, ...currentQuery } = query;
     try {
       const table = await this.api.getTable(signal);
@@ -482,7 +485,7 @@ export class TableModel {
 
   commitRefresh(snapshot: TableRefresh, manual?: { drafts: 'preserve' | 'discard' }): boolean {
     if (this.disposed || this.saving || (!manual && (this.edits.drafts.size || this.undoStack.length || this.redoStack.length)) || snapshot.signal.aborted ||
-        snapshot.generation !== this.generation || snapshot.sourceRevision !== this.revision) return false;
+        snapshot.generation !== this.generation || snapshot.sourceRevision !== this.stateRevision) return false;
     this.resetPages();
     if (manual?.drafts === 'discard') this.edits = { drafts: new Map(), rows: new Map() };
     this.table = snapshot.table;

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { waitForResponse } from './wait-for-response.mjs';
 
 export async function verifyViewWorkflow(page) {
   await page.getByRole('button', { name: '+ New table', exact: true }).click();
@@ -19,8 +20,8 @@ export async function verifyViewWorkflow(page) {
     const { records } = await call(`/tables/${table.id}/records`, 'POST', ['alpha', 'beta', 'gamma'].map((note, index) => ({
       values: { [table.primaryFieldId]: ['A', 'B', 'C'][index], [notes]: note },
     })));
-    await call(`/tables/${table.id}/views`, 'POST', { name: 'Reverse', query: { sort: [{ fieldId: table.primaryFieldId, direction: 'desc' }] } });
-    return { table, notes, records };
+    const reverse = await call(`/tables/${table.id}/views`, 'POST', { name: 'Reverse', query: { sort: [{ fieldId: table.primaryFieldId, direction: 'desc' }] } });
+    return { table, notes, records, reverse };
   });
   const read = () => page.evaluate(async id => {
     const connection = await window.rowweave.connection();
@@ -49,8 +50,28 @@ export async function verifyViewWorkflow(page) {
   await page.keyboard.press('ArrowRight');
   assert.equal(await tabs.getByRole('tab', { name: 'Reverse', exact: true }).evaluate(element => element === document.activeElement), true);
   assert.equal(await tabs.getByRole('tab', { name: 'All records', exact: true }).getAttribute('aria-selected'), 'true');
-  await page.keyboard.press('Enter');
+  const reverseQuery = `**/tables/${fixture.table.id}/views/${fixture.reverse.id}/query`;
+  const requested = Promise.withResolvers(), release = Promise.withResolvers(), settled = Promise.withResolvers();
+  const holdReverse = async route => {
+    try { requested.resolve(); await release.promise; await route.continue(); }
+    finally { settled.resolve(); }
+  };
+  await page.route(reverseQuery, holdReverse);
+  const firstCell = page.locator('canvas [aria-rowindex="2"] [role="gridcell"][aria-colindex="1"]');
+  try {
+    await page.keyboard.press('Enter');
+    await waitForResponse(requested.promise, 'the pending view switch');
+    await page.getByText('Loading rows…', { exact: true }).waitFor();
+    assert.equal(await tabs.getByRole('tab', { name: 'All records', exact: true }).getAttribute('aria-selected'), 'true');
+    assert.equal(await firstCell.textContent(), 'A');
+    assert.equal(await page.getByText('3 records · 2 fields', { exact: true }).count(), 1);
+  } finally {
+    release.resolve();
+    await waitForResponse(settled.promise, 'the released view switch');
+    await page.unroute(reverseQuery, holdReverse);
+  }
   await page.getByRole('tabpanel', { name: 'Reverse', exact: true }).waitFor();
+  await firstCell.filter({ hasText: /^C$/ }).waitFor({ state: 'attached' });
   await tabs.getByRole('tab', { name: 'Reverse', exact: true }).waitFor({ state: 'visible' });
   await page.waitForFunction(() => document.querySelector('[role="tab"][aria-selected="true"]')?.getAttribute('aria-disabled') === 'false');
   await page.keyboard.press('Home');
