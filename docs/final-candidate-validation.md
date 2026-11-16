@@ -1,6 +1,6 @@
 # Current candidate validation
 
-The implementation inventory is complete for the owner's current authorized scope. The current clean package passes the measured performance targets, and current-code CI/portable verification passed. Final native interaction is still pending, so the overall goal remains active. This report does not declare owner acceptance.
+Implementation and verification are complete for the owner's current authorized scope. The current clean package passes the measured performance targets, current-code CI/portable checks and final native interaction checks. The candidate is ready for the owner's end-to-end walkthrough. This report does not declare owner acceptance.
 
 ## Scope and artifact
 
@@ -9,7 +9,7 @@ The active scope is [Workflow gap closure](gap-closure-plan.md). Custom forms, p
 - Measured clean source: `2d93bd82281167a940e751b3f728d79d6f00f216`, with packaging recording `uncommittedChanges: false`.
 - ZIP: `rowweave-0.1.0-win32-x64.zip`, built on 2026-11-16 at 11:19:55 UTC.
 - SHA-256: `888d98bb40221315bee37269186618253fe3edf03c7da018dbd1565c3fae1d0d`.
-- Local manifest: `.artifacts/batch-save-worktree/release/latest.json`. The archive and executable are under that worktree's `release/0.1.0-20261116T111933580Z/` directory.
+- Delivery manifest: `release/latest.json`. The archive and executable are under `release/0.1.0-20261116T111933580Z/`. This is a checksum-verified copy of the measured and native-tested package in `.artifacts/batch-save-worktree/release/`; no application rebuild occurred between these checks and delivery.
 - PR [#115](https://github.com/euyuil/rowweave/pull/115) delivered the cache change and test/report follow-ups, squash merged as `59bbc6bc9bcb8c7dbfd226eab746f3c2f054bbe4`. Later changes to column acceptance and documentation do not alter the packaged application code.
 
 The executable is `rowweave.exe`; RowWeave remains the displayed brand. This evaluation package is not a signed installer or public release. Use an isolated profile for acceptance; synthetic datasets and native fixtures are not user workspaces.
@@ -65,14 +65,18 @@ The [save investigation](record-save-performance.md) records the bounded receipt
 
 Service-specific workloads retain their own exact-source reports: [aggregate/linked queries](query-performance.md), [clock calculations](clock-calculation-performance.md), [nested groups](nested-group-performance.md), [business-day filters](business-day-performance.md), [calendar queries](calendar-performance.md) and [chained lookups](chained-lookup-performance.md). Historical reports establish their stated workloads separately from current renderer measurements.
 
-## Remaining native and owner acceptance
+## Final native interaction
 
-The following remain **pending**, not passed:
+Performed on 2026-11-16 after the owner unlocked Windows, using the clean package identified above. The installed input method was Sogou Input `16.10.0.5813`, using the owner's existing double-Pinyin configuration; its exact scheme was not inspected or changed. Excel was x64 `16.0.20326.20318`. These checks used real native windows, physical key input and the system clipboard, separately from automated desktop acceptance.
 
-- Native Chinese composition, including confirm/cancel and protected drafts during external updates.
-- An actual Excel clipboard round trip containing Chinese, emoji, quotes, blanks and multiline cells.
-- Native file-selection/save dialogs, attachment byte comparison and explicit system-browser handoff.
+- **Chinese composition:** the first Escape canceled an active composition while retaining the cell editor; a second Escape canceled the draft and restored the saved value. Physical `v`, `s`, `w`, `f` keys then displayed the candidate `中文`. While its candidate panel was active, an independent process changed a different record through `RecordService.updateBatch`. The update notice appeared without closing the candidate panel or replacing the draft. Space selected the candidate, Enter staged the cell and Ctrl+S saved it. An independent service read confirmed `中文` and the concurrent record update.
+- **Excel clipboard:** the copied synthetic workbook received a fresh `本次验收🌱 20261116` marker. Native Ctrl+C/Ctrl+V transferred its three populated rows and three columns to RowWeave, then back into the previously blank `E8:G10` rectangle. The initial Excel selection also included an empty fourth row; only the populated three-row rectangle was transferred, and the separate fifth RowWeave record remained unchanged. All nine stored values matched the source, including Chinese, emoji, quotes, a comma, multiline text and blank cells. Independently reading the saved workbook XML confirmed the nine return values after decoding OOXML escapes and normalizing CRLF to LF. The source and RowWeave stored LF; the Excel return cell contained CRLF. No other characters were normalized, and byte-for-byte newline equality is not claimed.
+- **Native file dialogs:** the Windows Open dialog selected a generated file with a Chinese filename. After saving its attachment field, Download opened the Windows save dialog and wrote a new filename. The uploaded bytes, original file and downloaded copy were identical: 68 bytes, SHA-256 `b9757cc02727512addc14e02e18c92f5f59529287e0523f577c22291cc04e6d5`.
+- **Browser handoff:** the URL cell's explicit Open link action opened `https://example.com/` in Microsoft Edge. The native browser address and document destination were observed. No browser setting or existing tab content was changed.
+- **Restart:** the saved workspace was closed with its native window close button; the observed process exited without a termination signal. A new process opened the same isolated profile. Both the grid and an independent service read confirmed unchanged table/field/record UUIDs, record versions `[3, 2, 2, 2, 2]`, values, URL and attachment bytes. The external process handle did not report an exit code, so this observation establishes normal window-close/relaunch and persistence, not an additional measured zero-exit-code result.
 
-The current package and a copied generated spreadsheet/file fixture were prepared in an isolated profile. The first hidden launch was terminated without being counted as shutdown evidence. A visible launch was identified, but its captured screen showed the Windows lock screen on 2026-11-16 at 19:51 local time. No native input was sent; native verification awaits the owner unlocking the desktop. Existing user data was not touched.
+Only an isolated RowWeave profile and generated spreadsheet/file fixtures were modified. The first hidden launch was terminated without being counted as shutdown evidence. The subsequent visible launch encountered the Windows lock screen at 19:51 local time; native input resumed only after the owner's unlock reply. During file-dialog automation, an unavailable accessibility element required a fresh observation and native keyboard input. Reading the workbook while Excel held it open failed; the saved workbook was closed before independent XML verification. These tooling attempts are not product failures or passing evidence.
 
-Once these gates pass, record the completed native evidence and invite the owner to perform the [end-to-end walkthrough](acceptance.md). The owner has not accepted this candidate.
+Raw local evidence is under `.artifacts/batch-save-worktree/.artifacts/final-native-2026-11-16T11-49-57-082Z/`: `native-environment.json`, `ime-external-update.png`, `external-update.json`, `ime-saved-records.json`, `attachment-roundtrip.json`, `browser-handoff.json`, `excel-roundtrip.png`, `excel-roundtrip.json`, `before-restart.json`, `normal-shutdown.json`, `restart-launch.json`, `after-restart.json` and `after-restart.png`. The saved workbook and isolated database remain there for reproduction. Generated data and screenshots are not version-controlled source.
+
+These observations cover the tested input method, spreadsheet version and fixture values on this machine. They do not establish every input method, spreadsheet type-inference rule or arbitrary workload. The [end-to-end walkthrough](acceptance.md) is ready for the owner to exercise their normal workflows. The owner has not accepted this candidate.
