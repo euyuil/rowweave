@@ -64,7 +64,7 @@ Read the returned table version and generated option IDs. Rename options with th
 
 For a type change, call `fields_preview_conversion` with `{ tableId, fieldId, input: { expectedVersion, field } }`. `field` is the complete desired writable configuration, including name/type/options/defaults/format. Inspect `invalid`, `issues`, `samples` and `changed`; correct invalid values first. Preview samples are bounded, not an exhaustive list of affected records.
 
-For `fields_apply_conversion`, use `preview.schemaVersion` and the preview's resolved field configuration, retaining generated option IDs but omitting returned metadata `id` and `lookupResult`. Apply revalidates current records atomically. A successful preview neither reserves a version nor authorizes discarding invalid values. Relationships cannot be converted to/from ordinary fields.
+For `fields_apply_conversion`, use `preview.schemaVersion` and the preview's resolved field configuration, retaining generated option IDs but omitting returned metadata `id`, `lookupResult` and `lookupResultTableId`. Apply revalidates current records atomically. A successful preview neither reserves a version nor authorizes discarding invalid values. Relationships cannot be converted to/from ordinary fields.
 
 CLI: `rowweave fields preview-conversion table-id field-id --input conversion.json`, followed by `apply-conversion` with the reviewed input. CLI JSON is the inner `{ expectedVersion, field }` object.
 

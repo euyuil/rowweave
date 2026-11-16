@@ -1,4 +1,4 @@
-import type { Field, FieldFilter, FilterGroup, FilterOperator, RelativeDateFilter } from '../../contracts/src/index.js';
+import { lookupElementField, type Field, type FieldFilter, type FilterGroup, type FilterOperator, type RelativeDateFilter } from '../../contracts/src/index.js';
 import { fromFormValue, toFormValue, type FormValue } from './field-input-values.js';
 import { queryValueField } from '../../core/src/record-query.js';
 
@@ -28,7 +28,7 @@ export function filterCount(group: GroupDraft): number {
 }
 
 export function filterOperators(field: Field): FilterOperator[] {
-  if (field.type === 'lookup') return ['multiSelect', 'attachment'].includes(field.lookupResult!.type)
+  if (field.type === 'lookup') return ['multiSelect', 'attachment'].includes(lookupElementField(field).type)
     ? ['hasAny', 'isEmpty', 'isNotEmpty'] : filterOperators(queryValueField(field));
   field = queryValueField(field);
   const operators: FilterOperator[] = ['multiSelect', 'relation', 'attachment'].includes(field.type) ? ['hasAny', 'eq', 'neq'] : ['eq', 'neq'];

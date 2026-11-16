@@ -80,11 +80,11 @@ test('format 37 preserves existing views and saved galleries survive backup and 
   assert.deepEqual(reopened.listViews(table.id), before); assert.deepEqual(reopened.workspaceState({ tableId: table.id }), state);
   const view = reopened.createView(table.id, { name: 'Saved gallery', type: 'gallery', gallery: { cardSize: 'small', coverFit: 'contain', coverFieldId: cover } });
   const backup = data.path + '.backup', restored = data.path + '.restored';
-  assert.equal((await backupWorkspace(data.path, backup)).version, 37);
+  assert.equal((await backupWorkspace(data.path, backup)).version, 38);
   await restoreWorkspace(backup, restored);
   const db = new DatabaseSync(restored);
   try {
-    assert.equal(db.prepare('PRAGMA user_version').get()!['user_version'], 37);
+    assert.equal(db.prepare('PRAGMA user_version').get()!['user_version'], 38);
     const config = JSON.parse(db.prepare('SELECT config_json FROM views WHERE id = ?').get(view.id)!['config_json'] as string);
     assert.equal(config.type, 'gallery'); assert.deepEqual(config.gallery, view.gallery);
   } finally { db.close(); }

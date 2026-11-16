@@ -171,7 +171,7 @@ export class SqliteRecordStore implements RecordStore {
     const write = this.db.prepare(`INSERT INTO fields VALUES (?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET position = excluded.position, definition_json = excluded.definition_json`);
     for (const [position, field] of table.fields.entries()) {
-      const { lookupResult: _result, ...stored } = field;
+      const { lookupResult: _result, lookupResultTableId: _resultTable, ...stored } = field;
       write.run(field.id, table.id, position, JSON.stringify(stored));
     }
   }
@@ -529,15 +529,13 @@ export class SqliteRecordStore implements RecordStore {
   }
 
   private syncLookupViews(changed: Table, write: boolean): void {
-    const definitions = new Map(changed.fields.map(field => [field.id, field]));
     for (const id of this.lookups.dependents(changed.id)) {
-      const source = id === changed.id ? changed : this.getTable(id);
-      source.fields = source.fields.map(field => field.type === 'lookup' && definitions.has(field.lookup!.fieldId)
-        ? { ...field, lookupResult: definitions.get(field.lookup!.fieldId)! } : field);
+      const source = this.getTable(id);
+      if (!write) this.lookups.resolve(source, changed);
       if (!write) { for (const view of this.listViews(id)) reconcileView(view, source); }
       else {
         this.syncViews(source);
-        if (id !== changed.id) this.db.prepare('UPDATE tables SET version = version + 1 WHERE id = ?').run(id);
+        this.db.prepare('UPDATE tables SET version = version + 1 WHERE id = ?').run(id);
       }
     }
   }

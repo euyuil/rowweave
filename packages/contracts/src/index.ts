@@ -41,6 +41,7 @@ export interface Field {
   formula?: { expression: string; resultType: 'number' | 'text' | 'checkbox' | 'date' | 'datetime' };
   // Resolved from the current target schema; not writable field configuration.
   lookupResult?: Field;
+  lookupResultTableId?: string;
 }
 
 export interface Table {
@@ -209,8 +210,13 @@ export function valueField(field: Field): Field {
   if (field.type === 'autoNumber') return { ...field, type: 'number' };
   if (field.type === 'createdTime' || field.type === 'updatedTime') return { ...field, type: 'datetime' };
   if (isLookupSummary(field)) return field.lookup!.operation === 'count' ? { id: field.id, name: field.name, type: 'number' }
-    : { ...valueField(field.lookupResult!), id: field.id, name: field.name, required: false };
+    : { ...lookupElementField(field.lookupResult!), id: field.id, name: field.name, required: false };
   return field.type === 'formula' ? { ...field, type: field.formula!.resultType } : field;
+}
+
+export function lookupElementField(field: Field): Field {
+  while (field.type === 'lookup' && !isLookupSummary(field)) field = field.lookupResult!;
+  return valueField(field);
 }
 
 export function supportsScalarGrouping(field: Field): boolean {
@@ -218,7 +224,7 @@ export function supportsScalarGrouping(field: Field): boolean {
 }
 
 export function supportsGalleryCover(field: Field): boolean {
-  return field.type === 'attachment' || (field.type === 'lookup' && !isLookupSummary(field) && field.lookupResult?.type === 'attachment');
+  return lookupElementField(field).type === 'attachment';
 }
 
 export function isReadOnlyField(field: Pick<Field, 'type'>): boolean {

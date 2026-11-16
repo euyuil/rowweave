@@ -1,5 +1,5 @@
 import React, { useContext, useId } from 'react';
-import { isReadOnlyField, isLookupSummary, maxUrlLength, valueField, type Field, type RecordLink } from '../../contracts/src/index.js';
+import { isReadOnlyField, isLookupSummary, maxUrlLength, valueField, lookupElementField, type Field, type RecordLink } from '../../contracts/src/index.js';
 import type { FormValue } from './field-input-values.js';
 import { RelationInput } from './relation-input.js';
 import { cellDisplay } from '../../client/src/cell-values.js';
@@ -26,10 +26,11 @@ export function FieldInput({ field, value, onChange, disabled: disabledProp = fa
   } else if (field.type === 'formula') {
     input = <output id={id} aria-describedby={descriptionId}>{value === null ? ''
       : cellDisplay(field, field.formula!.resultType === 'number' ? Number(value) : field.formula!.resultType === 'checkbox' ? value === 'true' : scalar)}</output>;
-  } else if (field.type === 'attachment' || (field.type === 'lookup' && field.lookupResult!.type === 'attachment')) {
+  } else if (lookupElementField(field).type === 'attachment') {
     const source = field.type === 'lookup' ? field : attachments!.table!.fields.find(source => source.id === field.id);
-    const tableId = source?.type === 'lookup' ? attachments!.table!.fields.find(relation => relation.id === source.lookup!.relationFieldId)!.relation!.tableId
-      : attachments!.table!.id;
+    let lookup = source;
+    while (lookup?.lookupResult?.type === 'lookup') lookup = lookup.lookupResult;
+    const tableId = lookup?.type === 'lookup' ? lookup.lookupResultTableId! : attachments!.table!.id;
     input = <AttachmentInput id={id} descriptionId={descriptionId} tableId={tableId}
       value={field.type === 'lookup' ? JSON.parse((value ?? '[]') as string) : value as string[] | null}
       disabled={disabled} readOnly={field.type === 'lookup'} allowUploads={allowUploads} onChange={onChange} />;

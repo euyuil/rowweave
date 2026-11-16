@@ -504,6 +504,47 @@ test('MCP, SDK and CLI preserve business-day rules and share weekend continuatio
   }
 });
 
+test('SDK, CLI and MCP share chained lookup schemas, queries, errors and revision conflicts', async t => {
+  const { server, token, environment } = await setup(t), { json, call, client } = await connect(t, environment);
+  const api = createWorkspaceClient({ url: server.url, token });
+  let table = await api.createTable({ name: 'Lookup interfaces' });
+  table = await api.createField(table.id, { expectedVersion: table.version, name: 'Amount', type: 'number' });
+  const amount = table.fields.at(-1)!.id;
+  table = await json<Table>('fields_create', { tableId: table.id, input: { expectedVersion: table.version, name: 'Links', type: 'relation', relation: { tableId: table.id, multiple: true } } });
+  const link = table.fields.at(-1)!.id;
+  table = await api.createField(table.id, { expectedVersion: table.version, name: 'First', type: 'lookup', lookup: { relationFieldId: link, fieldId: amount } });
+  const first = table.fields.at(-1)!.id;
+  const directory = await mkdtemp(join(tmpdir(), 'rowweave-chain-cli-')); t.after(() => rm(directory, { recursive: true, force: true }));
+  const input = join(directory, 'input.json'), cli = resolve('apps/cli/dist/rowweave.js');
+  const run = async (args: string[], value: unknown) => {
+    await writeFile(input, JSON.stringify(value));
+    return JSON.parse((await runFile(process.execPath, [cli, ...args, '--input', input], { env: { ...process.env, ...environment } })).stdout);
+  };
+  table = await run(['fields', 'create', table.id], { expectedVersion: table.version, name: 'Second', type: 'lookup', lookup: { relationFieldId: link, fieldId: first } }) as Table;
+  const second = table.fields.at(-1)!.id;
+  table = await json<Table>('fields_create', { tableId: table.id, input: { expectedVersion: table.version, name: 'Total', type: 'lookup', lookup: { relationFieldId: link, fieldId: first, operation: 'sum' } } });
+  const total = table.fields.at(-1)!.id;
+  const leaf = (await api.createRecords(table.id, [{ values: { [amount]: 7 } }])).records[0]!;
+  const middle = (await api.createRecords(table.id, [{ values: { [link]: [leaf.id] } }])).records[0]!;
+  const root = (await api.createRecords(table.id, [{ values: { [link]: [middle.id] } }])).records[0]!;
+  const query = { filter: { conjunction: 'and' as const, conditions: [{ fieldId: second, operator: 'gte' as const, value: 1 }] }, limit: 1 };
+  const page = await api.queryRecords(table.id, query);
+  assert.deepEqual(page.records.map(record => record.id), [root.id]);
+  assert.deepEqual(page.records[0]!.values[second], [7]); assert.equal(page.records[0]!.values[total], 7);
+  assert.deepEqual(await json('records_query', { tableId: table.id, query }), page);
+  assert.deepEqual(await run(['records', 'query', table.id], query), page);
+  const schema = await resource(client, `rowweave://tables/${table.id}/schema`) as Table;
+  assert.deepEqual(schema, await api.getTable(table.id));
+  assert.equal(schema.fields.find(field => field.id === second)!.lookupResult!.lookupResultTableId, table.id);
+  await json('records_update', { tableId: table.id, records: [{ id: leaf.id, expectedVersion: leaf.version, values: { [amount]: 9 } }] });
+  assert.deepEqual((await api.getRecord(table.id, root.id)).values[second], [9]);
+  const stale = { ...query, offset: 1, expectedRevision: page.revision };
+  await assert.rejects(api.queryRecords(table.id, stale), { code: 'DATA_CHANGED' });
+  assert.match(text(await call('records_query', { tableId: table.id, query: stale })), /DATA_CHANGED/);
+  await assert.rejects(run(['records', 'query', table.id], stale), error => /DATA_CHANGED/.test(String((error as { stderr: string }).stderr)));
+  assert.match(text(await call('records_update', { tableId: table.id, records: [{ id: root.id, expectedVersion: root.version, values: { [second]: [1] } }] })), /READ_ONLY_FIELD/);
+});
+
 test('MCP and CLI create paired fields and update the same relationship from either side', async t => {
   const { environment, service } = await setup(t);
   const { json, call } = await connect(t, environment);

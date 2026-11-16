@@ -104,7 +104,7 @@ Install the optional [RowWeave usage Skill](agent-skills.md) to provide these co
 1. List tables, read the chosen schema, and map requested names to stable IDs. Ask for clarification if names are ambiguous.
 2. Query a small page with only needed fields. Use nested filters/sorting in the service instead of downloading a table. Continue with the returned revision in `expectedRevision`.
 3. Submit typed values: JSON numbers/booleans, ISO dates/timestamps, option IDs for selects, record ID arrays for links. Omit computed lookups from writes. Preserve null versus empty text.
-4. Use the current table version for schema writes, record versions for record updates/deletions, and view versions for view writes. Inspect conversion/CSV preview before applying. A conversion preview's `field` includes returned metadata: copy its writable configuration, omitting `id` and `lookupResult`.
+4. Use the current table version for schema writes, record versions for record updates/deletions, and view versions for view writes. Inspect conversion/CSV preview before applying. A conversion preview's `field` includes returned metadata: copy its writable configuration, omitting `id`, `lookupResult` and `lookupResultTableId`.
 5. Inspect the returned result and, when needed, query saved values. A batch is all-or-nothing. Explicit deletion permanently removes data and respects relationship/lookup dependencies.
 
 Tool failures use `isError: true` and JSON `{ "error": { "code", "message", "recovery", "status"? } }`. Service error codes/status are preserved, including `SCHEMA_CONFLICT`, `VERSION_CONFLICT`, `VIEW_CONFLICT`, `QUERY_CHANGED`, and dependency errors. MCP input-schema failures are reported by the SDK before reaching the service. Resource failures are protocol errors; a missing resource uses the MCP resource-not-found form.
@@ -119,4 +119,4 @@ Service limits still apply: 500 records per page, 2,000 records/20,000 cells per
 
 Formula fields use the existing field and record tools. Configure `formula: { expression, resultType }` with stable field-ID references; read computed values and optional `formulaErrors` from record responses. See the [formula language](formulas.md). Computed fields reject direct writes.
 
-Lookup configuration also accepts `operation: "values" | "count" | "sum" | "average" | "min" | "max"`. Numeric summaries return scalar values; omitted operation retains array values. See [linked summaries](linked-summaries.md).
+Lookup configuration also accepts `operation: "values" | "count" | "sum" | "average" | "min" | "max"`. Numeric summaries return scalar values; omitted operation retains array values. Targets may be other lookups, with shared cycle/type/error validation and transitive revision checks. See [linked summaries](linked-summaries.md) and [chained lookups](chained-lookups.md).

@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import type { Attachment, AttachmentPage, AttachmentQuery, CellValue, RowRecord, Table } from '../../contracts/src/index.js';
+import { lookupElementField, type Attachment, type AttachmentPage, type AttachmentQuery, type CellValue, type RowRecord, type Table } from '../../contracts/src/index.js';
 import type { AttachmentFile, CheckedAttachmentUpload } from '../../core/src/attachments.js';
 import { ServiceError } from '../../core/src/errors.js';
 
@@ -60,7 +60,7 @@ export class Attachments {
   }
 
   hydrate(table: Table, records: RowRecord[]): RowRecord[] {
-    const fields = table.fields.filter(field => field.type === 'attachment' || (field.type === 'lookup' && field.lookupResult!.type === 'attachment'));
+    const fields = table.fields.filter(field => lookupElementField(field).type === 'attachment');
     if (!fields.length || !records.length) return records;
     const ids = [...new Set(records.flatMap(record => fields.flatMap(field => (record.values[field.id] ?? []) as string[])))];
     const files = new Map(this.db.prepare(`SELECT ${columns} FROM attachments WHERE id IN (SELECT value FROM json_each(?))`).all(JSON.stringify(ids))

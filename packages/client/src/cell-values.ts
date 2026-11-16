@@ -1,4 +1,4 @@
-import { isLookupSummary, type CellValue, type Field } from '../../contracts/src/index.js';
+import { isLookupSummary, lookupElementField, type CellValue, type Field } from '../../contracts/src/index.js';
 import { fieldText } from '../../core/src/field-display.js';
 
 const numberFormats = new WeakMap<Field, Intl.NumberFormat>();
@@ -6,13 +6,13 @@ const numberFormats = new WeakMap<Field, Intl.NumberFormat>();
 export const cellText = fieldText;
 
 export function cellDisplay(field: Field, value: CellValue | undefined): string {
-  if (field.type === 'attachment' || (field.type === 'lookup' && field.lookupResult!.type === 'attachment')) {
+  if (lookupElementField(field).type === 'attachment') {
     const count = ((value ?? []) as string[]).length;
     return count ? `${count} ${count === 1 ? 'file' : 'files'}` : '';
   }
-  if (isLookupSummary(field)) return field.lookup!.operation === 'count' ? String(value ?? '') : cellDisplay(field.lookupResult!, value);
+  if (isLookupSummary(field)) return field.lookup!.operation === 'count' ? String(value ?? '') : cellDisplay(lookupElementField(field.lookupResult!), value);
   if (field.type === 'lookup') {
-    const target = field.lookupResult!;
+    const target = lookupElementField(field);
     const scalar = target.type === 'multiSelect' ? { ...target, type: 'singleSelect' as const } : target;
     return ((value ?? []) as CellValue[]).map(value => cellDisplay(scalar, value)).join(', ');
   }

@@ -17,7 +17,9 @@ export class ConnectedCalculations {
   private readonly nodes = new Map<string, Node>();
   private readonly ordered: Node[] = [];
 
-  get hasLinked(): boolean { return this.ordered.some(node => node.linked); }
+  get hasLinked(): boolean {
+    return this.ordered.some(node => node.linked || (node.field.type === 'lookup' && this.nodes.get(node.field.lookup!.fieldId)!.field.type === 'lookup'));
+  }
 
   constructor(private readonly db: DatabaseSync, override?: Table) {
     const definitions = db.prepare('SELECT table_id, definition_json FROM fields').all()
