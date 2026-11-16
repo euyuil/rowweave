@@ -15,7 +15,7 @@ Build a project tracker, customer list, or inventory without writing a schema in
 
 ## Try RowWeave
 
-The first product candidate is ready for evaluation. Download **rowweave-windows** from a successful [CI run](https://github.com/euyuil/rowweave/actions), extract the application ZIP, and open `rowweave.exe`. No separate Node.js installation is needed for the desktop.
+Windows evaluation builds are available from successful [CI runs](https://github.com/euyuil/rowweave/actions). Download **rowweave-windows**, extract the application ZIP, and open `rowweave.exe`. No separate Node.js installation is needed for the desktop. Check the [candidate report](docs/final-candidate-validation.md) for completed and pending verification.
 
 Start with an empty workspace: create a table, add fields, and enter or import records. Save explicitly with **Save changes** or **Ctrl+S**.
 
@@ -25,6 +25,6 @@ Start with an empty workspace: create a table, add fields, and enter or import r
 
 [Run a service](docs/service.md) · [TypeScript SDK](packages/client/README.md) · [CLI](apps/cli/README.md) · [MCP](docs/mcp.md) · [Agent Skills](docs/agent-skills.md) · [Harness](docs/harness.md)
 
-This release focuses on flexible structured tables and reliable data operations. Built-in AI chat, enterprise permissions, and real-time collaborative editing remain outside its scope.
+This release focuses on flexible structured tables and reliable data operations. Custom forms, pivot tables, dashboards, map views and automation are not implemented in this scope. Built-in AI chat, enterprise permissions and real-time collaborative editing are also outside its scope.
 
-For measured performance and current limits, see the [verification report](docs/product-performance.md). For source builds and architecture, see [development](docs/development.md) and [design](docs/design.md). Share your workflows and feedback in [Issues](https://github.com/euyuil/rowweave/issues).
+For measured performance and current limits, see the [candidate report](docs/final-candidate-validation.md). For source builds and architecture, see [development](docs/development.md) and [design](docs/design.md). Share your workflows and feedback in [Issues](https://github.com/euyuil/rowweave/issues).
