@@ -3,7 +3,7 @@ import { galleryApi } from './gallery-workflow.mjs';
 import { waitForResponse } from './wait-for-response.mjs';
 
 export async function verifyGalleryRefresh(page, fixture) {
-  const { root, name, cover, records, image, hidden } = fixture;
+  const { root, name, cover, records, image, focusImage, hidden } = fixture;
   let { table, view } = fixture;
   const call = galleryApi(page), gallery = page.getByRole('region', { name: 'Collection gallery', exact: true });
   const dialog = page.getByRole('dialog');
@@ -13,15 +13,20 @@ export async function verifyGalleryRefresh(page, fixture) {
   const update = async (index, values) => { const record = await current(index);
     return call(root + '/records', 'PATCH', [{ id: record.id, expectedVersion: record.version, values }]); };
   await title(4).focus();
+  await page.waitForFunction(id => document.querySelector('[data-gallery-record="' + id + '"] img')?.naturalWidth === 640, records[4].id);
+  const coverUrl = await card(4).locator('img').getAttribute('src');
   await gallery.locator('.gallery-viewport').evaluate(element => { window.galleryViewport = element; });
   const scroll = await gallery.locator('.gallery-viewport').evaluate(element => element.scrollTop);
-  const downloads = [], capture = request => { if (request.method() === 'GET' && request.url().includes(root + '/attachments/')) downloads.push(request.url()); };
+  const downloads = [], capture = request => {
+    if (request.method() === 'GET' && request.url().endsWith(root + '/attachments/' + focusImage.id + '/content')) downloads.push(request.url());
+  };
   page.on('request', capture);
   await update(4, { [name]: 'Remote card 004' });
   await title(4).filter({ hasText: 'Remote card 004' }).waitFor();
   assert.equal(await title(4).evaluate(element => element === document.activeElement), true);
   assert.equal(await gallery.locator('.gallery-viewport').evaluate(element => element === window.galleryViewport && element.scrollTop), scroll);
-  assert.equal(downloads.length, 0, 'An unrelated record update does not download existing covers again.');
+  assert.equal(downloads.length, 0, 'An unrelated record update does not download the already loaded visible cover again.');
+  assert.equal(await card(4).locator('img').getAttribute('src'), coverUrl, 'The visible cover keeps its existing image URL.');
   page.off('request', capture);
   await title(5).click();
   const input = dialog.getByLabel('Name', { exact: true });

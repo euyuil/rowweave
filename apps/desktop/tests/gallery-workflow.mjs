@@ -42,12 +42,14 @@ export async function verifyGalleryWorkflow(page, application) {
   }
   const [, cover, status, notes, hidden] = table.fields.map(field => field.id);
   const upload = (filename, mediaType, data) => call(root + '/attachments', 'POST', { filename, mediaType, data });
-  const image = await upload('landscape.png', 'image/png', await galleryArtwork(page));
+  const artwork = await galleryArtwork(page);
+  const image = await upload('landscape.png', 'image/png', artwork);
+  const focusImage = await upload('focused-card.png', 'image/png', artwork);
   const document = await upload('notes.pdf', 'application/pdf', Buffer.from('Test document').toString('base64'));
   const broken = await upload('broken.png', 'image/png', Buffer.from('Not an image').toString('base64'));
   const records = (await call(root + '/records', 'POST', Array.from({ length: 45 }, (_, index) => ({ values: {
     [name]: 'Card ' + String(index).padStart(3, '0'), [cover]: index === 0 ? [document.id, image.id] : index === 1 ? [document.id]
-      : index === 2 ? [broken.id] : index === 3 ? [] : [image.id], [status]: 'ready',
+      : index === 2 ? [broken.id] : index === 3 ? [] : index === 4 ? [focusImage.id] : [image.id], [status]: 'ready',
     [notes]: index === 0 ? 'A long note with multiple lines.\nSecond line, preserved in the full editor.\nThird line.' : 'A place for ideas and the details that matter.',
     [hidden]: 'Complete details ' + index,
   } })))).records;
@@ -115,7 +117,7 @@ export async function verifyGalleryWorkflow(page, application) {
   page.off('request', capture); await resize(originalSize);
   await verifyCoverLifecycle(page, { root, image });
   console.log('Gallery configuration, lazy image covers, explicit file failures, keyboard navigation, editing, paging, search and narrow layout passed.');
-  return { table, root, name, cover, status, notes, hidden, image, records, view };
+  return { table, root, name, cover, status, notes, hidden, image, focusImage, records, view };
 }
 
 async function verifyCoverLifecycle(page, { root, image }) {
