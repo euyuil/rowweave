@@ -2,7 +2,7 @@ import type { SQLInputValue } from 'node:sqlite';
 import type { CellValue, Field, FieldFilter, FilterGroup, Table } from '../../contracts/src/index.js';
 import type { CheckedQuery } from '../../core/src/record-query.js';
 import { lookupSql } from './lookups.js';
-import { groupFieldIds, valueField, isLookupSummary } from '../../contracts/src/index.js';
+import { groupFieldIds, valueField, lookupElementField, isLookupSummary } from '../../contracts/src/index.js';
 import type { DateRange } from './relative-date-ranges.js';
 
 function sqlLiteral(value: string | number | null): string {
@@ -66,7 +66,7 @@ export function querySql(table: Pick<Table, 'id' | 'fields'>, query: CheckedQuer
         WHERE edge.source_record_id = ${alias}.id AND edge.field_id = ${bind(field.id)} ORDER BY edge.position))`;
     }
     if (field.type === 'lookup' && !isLookupSummary(field)) {
-      const target = field.lookupResult!;
+      const target = lookupElementField(field);
       if (target.type === 'attachment') return formatted(target, sorting ? `json_array(json_extract(${value}, '$[0]'))` : value);
       const scalar = target.type === 'multiSelect' ? { ...target, type: 'singleSelect' as const } : target;
       if (sorting) return formatted(scalar, `json_extract(${value}, '$[0]')`);

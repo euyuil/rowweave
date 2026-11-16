@@ -1,4 +1,4 @@
-import { maxPageSize, maxTextLength, maxGroupLevels, valueField, isLookupSummary, supportsScalarGrouping, relativeDatePeriods, maxRelativeDays, maxRelativeHours, dateContextPattern,
+import { maxPageSize, maxTextLength, maxGroupLevels, valueField, lookupElementField, isLookupSummary, supportsScalarGrouping, relativeDatePeriods, maxRelativeDays, maxRelativeHours, dateContextPattern,
   type Field, type FieldFilter, type FilterGroup, type RecordQuery, type RelativeDateFilter, type Table } from '../../contracts/src/index.js';
 import { ServiceError } from './errors.js';
 import { validateValue } from './field-values.js';
@@ -6,7 +6,7 @@ import { validateValue } from './field-values.js';
 export type CheckedQuery = RecordQuery & { offset: number; limit: number };
 
 export function queryValueField(field: Field): Field {
-  return valueField(field.type === 'lookup' && !isLookupSummary(field) ? { ...field.lookupResult!, id: field.id, name: field.name, required: false } : field);
+  return valueField(field.type === 'lookup' && !isLookupSummary(field) ? { ...lookupElementField(field), id: field.id, name: field.name, required: false } : field);
 }
 
 export function parseQuery(table: Table, input: unknown): CheckedQuery {

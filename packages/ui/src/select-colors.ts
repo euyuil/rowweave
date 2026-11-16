@@ -1,4 +1,4 @@
-import { isLookupSummary, type CellValue, type Field, type SelectOption } from '../../contracts/src/index.js';
+import { isLookupSummary, lookupElementField, type CellValue, type Field, type SelectOption } from '../../contracts/src/index.js';
 
 export function selectStyle(option: Pick<SelectOption, 'color'>): { backgroundColor: string; color: string } {
   const backgroundColor = option.color ?? '#e7edf8';
@@ -12,7 +12,7 @@ export function selectStyle(option: Pick<SelectOption, 'color'>): { backgroundCo
 
 export function selectedOptions(field: Field, value: CellValue | undefined): SelectOption[] | undefined {
   if (isLookupSummary(field)) return undefined;
-  const source = field.type === 'lookup' ? field.lookupResult! : field;
+  const source = lookupElementField(field);
   if (source.type !== 'singleSelect' && source.type !== 'multiSelect') return undefined;
   const values = field.type === 'lookup' || source.type === 'multiSelect' ? (value ?? []) as CellValue[] : [value];
   return values.filter(value => value !== null && value !== undefined).map(id => source.options!.find(option => option.id === id)!);
