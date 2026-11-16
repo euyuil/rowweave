@@ -942,7 +942,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     {csvAction === 'export' && table && view && <CsvExportDialog table={table} view={view} search={search} api={api} host={host}
       onClose={() => setCsvAction(undefined)} />}
     {managingFields && table && <FieldsDialog initial={table} api={api} setDirty={setFormDirty}
-      onClose={() => setManagingFields(false)} onSaved={() => refreshAfterWrite('Schema')} />}
+      onClose={schemaChanged => { setManagingFields(false); if (schemaChanged) void reload(false); }} onSaved={() => refreshAfterWrite('Schema')} />}
     {columnAction && view && <ColumnActions field={columnAction.field} view={view} bounds={columnAction.bounds}
       disabled={recordActionsLocked} onAction={changeColumn} onClose={() => { setColumnAction(undefined); grid.current?.focus(); }} />}
     {editingField && table && <FieldForm table={table} field={editingField.field} anchor={editingField.bounds} api={api} setDirty={setFormDirty}

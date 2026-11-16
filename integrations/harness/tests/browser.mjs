@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { verifyHarnessRelationPairing } from './relation-pairing-workflow.mjs';
 import { build } from 'esbuild';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -328,6 +329,7 @@ app.on('window-all-closed', () => app.quit());`);
   await verifyHarnessCalendar(page, service);
   await verifyHarnessGantt(page, service);
   await verifyHarnessGallery(page, service);
+  await verifyHarnessRelationPairing(page, service);
   assert.equal(await page.evaluate(value => document.body.innerText.includes(value) || Object.values(localStorage).some(item => item.includes(value)), token), false);
   await page.evaluate(() => window.harnessTest.redeclare());
   assert.deepEqual(await page.evaluate(() => window.harnessTest.inspect()), { main: ['conversation', 'rowweave'], sidebar: ['rowweave'], active: null });

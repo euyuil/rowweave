@@ -197,6 +197,7 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved, ancho
               <p className="form-note">Both fields are created together. Adding or removing a link from either table updates the other side when saved.</p></>}
           </>}
           {field?.relation?.inverseFieldId && <p className="form-note">Two-way link: changes update the opposite field when saved. Configure that field in the linked table to change its name or record limit.</p>}
+          {field?.type === 'relation' && !field.relation!.inverseFieldId && <p className="form-note">To connect this field to an existing reverse field, save or cancel these edits, then choose Pair existing field in Manage fields.</p>}
         </>}
         {(type === 'number' || (type === 'formula' && resultType === 'number')) && <div className="form-row">
           <label className="form-field">Number format<select aria-label="Number format" value={format} onChange={event => setFormat(event.target.value as typeof format)}>
