@@ -160,6 +160,7 @@ export async function verifyRelationPairingAfterRestart(page, fixture) {
   await page.getByRole('navigation', { name: 'Tables', exact: true }).getByRole('button', { name: target.name, exact: true }).click();
   await page.getByRole('heading', { name: target.name, exact: true }).waitFor();
   await page.waitForFunction(() => document.querySelector('.grid-host')?.getAttribute('aria-busy') === 'false');
+  await page.locator('canvas').first().waitFor({ state: 'visible' });
   const bounds = await page.locator('canvas').first().boundingBox();
   await page.mouse.click(bounds.x + 100, bounds.y + 58);
   await page.getByRole('button', { name: 'Open record', exact: true }).click();
