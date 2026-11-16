@@ -38,6 +38,7 @@ export const fieldUpdate = z.strictObject({
   precision: z.number().int().nullable().exactOptional(),
 });
 export const conversion = z.strictObject({ ...expectedVersion, field });
+export const relationPair = z.strictObject({ ...expectedVersion, targetFieldId: id, expectedTargetVersion: version });
 const condition = z.strictObject({ fieldId: id, operator: z.enum(['eq', 'neq', 'contains', 'gt', 'gte', 'lt', 'lte', 'isEmpty', 'isNotEmpty', 'hasAny', 'relativeDate']), value: value.exactOptional(),
   relative: z.strictObject({ period: z.enum(relativeDatePeriods), timeZone: z.string().describe('Named time zone, such as Asia/Shanghai or UTC.'),
     days: z.int().min(1).max(maxRelativeDays).describe('For pastDays/nextDays or pastBusinessDays/nextBusinessDays. Business days count Monday–Friday only, including today if it is a weekday; public holidays count.').exactOptional(),

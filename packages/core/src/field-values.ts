@@ -1,4 +1,4 @@
-import { maxTextLength, maxAttachmentsPerCell, type CellValue, type Field } from '../../contracts/src/index.js';
+import { maxTextLength, maxAttachmentsPerCell, maxLinkedRecords, type CellValue, type Field } from '../../contracts/src/index.js';
 import { ServiceError } from './errors.js';
 import { webUrl } from './web-url.js';
 
@@ -49,9 +49,9 @@ export function validateValue(field: Field, input: unknown): CellValue {
       if (field.required && !input.length) return invalid('choose at least one option.');
       return input as string[];
     case 'relation':
-      if (!Array.isArray(input) || input.length > (field.relation!.multiple ? 200 : 1) ||
+      if (!Array.isArray(input) || input.length > (field.relation!.multiple ? maxLinkedRecords : 1) ||
           new Set(input).size !== input.length || input.some(id => typeof id !== 'string' || !id || id.length > 100)) {
-        return invalid(`choose up to ${field.relation!.multiple ? 200 : 1} unique record IDs.`);
+        return invalid(`choose up to ${field.relation!.multiple ? maxLinkedRecords : 1} unique record IDs.`);
       }
       if (field.required && !input.length) return invalid('choose at least one record.');
       return input as string[];

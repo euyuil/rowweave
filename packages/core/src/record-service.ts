@@ -40,6 +40,7 @@ export interface RecordStore {
   createTable(table: Table): Table;
   updateSchema(table: Table, expectedVersion: number, validateRecord?: (record: RowRecord) => void): Table;
   createReciprocalFields(table: Table, target: Table, validateRecord?: (record: RowRecord) => void): Table;
+  pairRelationFields(table: Table, field: Field, target: Table, inverse: Field): Table;
   deleteTable(id: string, expectedVersion: number): void;
   readPage(offset: number, limit: number, id?: string): RecordPage;
   updateBatch(updates: RecordUpdate[], id: string, schemaVersion: number): BatchResult;
@@ -188,6 +189,32 @@ export class RecordService {
       return this.store.createReciprocalFields(table, target, validateRecord);
     }
     return this.store.updateSchema(table, version, validateRecord);
+  }
+
+  pairRelationFields(id: string, fieldId: string, input: unknown): Table {
+    const item = schemaObject(input);
+    const version = schemaVersion(item['expectedVersion']);
+    const targetVersion = schemaVersion(item['expectedTargetVersion']);
+    if (typeof item['targetFieldId'] !== 'string' || !item['targetFieldId'] || item['targetFieldId'].length > 100) {
+      throw new ServiceError('INVALID_SCHEMA', 'Provide the stable ID of the existing reverse field.');
+    }
+    const table = this.store.getTable(id);
+    const field = table.fields.find(field => field.id === fieldId);
+    if (!field) throw new ServiceError('FIELD_NOT_FOUND', 'This field does not exist.', 404);
+    if (field.type !== 'relation') throw new ServiceError('INVALID_SCHEMA', 'Only linked-record fields can be paired.');
+    const target = field.relation!.tableId === id ? table : this.store.getTable(field.relation!.tableId);
+    if (table.version !== version || target.version !== targetVersion) {
+      throw new ServiceError('SCHEMA_CONFLICT', 'A table schema changed. Reload both tables before pairing linked fields.', 409);
+    }
+    const inverse = target.fields.find(field => field.id === item['targetFieldId']);
+    if (!inverse) throw new ServiceError('FIELD_NOT_FOUND', 'The reverse field does not exist in the target table.', 404);
+    if (inverse.id === field.id || inverse.type !== 'relation' || inverse.relation!.tableId !== id) {
+      throw new ServiceError('INVALID_SCHEMA', 'Choose a different linked-record field that points back to this table.');
+    }
+    if (field.relation!.inverseFieldId || inverse.relation!.inverseFieldId) {
+      throw new ServiceError('RELATION_DEPENDENCY', 'Both fields must be one-way fields before they can be paired.', 409);
+    }
+    return this.store.pairRelationFields(table, field, target, inverse);
   }
 
   updateField(id: string, fieldId: string, input: unknown): Table {

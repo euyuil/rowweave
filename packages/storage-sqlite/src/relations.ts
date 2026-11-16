@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { CellValue, Field, RowRecord, Table } from '../../contracts/src/index.js';
+import { maxLinkedRecords, type CellValue, type Field, type RowRecord, type Table } from '../../contracts/src/index.js';
 import { ServiceError } from '../../core/src/errors.js';
 import { fieldText } from '../../core/src/field-display.js';
 import { validateValue } from '../../core/src/field-values.js';
@@ -114,6 +114,52 @@ export class Relations {
       for (const [position, id] of state.ids.entries()) insert.run(state.recordId, state.field.id, id, position);
     }
     return { records, values: updatedValues };
+  }
+
+  pairFields(field: Field, inverse: Field): Map<string, Set<string>> {
+    const copy = this.db.prepare(`INSERT INTO relation_edges (source_record_id, field_id, target_record_id, position)
+      SELECT edge.target_record_id, ?, edge.source_record_id,
+        COALESCE((SELECT MAX(existing.position) FROM relation_edges existing
+          WHERE existing.source_record_id = edge.target_record_id AND existing.field_id = ?), -1)
+        + ROW_NUMBER() OVER (PARTITION BY edge.target_record_id ORDER BY source.position, source.id)
+      FROM relation_edges edge JOIN records source ON source.id = edge.source_record_id
+      WHERE edge.field_id = ? AND NOT EXISTS (SELECT 1 FROM relation_edges existing
+        WHERE existing.source_record_id = edge.target_record_id AND existing.field_id = ? AND existing.target_record_id = edge.source_record_id)
+      RETURNING source_record_id`);
+    const changed = new Map<string, Set<Field>>();
+    const writeField = this.db.prepare('UPDATE fields SET definition_json = ? WHERE id = ?');
+    for (const [current, reverse] of [[field, inverse], [inverse, field]] as const) {
+      for (const row of copy.iterate(current.id, current.id, reverse.id, current.id)) {
+        const id = row['source_record_id'] as string;
+        const fields = changed.get(id) ?? new Set<Field>();
+        fields.add(current);
+        changed.set(id, fields);
+      }
+      current.relation!.inverseFieldId = reverse.id;
+      writeField.run(JSON.stringify(current), current.id);
+    }
+    const read = this.db.prepare('SELECT table_id, values_json FROM records WHERE id = ?');
+    const readIds = this.db.prepare('SELECT target_record_id FROM relation_edges WHERE source_record_id = ? AND field_id = ? ORDER BY position LIMIT ?');
+    const write = this.db.prepare('UPDATE records SET values_json = ?, version = version + 1 WHERE id = ?');
+    const records = new Map<string, Set<string>>();
+    for (const [id, fields] of changed) {
+      const row = read.get(id)!;
+      const values = JSON.parse(row['values_json'] as string) as Record<string, CellValue>;
+      for (const current of fields) {
+        const ids = readIds.all(id, current.id, (current.relation!.multiple ? maxLinkedRecords : 1) + 1).map(edge => edge['target_record_id'] as string);
+        try { values[current.id] = validateValue(current, ids); }
+        catch (error) {
+          if (error instanceof ServiceError) throw new ServiceError(error.code, `Record ${id}: ${error.message}`);
+          throw error;
+        }
+      }
+      write.run(JSON.stringify(values), id);
+      const tableId = row['table_id'] as string;
+      const ids = records.get(tableId) ?? new Set<string>();
+      ids.add(id);
+      records.set(tableId, ids);
+    }
+    return records;
   }
 
   detachFields(table: Table, before: Table): string[] {

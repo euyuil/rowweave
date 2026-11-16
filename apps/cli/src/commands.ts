@@ -1,7 +1,7 @@
 import type { WorkspaceApi, TableCreate, TableUpdate, FieldCreate, FieldUpdate, FieldConversion, RecordCreate,
   RecordUpdate, RecordDelete, RecordQuery, ViewCreate, ViewUpdate, ViewPageRequest, SummaryRequest, GroupQuery,
   RecordHistoryQuery, RecordRestore, DeletedRecordRestore, AttachmentQuery, FormulaPreviewRequest, WorkspaceStateRequest,
-  CalendarLayoutRequest, CalendarRecordsRequest, RecordSchedule } from '../../../packages/client/src/index.js';
+  CalendarLayoutRequest, CalendarRecordsRequest, RecordSchedule, RelationPair } from '../../../packages/client/src/index.js';
 
 export class UsageError extends Error {}
 
@@ -31,6 +31,7 @@ export const commands: Record<string, Command> = {
   'tables delete': { ids: 1, input: 'required', run: (api, [id], input) => api.deleteTable(id!, inputObject(input)['expectedVersion'] as number) },
   'fields create': { ids: 1, input: 'required', run: (api, [id], input) => api.createField(id!, input as FieldCreate) },
   'fields update': { ids: 2, input: 'required', run: (api, [id, field], input) => api.updateField(id!, field!, input as FieldUpdate) },
+  'fields pair': { ids: 2, input: 'required', run: (api, [id, field], input) => api.pairRelationFields(id!, field!, input as RelationPair) },
   'fields delete': { ids: 2, input: 'required', run: (api, [id, field], input) => api.deleteField(id!, field!, inputObject(input)['expectedVersion'] as number) },
   'fields preview-conversion': { ids: 2, input: 'required', run: (api, [id, field], input) => api.previewConversion(id!, field!, input as FieldConversion) },
   'fields apply-conversion': { ids: 2, input: 'required', run: (api, [id, field], input) => api.applyConversion(id!, field!, input as FieldConversion) },

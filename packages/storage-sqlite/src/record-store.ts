@@ -250,6 +250,20 @@ export class SqliteRecordStore implements RecordStore {
     });
   }
 
+  pairRelationFields(table: Table, field: Field, target: Table, inverse: Field): Table {
+    return this.transaction(() => {
+      this.checkSchema(table.id, table.version);
+      if (target.id !== table.id) this.checkSchema(target.id, target.version);
+      const records = this.relations.pairFields(field, inverse);
+      const versioned = new Set([...records.values()].flatMap(ids => [...ids]));
+      const calculated = new ConnectedCalculations(this.db).run(records, versioned, this.lookups, id => this.getTable(id), this.transactionTime!);
+      const tables = [...new Set([table.id, target.id])];
+      for (const id of tables) this.db.prepare('UPDATE tables SET version = version + 1 WHERE id = ?').run(id);
+      this.relations.bumpRevisions([...tables, ...calculated.tables]);
+      return this.getTable(table.id);
+    });
+  }
+
   private writeSchema(table: Table, expectedVersion: number, validateRecord?: (record: RowRecord) => void, syncDependents = true): Table {
     this.checkSchema(table.id, expectedVersion);
     if (table.version !== expectedVersion) {

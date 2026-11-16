@@ -55,6 +55,7 @@ Tools have discoverable strict JSON schemas. Read descriptions and use stable ID
 | `tables_delete` | `{ tableId, expectedVersion }` |
 | `fields_create` | `{ tableId, input: FieldCreate }` |
 | `fields_update` | `{ tableId, fieldId, input: FieldUpdate }` |
+| `fields_pair` | `{ tableId, fieldId, input: { expectedVersion, targetFieldId, expectedTargetVersion } }`; [preserve existing links while pairing fields](relation-pairing.md) |
 | `fields_delete` | `{ tableId, fieldId, expectedVersion }` |
 | `fields_preview_conversion`, `fields_apply_conversion` | `{ tableId, fieldId, input: FieldConversion }` |
 | `records_get` | `{ tableId, recordId }` |
