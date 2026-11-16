@@ -8,7 +8,7 @@ This change adjusts a connection-local cache target. It does not change schemas,
 
 The clean measured source is `2d93bd82281167a940e751b3f728d79d6f00f216`. Its Windows package was built at 2026-11-16T11:19:55Z and has ZIP SHA-256 `888d98bb40221315bee37269186618253fe3edf03c7da018dbd1565c3fae1d0d`. The local artifact is `.artifacts/batch-save-worktree/release/0.1.0-20261116T111933580Z/rowweave-0.1.0-win32-x64.zip`.
 
-Strict TypeScript checking, the production build and all 465 Node regressions passed. No product UI behavior changed. [Final-head CI](https://github.com/euyuil/rowweave/actions/runs/43860985755) passed on Linux and Windows, including full source/extracted-package desktop and shared desktop/service/SDK/CLI/MCP/Harness acceptance, before PR #115 squash merged. Current native checks remain pending in the [candidate report](final-candidate-validation.md).
+Strict TypeScript checking, the production build and all 465 Node regressions passed. No product UI behavior changed. [Final-head CI](https://github.com/euyuil/rowweave/actions/runs/43860985755) passed on Linux and Windows, including full source/extracted-package desktop and shared desktop/service/SDK/CLI/MCP/Harness acceptance, before PR #115 squash merged. The same clean package subsequently passed native input, Excel clipboard, file-dialog, browser-handoff and restart checks recorded separately in the [candidate report](final-candidate-validation.md#final-native-interaction).
 
 ## Desktop measurements
 
