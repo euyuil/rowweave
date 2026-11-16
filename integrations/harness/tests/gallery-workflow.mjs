@@ -1,0 +1,41 @@
+import assert from 'node:assert/strict';
+import { galleryArtwork } from '../../../apps/desktop/tests/gallery-workflow.mjs';
+
+export async function verifyHarnessGallery(page, service) {
+  const dialog = page.getByRole('dialog');
+  await page.getByRole('button', { name: '+ New table', exact: true }).click();
+  await dialog.getByLabel('Table name', { exact: true }).fill('Harness collection');
+  await dialog.getByRole('button', { name: 'Create table', exact: true }).click();
+  await page.getByRole('heading', { name: 'Harness collection', exact: true }).waitFor();
+  let table = service.listTables().find(table => table.name === 'Harness collection');
+  table = service.createField(table.id, { expectedVersion: table.version, name: 'Images', type: 'attachment' });
+  const cover = table.fields[1].id, name = table.primaryFieldId;
+  const file = service.uploadAttachment(table.id, { filename: 'landscape.png', mediaType: 'image/png', data: await galleryArtwork(page) });
+  const record = service.createRecords(table.id, [{ values: { [name]: 'Shared collection', [cover]: [file.id] } }]).records[0];
+  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await page.getByText('1 record · 2 fields', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'New view', exact: true }).click();
+  await dialog.getByLabel('View name', { exact: true }).fill('Collection');
+  await dialog.getByLabel('View type', { exact: true }).selectOption('gallery');
+  await dialog.getByLabel('Gallery cover field', { exact: true }).selectOption(cover);
+  await dialog.getByLabel('Gallery card size', { exact: true }).selectOption('large');
+  await dialog.getByRole('button', { name: 'Create view', exact: true }).click();
+  const gallery = page.getByRole('region', { name: 'Collection gallery', exact: true });
+  await gallery.getByRole('button', { name: 'Shared collection', exact: true }).waitFor();
+  await page.waitForFunction(() => document.querySelector('.gallery-cover img')?.naturalWidth === 640);
+  await gallery.locator('.gallery-title').focus(); await page.keyboard.press('Enter');
+  await dialog.getByLabel('Name', { exact: true }).fill('Edited collection');
+  await dialog.getByRole('button', { name: 'Save record', exact: true }).click();
+  await gallery.getByRole('button', { name: 'Edited collection', exact: true }).waitFor();
+  assert.equal(service.getRecord(table.id, record.id).values[name], 'Edited collection');
+  assert.equal(await gallery.locator('.gallery-title').evaluate(element => element === document.activeElement), true);
+  const view = service.listViews(table.id).find(view => view.name === 'Collection');
+  assert.deepEqual(view.gallery, { cardSize: 'large', coverFit: 'cover', coverFieldId: cover });
+  service.updateView(table.id, view.id, { expectedVersion: view.version, gallery: { cardSize: 'small', coverFit: 'contain' } });
+  await page.waitForFunction(() => document.querySelector('.gallery-small') && !document.querySelector('.gallery-cover'));
+  await page.screenshot({ path: '.artifacts/desktop-harness-gallery.png' });
+  await page.getByRole('button', { name: 'Delete table', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Delete table', exact: true }).click();
+  await dialog.waitFor({ state: 'detached' });
+  console.log('Installed Harness gallery configuration, authenticated cover loading, editing, focus and external refresh passed.');
+}

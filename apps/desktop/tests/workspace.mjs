@@ -23,6 +23,8 @@ import { verifyCalendarWorkflow, verifyCalendarAfterRestart } from './calendar-w
 import { verifyCalendarRefresh } from './calendar-refresh-workflow.mjs';
 import { verifyGanttWorkflow, verifyGanttAfterRestart } from './gantt-workflow.mjs';
 import { verifyGanttRefresh } from './gantt-refresh-workflow.mjs';
+import { verifyGalleryWorkflow, verifyGalleryAfterRestart } from './gallery-workflow.mjs';
+import { verifyGalleryRefresh } from './gallery-refresh-workflow.mjs';
 import { verifyFormulaWorkflow } from './formula-workflow.mjs';
 import { verifyDateFormulaWorkflow } from './date-formula-workflow.mjs';
 import { verifyArrayFormulaWorkflow } from './array-formula-workflow.mjs';
@@ -305,6 +307,7 @@ try {
   await verifyBoardRefresh(page);
   const calendar = await verifyCalendarRefresh(page, await verifyCalendarWorkflow(page, application));
   const gantt = await verifyGanttRefresh(page, await verifyGanttWorkflow(page, application));
+  const gallery = await verifyGalleryRefresh(page, await verifyGalleryWorkflow(page, application));
   await verifyFormulaWorkflow(page);
   await verifyDateFormulaWorkflow(page);
   await verifyArrayFormulaWorkflow(page);
@@ -341,6 +344,7 @@ try {
   await verifyNestedGroupsAfterRestart(page, nestedGroups);
   await verifyCalendarAfterRestart(page, calendar);
   await verifyGanttAfterRestart(page, gantt);
+  await verifyGalleryAfterRestart(page, gallery);
   for (const name of ['Projects 项目', 'Tasks']) {
     await choose(name);
     await page.getByRole('heading', { name, exact: true }).waitFor();

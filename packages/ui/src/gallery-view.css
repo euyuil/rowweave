@@ -1,0 +1,25 @@
+.rowweave-app .gallery-view { flex: 1; min-height: 0; display: flex; flex-direction: column; background: #f7f9fc; --gallery-width: 280px; }
+.rowweave-app .gallery-small { --gallery-width: 220px; }
+.rowweave-app .gallery-large { --gallery-width: 360px; }
+.rowweave-app .gallery-viewport { flex: 1; min-height: 0; overflow: auto; padding: 16px; }
+.rowweave-app .gallery-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--gallery-width)), 1fr)); gap: 16px; list-style: none; padding: 0; margin: 0; align-items: start; }
+.rowweave-app .gallery-card { min-width: 0; overflow: hidden; border: 1px solid #dce3ee; border-radius: 10px; background: white; box-shadow: 0 2px 5px #1b315008; }
+.rowweave-app .gallery-card:focus-within { border-color: #7699e2; box-shadow: 0 0 0 2px #d4e1fc; }
+.rowweave-app .gallery-cover-button { display: block; width: 100%; padding: 0; border: 0; border-radius: 0; background: #edf2f9; }
+.rowweave-app .gallery-cover { width: 100%; aspect-ratio: 16 / 9; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.rowweave-app .gallery-cover img { width: 100%; height: 100%; object-fit: var(--gallery-cover-fit); }
+.rowweave-app .gallery-cover-placeholder { display: flex; align-items: center; flex-direction: column; gap: 6px; padding: 16px; color: #687b99; min-width: 0; }
+.rowweave-app .gallery-cover-placeholder > span { font-size: 30px; color: #91a5c4; }
+.rowweave-app .gallery-cover-placeholder small { font-size: 12px; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.rowweave-app .gallery-card-body { padding: 14px 16px 16px; }
+.rowweave-app .gallery-title { padding: 0; border: 0; background: none; color: #233e67; text-align: left; font-size: 15px; font-weight: 600; line-height: 22px; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.rowweave-app .gallery-title:focus-visible { outline: 2px solid #315cbe; outline-offset: 3px; }
+.rowweave-app .gallery-card dl { margin: 12px 0 0; display: flex; flex-direction: column; gap: 10px; }
+.rowweave-app .gallery-card dl:empty { display: none; }
+.rowweave-app .gallery-card-field { min-width: 0; }
+.rowweave-app .gallery-card dt { font-size: 11px; color: #6c7b91; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; margin-bottom: 4px; }
+.rowweave-app .gallery-card dd { font-size: 13px; line-height: 19px; color: #354963; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.rowweave-app .gallery-empty { margin: 36px 12px; text-align: center; color: #687b99; }
+.rowweave-app .gallery-pages { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 16px; border-top: 1px solid #dce3ee; background: white; font-size: 12px; color: #637492; }
+.rowweave-app .gallery-pages button { padding: 6px 10px; font-size: 12px; }
+.rowweave-app .gallery-pages small { margin-left: auto; }
