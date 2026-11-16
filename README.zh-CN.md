@@ -15,7 +15,7 @@
 
 ## 体验 RowWeave
 
-首个产品候选版本已可供评估。从成功的 [CI 运行记录](https://github.com/euyuil/rowweave/actions)下载 **rowweave-windows**，解压其中的应用 ZIP，打开 `rowweave.exe`。桌面版无需额外安装 Node.js。
+Windows 评估版本可从成功的 [CI 运行记录](https://github.com/euyuil/rowweave/actions)获取。下载 **rowweave-windows**，解压其中的应用 ZIP，打开 `rowweave.exe`。桌面版无需额外安装 Node.js。已完成与待完成的验证见[候选版报告（英文）](docs/final-candidate-validation.md)。
 
 从空白工作区开始：创建表，添加字段，再录入或导入记录。点击 **Save changes** 或按 **Ctrl+S** 保存修改。
 
@@ -25,6 +25,6 @@
 
 [部署服务（英文）](docs/service.md) · [TypeScript SDK（英文）](packages/client/README.md) · [CLI（英文）](apps/cli/README.md) · [MCP（英文）](docs/mcp.md) · [Agent Skills（英文）](docs/agent-skills.md) · [Harness（英文）](docs/harness.md)
 
-本版专注灵活的结构化表格和可靠的数据操作。内置 AI 聊天、企业级权限和实时协同编辑仍不在本轮范围内。
+本版专注灵活的结构化表格和可靠的数据操作。自定义表单、透视表、仪表盘、地图视图和自动化尚未实现，不在本轮范围内。内置 AI 聊天、企业级权限和实时协同编辑也不在本轮范围内。
 
-实测性能与当前限制见[验证报告（英文）](docs/product-performance.md)。源码运行与架构见[开发文档（英文）](docs/development.md)和[设计文档（英文）](docs/design.md)。欢迎在 [Issues](https://github.com/euyuil/rowweave/issues) 中分享使用场景和反馈。
+实测性能与当前限制见[候选版报告（英文）](docs/final-candidate-validation.md)。源码运行与架构见[开发文档（英文）](docs/development.md)和[设计文档（英文）](docs/design.md)。欢迎在 [Issues](https://github.com/euyuil/rowweave/issues) 中分享使用场景和反馈。
