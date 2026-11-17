@@ -58,6 +58,11 @@ export async function verifySaveSelection(page) {
     };
     const failureUrl = scenario === 'failed write' ? '**' + root + '/records' : '**' + root;
     if (scenario.startsWith('failed')) await page.route(failureUrl, failure);
+    const delayedWrite = async route => {
+      await new Promise(resolve => setTimeout(resolve, 150));
+      await route.continue();
+    };
+    if (scenario === 'sorted') await page.route('**' + root + '/records', delayedWrite);
     try {
       await page.keyboard.press('Control+s');
       if (scenario === 'failed write') {
@@ -68,20 +73,25 @@ export async function verifySaveSelection(page) {
         assert.equal(writes, 1);
         assert.equal((await call(root + '/records/' + records[1].id)).values[name], 'B');
       } else {
+        await waitForAutosave(page);
         if (scenario === 'failed refresh') await page.getByRole('status').filter({ hasText: 'Could not check for updates' }).waitFor();
         else await waitForLiveSync(page);
+        await ready();
         if (scenario === 'filtered') {
           await notice.waitFor();
           assert.equal(await open.isEnabled(), false, 'A record outside the filter must not select its former neighbor.');
           assert.equal(await page.getByRole('button', { name: 'Delete records', exact: true }).isEnabled(), false);
         } else {
-          assert.equal(await open.isEnabled(), true, 'The selected record UUID is retained across its move.');
+          assert.equal(await open.isEnabled(), true, `${scenario}: the selected record UUID is retained across its move.`);
           await copy('Z');
         }
         assert.equal((await call(root + '/records/' + records[1].id)).values[name], 'Z');
         assert.equal((await call(root + '/records/' + records[2].id)).version, 1);
       }
-    } finally { if (scenario.startsWith('failed')) await page.unroute(failureUrl, failure); }
+    } finally {
+      if (scenario.startsWith('failed')) await page.unroute(failureUrl, failure);
+      if (scenario === 'sorted') await page.unroute('**' + root + '/records', delayedWrite);
+    }
     if (scenario === 'failed write') {
       await page.getByRole('button', { name: 'Retry saving', exact: true }).click();
       await waitForAutosave(page);
