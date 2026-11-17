@@ -1,3 +1,4 @@
+import { closeSavedRecord, cancelDialog } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyRecordTimesWorkflow(page) {
@@ -22,6 +23,8 @@ export async function verifyRecordTimesWorkflow(page) {
   await dialog.getByRole('button', { name: 'Done', exact: true }).click(); await ready();
   const select = async () => {
     await page.locator('.dvn-scroller').click({ position: { x: 100, y: 58 } });
+    await page.waitForFunction(() => document.querySelector('canvas')?.contains(document.activeElement) || !!document.querySelector('.rowweave-cell-editor'));
+    if (await page.locator('.rowweave-cell-editor').count()) await page.keyboard.press('Escape');
     await page.waitForFunction(() => document.querySelector('canvas')?.contains(document.activeElement));
   };
   await select();
@@ -31,13 +34,13 @@ export async function verifyRecordTimesWorkflow(page) {
   assert.match(created, /^\d{4}-\d{2}-\d{2}T.*Z$/); assert.equal(edited, created);
   assert.equal(await dialog.getByRole('button', { name: 'Clear Edited', exact: true }).count(), 0);
   await dialog.getByLabel('Name', { exact: true }).fill('Saved again');
-  await dialog.getByRole('button', { name: 'Save record', exact: true }).click();
+  await closeSavedRecord(page);
   await dialog.waitFor({ state: 'detached' }); await ready(); await select();
   await page.getByRole('button', { name: 'Open record', exact: true }).click();
   assert.equal(await dialog.getByLabel('Created (UTC)', { exact: true }).textContent(), created);
   assert.ok(await dialog.getByLabel('Edited (UTC)', { exact: true }).textContent() > edited);
   await page.screenshot({ path: '.artifacts/desktop-record-times.png' });
-  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   await page.getByRole('button', { name: 'Duplicate', exact: true }).click();
   assert.equal(await dialog.getByLabel('Created (UTC)', { exact: true }).textContent(), '');
   assert.equal(await dialog.getByLabel('Edited (UTC)', { exact: true }).textContent(), '');

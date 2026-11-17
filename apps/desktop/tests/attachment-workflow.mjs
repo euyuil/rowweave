@@ -1,3 +1,4 @@
+import { waitForLiveSync, waitForAutosave, closeSavedRecord, cancelDialog } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -82,7 +83,7 @@ export async function verifyAttachmentWorkflow(page, application) {
     assert.deepEqual((await call(`/tables/${table.id}/records/${record.id}`)).values[field], [id]);
     await page.getByRole('button', { name: 'Open record', exact: true }).click();
     await dialog.getByRole('button', { name: 'Remove 设计.bin', exact: true }).click();
-    await dialog.getByRole('button', { name: 'Save record', exact: true }).click();
+    await closeSavedRecord(page);
     await dialog.waitFor({ state: 'detached' }); await ready();
     assert.deepEqual((await call(`/tables/${table.id}/records/${record.id}`)).values[field], []);
     await page.locator('.dvn-scroller').click({ position: { x: 100, y: 58 } });
@@ -92,7 +93,7 @@ export async function verifyAttachmentWorkflow(page, application) {
     await editor.getByRole('button', { name: 'Choose uploaded files', exact: true }).click();
     await editor.getByRole('checkbox', { name: /^设计\.bin/ }).check();
     await editor.getByRole('button', { name: 'Apply', exact: true }).click();
-    await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+    await waitForAutosave(page);
     await page.getByText('All changes saved', { exact: true }).waitFor();
     assert.deepEqual((await call(`/tables/${table.id}/records/${record.id}`)).values[field], [id]);
     await page.screenshot({ path: '.artifacts/desktop-attachments-grid.png' });
@@ -118,7 +119,7 @@ export async function verifyAttachmentWorkflow(page, application) {
     table = await call(`/tables/${table.id}/fields`, 'POST', { expectedVersion: table.version, name: 'Related files', type: 'lookup', lookup: { relationFieldId: relation, fieldId: field } });
     const current = await call(`/tables/${table.id}/records/${record.id}`);
     await call(`/tables/${table.id}/records`, 'PATCH', [{ id: record.id, expectedVersion: current.version, values: { [relation]: [record.id, other.id] } }]);
-    await page.getByRole('button', { name: 'Reload', exact: true }).click(); await ready();
+    await waitForLiveSync(page); await ready();
     await page.getByText('2 records · 4 fields', { exact: true }).waitFor();
     await page.locator('.dvn-scroller').click({ position: { x: 100, y: 58 } });
     await page.getByRole('button', { name: 'Open record', exact: true }).click();
@@ -131,7 +132,7 @@ export async function verifyAttachmentWorkflow(page, application) {
     assert.equal(await lookup.getByRole('button', { name: /^Download / }).count(), 1);
     await lookup.getByText('21–21 of 21 files', { exact: true }).waitFor();
     await page.screenshot({ path: '.artifacts/desktop-attachments-lookup.png' });
-    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await cancelDialog(page);
     await page.getByRole('button', { name: 'Delete table', exact: true }).click();
     await dialog.getByRole('button', { name: 'Delete table', exact: true }).click(); await dialog.waitFor({ state: 'detached' });
   } finally {

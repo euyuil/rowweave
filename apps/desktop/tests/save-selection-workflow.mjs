@@ -1,3 +1,4 @@
+import { waitForLiveSync, waitForAutosave, cancelDialog } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifySaveSelection(page) {
@@ -12,7 +13,7 @@ export async function verifySaveSelection(page) {
   const ready = () => page.waitForFunction(() => document.querySelector('.grid-host')?.getAttribute('aria-busy') === 'false');
   const open = page.getByRole('button', { name: 'Open record', exact: true });
   const editor = page.getByRole('textbox', { name: 'Cell value', exact: true });
-  const notice = page.getByText('Changes saved. The selection was cleared; select records again before editing.', { exact: true });
+  const notice = page.getByText('Changes were loaded. The previous selection was cleared; select records again before editing.', { exact: true });
   const select = async (row, text) => {
     await ready();
     await page.waitForFunction(({ row, text }) =>
@@ -42,7 +43,7 @@ export async function verifySaveSelection(page) {
       query: scenario === 'filtered' ? { filter: { conjunction: 'and', conditions: [{ fieldId: name, operator: 'eq', value: 'B' }] } }
         : { sort: [{ fieldId: name, direction: 'asc' }] },
     });
-    await page.getByRole('button', { name: 'Reload', exact: true }).click(); await ready();
+    await waitForLiveSync(page); await ready();
     await select(scenario === 'grouped' ? 3 : scenario === 'filtered' ? 0 : 1, 'B');
     await copy('B');
     await page.keyboard.press('Control+s');
@@ -57,6 +58,11 @@ export async function verifySaveSelection(page) {
     };
     const failureUrl = scenario === 'failed write' ? '**' + root + '/records' : '**' + root;
     if (scenario.startsWith('failed')) await page.route(failureUrl, failure);
+    const delayedWrite = async route => {
+      await new Promise(resolve => setTimeout(resolve, 150));
+      await route.continue();
+    };
+    if (scenario === 'sorted') await page.route('**' + root + '/records', delayedWrite);
     try {
       await page.keyboard.press('Control+s');
       if (scenario === 'failed write') {
@@ -67,26 +73,38 @@ export async function verifySaveSelection(page) {
         assert.equal(writes, 1);
         assert.equal((await call(root + '/records/' + records[1].id)).values[name], 'B');
       } else {
-        if (scenario === 'failed refresh') await page.getByRole('alert').filter({ hasText: 'Changes saved, but refreshing failed' }).waitFor();
-        await notice.waitFor();
-        assert.equal(await open.isEnabled(), false, 'Saved row positions must not select a different record.');
-        assert.equal(await page.getByRole('button', { name: 'Delete records', exact: true }).isEnabled(), false);
+        await waitForAutosave(page);
+        if (scenario === 'failed refresh') await page.getByRole('status').filter({ hasText: 'Could not check for updates' }).waitFor();
+        else await waitForLiveSync(page);
+        await ready();
+        if (scenario === 'filtered') {
+          await notice.waitFor();
+          assert.equal(await open.isEnabled(), false, 'A record outside the filter must not select its former neighbor.');
+          assert.equal(await page.getByRole('button', { name: 'Delete records', exact: true }).isEnabled(), false);
+        } else {
+          assert.equal(await open.isEnabled(), true, `${scenario}: the selected record UUID is retained across its move.`);
+          await copy('Z');
+        }
         assert.equal((await call(root + '/records/' + records[1].id)).values[name], 'Z');
         assert.equal((await call(root + '/records/' + records[2].id)).version, 1);
       }
-    } finally { if (scenario.startsWith('failed')) await page.unroute(failureUrl, failure); }
+    } finally {
+      if (scenario.startsWith('failed')) await page.unroute(failureUrl, failure);
+      if (scenario === 'sorted') await page.unroute('**' + root + '/records', delayedWrite);
+    }
     if (scenario === 'failed write') {
-      await page.getByRole('button', { name: 'Save changes', exact: true }).click();
-      await notice.waitFor(); assert.equal(await open.isEnabled(), false);
+      await page.getByRole('button', { name: 'Retry saving', exact: true }).click();
+      await waitForAutosave(page);
+      await waitForLiveSync(page); assert.equal(await open.isEnabled(), true);
       assert.equal((await call(root + '/records/' + records[1].id)).values[name], 'Z');
     }
-    if (scenario === 'failed refresh') await page.getByRole('button', { name: 'Reload', exact: true }).click();
+    if (scenario === 'failed refresh') await waitForLiveSync(page);
     await ready();
     if (scenario !== 'filtered') {
       await select(scenario === 'grouped' ? 5 : 2, 'Z');
       await copy('Z'); await open.click();
       assert.equal(await dialog.getByLabel('Name', { exact: true }).inputValue(), 'Z');
-      await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+      await cancelDialog(page);
     } else await page.getByText('0 records · 1 field', { exact: true }).waitFor();
     if (scenario === 'grouped') await page.screenshot({ path: '.artifacts/desktop-save-selection.png' });
     await page.getByRole('button', { name: 'Delete table', exact: true }).click();

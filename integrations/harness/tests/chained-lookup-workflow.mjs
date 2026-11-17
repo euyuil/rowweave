@@ -1,3 +1,4 @@
+import { waitForLiveSync } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -19,7 +20,7 @@ export async function verifyHarnessChainedLookups(page, application, service, di
   const leaf = service.createRecords(table.id, [{ values: { [table.primaryFieldId]: 'Item', [amount.id]: 8.5, [files.id]: [file.id] } }]).records[0];
   const middle = service.createRecords(table.id, [{ values: { [table.primaryFieldId]: 'Collection', [link.id]: [leaf.id] } }]).records[0];
   const root = service.createRecords(table.id, [{ values: { [table.primaryFieldId]: 'Portfolio', [link.id]: [middle.id] } }]).records[0];
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await page.getByText('3 records · 6 fields', { exact: true }).waitFor();
   const manage = page.getByRole('dialog', { name: 'Manage fields', exact: true });
   for (const [name, target, operation] of [['Nested total', first, 'sum'], ['Nested files', firstFiles, 'values']]) {
@@ -55,7 +56,7 @@ export async function verifyHarnessChainedLookups(page, application, service, di
   assert.deepEqual(await readFile(destination), bytes);
   await panel.getByLabel('Nested total', { exact: true }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: '.artifacts/desktop-harness-chained-lookups.png' });
-  await panel.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await panel.getByRole('button', { name: 'Close', exact: true }).click();
   await page.locator('.dvn-scroller').evaluate(element => { element.scrollLeft = element.scrollWidth; });
   service.updateBatch([{ id: leaf.id, expectedVersion: leaf.version, values: { [amount.id]: 12.5 } }], table.id);
   await page.waitForFunction(() => document.querySelector('canvas [aria-rowindex="2"] [role="gridcell"][aria-colindex="7"]')?.textContent === '12.5');

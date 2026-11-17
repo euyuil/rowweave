@@ -1,3 +1,4 @@
+import { waitForLiveSync } from '../../../tests/live-ui.mjs';
 export async function verifySummaryWorkflow(page) {
   await page.getByRole('button', { name: '+ New table', exact: true }).click();
   await page.getByLabel('Table name', { exact: true }).fill('Summary lab');
@@ -24,7 +25,7 @@ export async function verifySummaryWorkflow(page) {
     } } });
     return { status: status.id, tableId: table.id };
   });
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await page.getByText('501 records · 3 fields', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Summarize', exact: true }).click();
   await page.getByRole('row', { name: 'All matching records 501 1,002', exact: true }).waitFor();
@@ -46,7 +47,7 @@ export async function verifySummaryWorkflow(page) {
   await page.getByRole('button', { name: 'Refresh summary', exact: true }).click();
   await page.getByRole('alert').filter({ hasText: 'Close this dialog and reload the table' }).waitFor();
   await page.getByRole('button', { name: 'Done', exact: true }).click();
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await page.getByRole('tab', { name: 'Open tasks', exact: true }).click();
   await page.getByText('401 records · 3 fields', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Summarize', exact: true }).click();

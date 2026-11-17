@@ -1,3 +1,4 @@
+import { waitForLiveSync, closeSavedRecord } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyRecordPanelWorkflow(page, application) {
@@ -36,10 +37,10 @@ export async function verifyRecordPanelWorkflow(page, application) {
   }, fixture);
   const dialog = page.getByRole('dialog');
   const open = async () => {
-    await page.getByRole('button', { name: 'Reload', exact: true }).click();
+    await waitForLiveSync(page);
     await page.waitForFunction(() => document.querySelector('.grid-host')?.getAttribute('aria-busy') === 'false');
     const grid = await page.locator('canvas').first().boundingBox();
-    await page.mouse.click(grid.x + 15, grid.y + 58);
+    if (await page.getByRole('button', { name: 'Open record', exact: true }).isDisabled()) await page.mouse.click(grid.x + 15, grid.y + 58);
     await page.getByRole('button', { name: 'Open record', exact: true }).click();
     await dialog.waitFor();
   };
@@ -53,6 +54,9 @@ export async function verifyRecordPanelWorkflow(page, application) {
   const body = dialog.locator('.drawer-body');
   assert.ok(await body.evaluate(element => element.scrollHeight > element.clientHeight));
   await page.screenshot({ path: '.artifacts/desktop-record-panel.png' });
+  const outage = route => route.request().method() === 'PATCH'
+    ? route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: { code: 'TEST_OUTAGE', message: 'Panel save unavailable' } }) }) : route.continue();
+  await page.route('**/tables/' + fixture.table.id + '/records', outage);
   await page.getByLabel('Detail 10', { exact: true }).fill('Last field draft');
   const actions = await dialog.locator('.dialog-actions').boundingBox();
   assert.ok(actions.y + actions.height <= 768);
@@ -68,9 +72,12 @@ export async function verifyRecordPanelWorkflow(page, application) {
   assert.deepEqual(await read(), fixture.record);
   await open();
   await page.getByLabel('Cost', { exact: true }).fill('77');
-  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Discard changes', exact: true }).click();
   assert.deepEqual(await read(), fixture.record);
+  await page.unroute('**/tables/' + fixture.table.id + '/records', outage);
   await open();
+  await page.getByLabel('Cost', { exact: true }).dispatchEvent('compositionstart');
   await page.getByLabel('Cost', { exact: true }).fill('99');
   await page.evaluate(async ({ table, record }) => {
     const connection = await window.rowweave.connection();
@@ -80,14 +87,16 @@ export async function verifyRecordPanelWorkflow(page, application) {
     });
     if (!response.ok) throw new Error('Could not prepare a concurrent record update.');
   }, fixture);
-  await dialog.getByRole('button', { name: 'Save record', exact: true }).click();
+  await page.getByLabel('Cost', { exact: true }).dispatchEvent('compositionend');
   await dialog.getByRole('alert').filter({ hasText: 'changed' }).waitFor();
   assert.equal(await page.getByLabel('Cost', { exact: true }).inputValue(), '99');
   assert.equal((await read()).values[fixture.table.fields[2].id], 33);
-  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Discard changes', exact: true }).click();
   await open();
   await page.getByLabel('Cost', { exact: true }).fill('34');
   await page.keyboard.press('Control+s');
+  await closeSavedRecord(page);
   await dialog.waitFor({ state: 'detached' });
   assert.equal((await read()).values[fixture.table.fields[2].id], 34);
   await page.evaluate(async ({ table }) => {

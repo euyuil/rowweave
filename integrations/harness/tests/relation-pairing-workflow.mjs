@@ -1,3 +1,4 @@
+import { waitForLiveSync } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyHarnessRelationPairing(page, service) {
@@ -10,7 +11,7 @@ export async function verifyHarnessRelationPairing(page, service) {
   const [forward, reverse] = table.fields.slice(1);
   const records = service.createRecords(table.id, ['First', 'Second'].map(name => ({ values: { [table.primaryFieldId]: name } }))).records;
   service.updateBatch([{ id: records[0].id, expectedVersion: records[0].version, values: { [forward.id]: [records[1].id] } }], table.id);
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await page.getByText('2 records · 3 fields', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Manage fields', exact: true }).click();
   const manage = page.getByRole('dialog', { name: 'Manage fields', exact: true });

@@ -1,3 +1,4 @@
+import { waitForAutosave } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyUrlWorkflow(page, application) {
@@ -63,7 +64,7 @@ export async function verifyUrlWorkflow(page, application) {
   await page.keyboard.press('Enter');
   await editor.getByLabel('Cell value', { exact: true }).fill('https://example.com/saved');
   await editor.getByRole('button', { name: 'Apply', exact: true }).click();
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await waitForAutosave(page);
   await page.getByText('All changes saved', { exact: true }).waitFor();
   assert.equal((await records()).page.records[0].values[field], 'https://example.com/saved');
   assert.equal((await opened()).length, 2);

@@ -1,3 +1,4 @@
+import { waitForLiveSync, requestLiveSync, closeSavedRecord } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 import { waitForResponse } from './wait-for-response.mjs';
 
@@ -46,11 +47,11 @@ export async function verifyCalendarRefresh(page, fixture) {
   const input = dialog.getByLabel('Name', { exact: true });
   await input.fill('日历草稿'); await input.dispatchEvent('compositionstart');
   await update(records[31], { [name]: 'Remote 031' });
-  await page.getByText('Updates are available. Finish editing to load them automatically, or use Refresh view to keep cell drafts. Reload resets local undo history.', { exact: true }).waitFor();
+  await page.getByText('Updates are available and will load automatically when editing finishes.', { exact: true }).waitFor();
   assert.equal(await input.inputValue(), '日历草稿');
   assert.equal(await input.evaluate(element => element === document.activeElement), true);
   await input.dispatchEvent('compositionend', { data: '日历草稿' });
-  await dialog.getByRole('button', { name: 'Save record', exact: true }).click();
+  await closeSavedRecord(page);
   await pane.getByRole('button', { name: 'Remote 031', exact: true }).waitFor();
   await pane.getByRole('button', { name: '日历草稿', exact: true }).waitFor();
 
@@ -113,7 +114,7 @@ export async function verifyCalendarRefresh(page, fixture) {
   };
   await page.route(tablePath, slowSchema);
   try {
-    await page.getByRole('button', { name: 'Reload', exact: true }).click();
+    await requestLiveSync(page);
     await waitForResponse(schemaReady, 'calendar reload schema');
     assert.equal(await calendar.count(), 1, 'Reload keeps the mounted month until its schema and view are ready together.');
     assert.equal(await calendar.getByLabel('Calendar month', { exact: true }).inputValue(), '2024-02');
@@ -145,7 +146,8 @@ export async function verifyCalendarRefresh(page, fixture) {
   const search = page.getByRole('searchbox', { name: 'Search records', exact: true });
   await page.route(layoutPath, slowSearch);
   try {
-    await page.getByRole('button', { name: 'Reload', exact: true }).click();
+    await update(created, { [name]: 'Created on calendar' });
+    await requestLiveSync(page);
     await waitForResponse(searchReady, 'calendar search during reload');
     await search.fill('Created on calendar');
     releaseSearch(); await waitForResponse(searchSettled, 'released calendar search reload');

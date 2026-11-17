@@ -1,3 +1,4 @@
+import { closeSavedRecord, cancelDialog } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifySchemaWorkflow(page) {
@@ -83,12 +84,12 @@ export async function verifySchemaWorkflow(page) {
   await page.getByRole('button', { name: 'Save field', exact: true }).click();
   await page.getByRole('dialog').getByRole('alert').filter({ hasText: 'existing option' }).waitFor();
   assert.equal((await read()).table.fields.find(field => field.id === status.id).options.length, 2);
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   await configure('Notes');
   await page.getByLabel('Require a value', { exact: true }).check();
   await page.getByRole('button', { name: 'Save field', exact: true }).click();
   await page.getByRole('dialog').getByRole('alert').filter({ hasText: 'value is required' }).waitFor();
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   await configure('Title');
   await page.getByLabel('Field type', { exact: true }).selectOption('number');
   await page.getByRole('button', { name: 'Preview conversion', exact: true }).click();
@@ -97,13 +98,13 @@ export async function verifySchemaWorkflow(page) {
   const before = await read();
   assert.equal(before.table.fields.find(field => field.id === original.primaryFieldId).type, 'text');
   await page.screenshot({ path: '.artifacts/desktop-conversion-errors.png' });
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   await done();
   const bounds = await page.locator('canvas').first().boundingBox();
   await page.mouse.click(bounds.x + 15, bounds.y + 94);
   await page.getByRole('button', { name: 'Open record', exact: true }).click();
   await page.getByLabel('Title', { exact: true }).fill('42');
-  await page.getByRole('button', { name: 'Save record', exact: true }).click();
+  await closeSavedRecord(page);
   await page.getByRole('dialog').waitFor({ state: 'detached' });
   await manage();
   await configure('Title');
@@ -137,7 +138,7 @@ export async function verifySchemaWorkflow(page) {
   await save('Budget');
   assert.equal((await read()).table.fields.find(field => field.id === budget.id).precision, undefined);
   await group('Notes').getByRole('button', { name: 'Delete', exact: true }).click();
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   await group('Notes').waitFor();
   await group('Notes').getByRole('button', { name: 'Delete', exact: true }).click();
   await page.getByRole('button', { name: 'Delete permanently', exact: true }).click();

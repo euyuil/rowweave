@@ -1,3 +1,4 @@
+import { waitForLiveSync, waitForAutosave } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyColumnWorkflow(page) {
@@ -34,6 +35,7 @@ export async function verifyColumnWorkflow(page) {
       .then(response => response.json()).then(views => views[0]);
   }, table.id);
   const menu = async (column, dropdown = false) => {
+    await waitForLiveSync(page);
     await page.waitForFunction(() => document.querySelector('.grid-host')?.getAttribute('aria-busy') === 'false');
     const bounds = await page.locator('canvas').first().boundingBox();
     await page.mouse.click(bounds.x + (dropdown ? 195 : 100) + column * 180, bounds.y + 20, { button: dropdown ? 'left' : 'right' });
@@ -43,7 +45,7 @@ export async function verifyColumnWorkflow(page) {
     await page.getByRole('dialog').getByRole('button', { name: label, exact: true }).click();
     await page.getByRole('dialog').waitFor({ state: 'detached' });
   };
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await page.getByText('3 records · 3 fields', { exact: true }).waitFor();
   const corner = await page.locator('canvas').first().boundingBox();
   await page.mouse.click(corner.x + 15, corner.y + 20, { button: 'right' });
@@ -76,14 +78,12 @@ export async function verifyColumnWorkflow(page) {
     const clipboardData = new DataTransfer(); clipboardData.setData('text/plain', '5');
     document.activeElement.dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true }));
   });
-  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
+  await waitForAutosave(page);
   const pendingBounds = await page.locator('canvas').first().boundingBox();
   await page.mouse.click(pendingBounds.x + 100, pendingBounds.y + 20, { button: 'right' });
-  assert.equal(await page.getByRole('dialog').count(), 0);
-  await page.getByText('Save or discard grid edits before changing columns.', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
-  await page.getByText('All changes saved', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
+  await page.getByRole('dialog').waitFor();
+  await page.keyboard.press('Escape');
+  await page.getByRole('dialog').waitFor({ state: 'detached' });
   await page.getByRole('button', { name: 'Filters', exact: true }).click();
   assert.equal(await page.getByLabel('View name', { exact: true }).count(), 0);
   await page.getByRole('button', { name: 'Clear filters', exact: true }).click();
@@ -129,7 +129,7 @@ export async function verifyColumnWorkflow(page) {
   assert.equal(unchanged.query.sort[0].direction, 'desc');
   assert.equal(unchanged.name, 'Changed with menu open');
   await page.getByRole('button', { name: 'Close', exact: true }).click();
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await page.getByText('1 record · 1 field', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Delete table', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Delete table', exact: true }).click();

@@ -1,3 +1,4 @@
+import { waitForLiveSync, cancelDialog } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyArrayFormulaWorkflow(page) {
@@ -26,7 +27,7 @@ export async function verifyArrayFormulaWorkflow(page) {
     table = await call('/tables/' + table.id + '/fields', 'POST', { expectedVersion: table.version, name, type: 'lookup', lookup: { relationFieldId: link, fieldId } });
   }
   const record = (await call('/tables/' + table.id + '/records', 'POST', [{ values: { [table.primaryFieldId]: 'Summary', [link]: rows.map(row => row.id) } }])).records[0];
-  await page.getByRole('button', { name: 'Reload', exact: true }).click(); await ready();
+  await waitForLiveSync(page); await ready();
   await page.getByText('1 record · 4 fields', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Manage fields', exact: true }).click();
   for (const [name, type, expression] of [
@@ -54,15 +55,15 @@ export async function verifyArrayFormulaWorkflow(page) {
   await page.waitForFunction(() => document.querySelector('.relation-results')?.getAttribute('aria-busy') === 'false');
   await dialog.getByLabel('Labels', { exact: true }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: '.artifacts/desktop-array-formula-record.png' });
-  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   await call('/tables/' + items.id + '/records', 'PATCH', [{ id: rows[0].id, expectedVersion: rows[0].version, values: { [amount]: 8 } }]);
-  await page.getByRole('button', { name: 'Reload', exact: true }).click(); await ready();
+  await waitForLiveSync(page); await ready();
   table = await call('/tables/' + table.id);
   assert.equal((await call('/tables/' + table.id + '/records/' + record.id)).values[table.fields[4].id], 15);
   await page.locator('.dvn-scroller').click({ position: { x: 100, y: 58 } });
   await page.getByRole('button', { name: 'Open record', exact: true }).click();
   assert.equal(await dialog.getByLabel('Total', { exact: true }).textContent(), '15');
-  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   await page.getByRole('button', { name: 'Delete table', exact: true }).click();
   await dialog.getByRole('button', { name: 'Delete table', exact: true }).click();
   await dialog.waitFor({ state: 'detached' });

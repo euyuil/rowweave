@@ -1,3 +1,4 @@
+import { waitForLiveSync, cancelDialog } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyFieldPanelWorkflow(page, application) {
@@ -37,11 +38,11 @@ export async function verifyFieldPanelWorkflow(page, application) {
     assert.ok(panel.y + panel.height <= 756);
   };
   const cancel = async () => {
-    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await cancelDialog(page);
     await dialog.waitFor({ state: 'detached' });
     await page.waitForFunction(() => document.querySelector('canvas')?.contains(document.activeElement));
   };
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await configure();
   let original = await readTable();
   await page.getByLabel('Field name', { exact: true }).fill('Canceled name');
@@ -60,7 +61,7 @@ export async function verifyFieldPanelWorkflow(page, application) {
   assert.equal(await input.evaluate(element => document.getElementById(element.getAttribute('aria-describedby')).textContent), description);
   assert.equal(await dialog.locator('.field-description b').count(), 0);
   await page.screenshot({ path: '.artifacts/desktop-field-description-entry.png' });
-  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   await dialog.waitFor({ state: 'detached' }); await ready();
   const cell = await page.locator('canvas').first().boundingBox();
   await page.mouse.click(cell.x + 100, cell.y + 58);
@@ -105,7 +106,7 @@ export async function verifyFieldPanelWorkflow(page, application) {
   await page.getByRole('textbox', { name: 'Cell value', exact: true }).waitFor();
   await page.keyboard.press('Escape');
   await call(`/tables/${table.id}/records`, 'PATCH', [{ id: records[1].id, expectedVersion: records[1].version, values: { [table.primaryFieldId]: '20' } }]);
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await configure();
   await page.getByLabel('Field type', { exact: true }).selectOption('number');
   await dialog.getByRole('button', { name: 'Preview conversion', exact: true }).click();

@@ -1,3 +1,4 @@
+import { waitForLiveSync, waitForAutosave, cancelDialog } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyCalculationControls(page, application) {
@@ -17,7 +18,7 @@ export async function verifyCalculationControls(page, application) {
   table = await call(root + '/fields', 'POST', { expectedVersion: table.version, name: 'Now', type: 'formula', formula: { expression: 'NOW()', resultType: 'datetime' } });
   const record = (await call(root + '/records', 'POST', [{ values: { [table.primaryFieldId]: 'Saved name' } }])).records[0];
   const history = await call(root + '/batches/query', 'POST', {});
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await page.getByText('1 record · 2 fields', { exact: true }).waitFor();
   await button.click();
   await dialog.getByText('Automatically every minute', { exact: true }).waitFor();
@@ -91,11 +92,11 @@ export async function verifyCalculationControls(page, application) {
     assert.equal(await editor.inputValue(), '保留中文草稿');
     assert.equal(await editor.evaluate(element => element === document.activeElement), true);
     await editor.evaluate(element => element.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '保留中文草稿' })));
-    await page.keyboard.press('Enter'); await page.getByText('1 unsaved cell', { exact: true }).waitFor();
+    await page.keyboard.press('Enter'); await waitForAutosave(page);
     await button.click();
     assert.equal(await dialog.getByRole('button', { name: 'Updating…', exact: true }).isDisabled(), true);
     await dialog.getByRole('button', { name: 'Close', exact: true }).click();
-    await page.getByText('1 unsaved cell', { exact: true }).waitFor();
+    await waitForAutosave(page);
 
     mocked = { ...status, running: false, lastError: 'Synthetic background failure' };
     await button.locator('[class~="failed"]').waitFor();
@@ -125,20 +126,19 @@ export async function verifyCalculationControls(page, application) {
       await dialog.getByRole('button', { name: 'Update calculations', exact: true }).click();
       await ready;
       await dialog.getByRole('button', { name: 'Close', exact: true }).click();
-      await page.getByText('1 unsaved cell', { exact: true }).waitFor();
+      await waitForAutosave(page);
       assert.match(await button.textContent(), /Updating/);
     } finally { releaseResponse(); await finished; await page.unroute('**/calculations/refresh', heldRefresh); }
     await button.click();
     await dialog.getByRole('status').filter({ hasText: 'Calculations updated' }).waitFor();
     assert.equal(refreshCalls, 1, 'Status polling must never repeat a failed refresh request.');
     await dialog.getByRole('button', { name: 'Close', exact: true }).click();
-    await page.getByText('1 unsaved cell', { exact: true }).waitFor();
-    assert.equal((await call(root + '/records/' + record.id)).values[table.primaryFieldId], 'Saved name');
+    await waitForAutosave(page);
+    assert.equal((await call(root + '/records/' + record.id)).values[table.primaryFieldId], '保留中文草稿');
     await openName();
     assert.equal(await editor.inputValue(), '保留中文草稿');
     await page.keyboard.press('Escape');
-    await application.evaluate(({ dialog }) => { dialog.showMessageBox = async () => ({ response: 1, checkboxChecked: false }); });
-    await page.getByRole('button', { name: 'Discard edits', exact: true }).click();
+    await page.getByRole('button', { name: 'Undo', exact: true }).click();
     await page.getByText('All changes saved', { exact: true }).waitFor();
     await page.getByRole('button', { name: '+ New record', exact: true }).click();
     const formName = dialog.getByLabel('Name', { exact: true });
@@ -151,7 +151,7 @@ export async function verifyCalculationControls(page, application) {
     await page.unroute('**/calculations/status', statusRoute);
     await page.unroute('**/calculations/refresh', refreshRoute);
   }
-  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   await page.getByRole('button', { name: 'Delete table', exact: true }).click();
   await dialog.getByRole('button', { name: 'Delete table', exact: true }).click(); await dialog.waitFor({ state: 'detached' });
 }

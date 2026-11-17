@@ -11,6 +11,9 @@ export class Calculations {
   private active: Promise<CalculationRefresh> | undefined;
   private timer: ReturnType<typeof setInterval> | undefined;
   private stopping = false;
+  private readonly listeners = new Set<() => void>();
+  subscribe(listener: () => void): () => void { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
+  private changed(): void { for (const listener of this.listeners) listener(); }
 
   constructor(private readonly runner: CalculationRunner, automatic: boolean) {
     this.state = { automatic, running: false };
@@ -34,6 +37,7 @@ export class Calculations {
     delete this.state.lastError;
     this.active = Promise.resolve().then(() => this.runner.refresh()).then(result => {
       this.state.lastResult = result;
+      this.changed();
       return result;
     }, error => {
       this.state.lastError = error instanceof Error ? error.message : 'Clock calculation failed.';
@@ -50,7 +54,9 @@ export class Calculations {
     if (this.stopping) throw new ServiceError('SERVICE_CLOSING', 'The service is closing.', 503);
     // A failed calculation has rolled back; allow accepted writes to fix the workspace.
     while (this.active) await this.active.catch(() => undefined);
-    return operation();
+    const result = operation();
+    this.changed();
+    return result;
   }
 
   stop(): void {

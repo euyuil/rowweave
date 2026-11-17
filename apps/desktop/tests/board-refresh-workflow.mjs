@@ -1,3 +1,4 @@
+import { closeSavedRecord } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 import { waitForResponse } from './wait-for-response.mjs';
 
@@ -55,14 +56,13 @@ export async function verifyBoardRefresh(page) {
   const input = dialog.getByLabel('Name', { exact: true });
   await input.fill('看板草稿'); await input.dispatchEvent('compositionstart');
   await update(records[65], { [name]: 'Remote Doing' });
-  await page.getByText('Updates are available. Finish editing to load them automatically, or use Refresh view to keep cell drafts. Reload resets local undo history.', { exact: true }).waitFor();
+  await page.getByText('Updates are available and will load automatically when editing finishes.', { exact: true }).waitFor();
   assert.equal(await input.inputValue(), '看板草稿');
   assert.equal(await input.evaluate(element => element === document.activeElement), true);
   await input.dispatchEvent('compositionend', { data: '看板草稿' });
-  await dialog.getByRole('button', { name: 'Save record', exact: true }).click();
+  await closeSavedRecord(page);
   await dialog.waitFor({ state: 'detached' });
   await doing.getByRole('button', { name: 'Remote Doing', exact: true }).waitFor();
-  await todo.getByRole('button', { name: 'Next records in To do', exact: true }).click();
   await todo.getByText('26–50', { exact: true }).waitFor();
   await board.focus();
 
@@ -101,14 +101,14 @@ export async function verifyBoardRefresh(page) {
 
   const moveInput = done.getByLabel('Move Done 0 to', { exact: true });
   await moveInput.focus(); await update(records[70], { [name]: 'Remote focused' });
-  await page.getByText('Updates are available. Finish editing to load them automatically, or use Refresh view to keep cell drafts. Reload resets local undo history.', { exact: true }).waitFor();
+  await page.getByText('Updates are available and will load automatically when editing finishes.', { exact: true }).waitFor();
   assert.equal(await moveInput.evaluate(element => element === document.activeElement), true);
   await board.focus(); await done.getByRole('button', { name: 'Remote focused', exact: true }).waitFor();
   const dragged = done.getByRole('button', { name: 'Done 1', exact: true }).locator('..');
   const transfer = await page.evaluateHandle(() => new DataTransfer());
   await dragged.dispatchEvent('dragstart', { dataTransfer: transfer });
   await update(records[71], { [name]: 'Remote drag' });
-  await page.getByText('Updates are available. Finish editing to load them automatically, or use Refresh view to keep cell drafts. Reload resets local undo history.', { exact: true }).waitFor();
+  await page.getByText('Updates are available and will load automatically when editing finishes.', { exact: true }).waitFor();
   assert.equal(await done.getByRole('button', { name: 'Done 1', exact: true }).count(), 1);
   await dragged.dispatchEvent('dragend', { dataTransfer: transfer }); await transfer.dispose();
   await done.getByRole('button', { name: 'Remote drag', exact: true }).waitFor();

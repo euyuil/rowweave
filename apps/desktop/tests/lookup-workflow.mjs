@@ -1,3 +1,4 @@
+import { waitForLiveSync, closeSavedRecord, cancelDialog } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyLookupWorkflow(page) {
@@ -40,7 +41,7 @@ export async function verifyLookupWorkflow(page) {
   const records = (await call(`/tables/${source.id}/records`, 'POST', [targets.map(record => record.id), [targets[0].id]].map((ids, index) => ({
     values: { [source.primaryFieldId]: `Task ${index + 1}`, [relation.id]: ids },
   })))).records;
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await page.getByText('2 records · 2 fields', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Manage fields', exact: true }).click();
   await page.getByRole('button', { name: 'Add field', exact: true }).click();
@@ -62,15 +63,12 @@ export async function verifyLookupWorkflow(page) {
   await page.getByRole('alert').filter({ hasText: 'read-only' }).waitFor();
   await page.getByText('All changes saved', { exact: true }).waitFor();
   await call(`/tables/${target.id}/fields/${budget.id}`, 'PATCH', { expectedVersion: target.version, name: 'Updated budget' });
-  await page.getByRole('button', { name: 'Open record', exact: true }).click();
-  await page.getByRole('alert').filter({ hasText: 'schema changed' }).waitFor();
-  assert.equal(await page.getByRole('dialog').count(), 0);
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await select(2);
   await page.getByRole('button', { name: 'Open record', exact: true }).click();
   assert.equal(await page.getByLabel('Project budget', { exact: true }).textContent(), '$0.00, $25.00');
   await page.getByLabel('Name', { exact: true }).fill('Renamed task');
-  await page.getByRole('button', { name: 'Save record', exact: true }).click();
+  await closeSavedRecord(page);
   await page.getByRole('dialog').waitFor({ state: 'detached' });
   await select();
   await page.getByRole('button', { name: 'Duplicate', exact: true }).click();
@@ -88,13 +86,13 @@ export async function verifyLookupWorkflow(page) {
   await page.getByText('2 records · 3 fields', { exact: true }).waitFor();
   await page.screenshot({ path: '.artifacts/desktop-lookups.png' });
   await call(`/tables/${target.id}/records`, 'PATCH', [{ id: targets[1].id, expectedVersion: 1, values: { [budget.id]: 5 } }]);
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await page.getByText('0 records · 3 fields', { exact: true }).waitFor();
   await page.getByRole('tab', { name: 'All records', exact: true }).click();
   await select();
   await page.getByRole('button', { name: 'Open record', exact: true }).click();
   assert.equal(await page.getByLabel('Project budget', { exact: true }).textContent(), '$0.00, $5.00');
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   await page.getByRole('button', { name: 'Manage fields', exact: true }).click();
   await page.getByRole('group', { name: 'Project budget', exact: true }).getByRole('button', { name: 'Configure', exact: true }).click();
   await page.getByLabel('Lookup operation', { exact: true }).selectOption('sum');
@@ -112,7 +110,7 @@ export async function verifyLookupWorkflow(page) {
   await page.getByRole('button', { name: 'Open record', exact: true }).click();
   assert.equal(await page.getByLabel('Project budget', { exact: true }).textContent(), '$5.00');
   await page.screenshot({ path: '.artifacts/desktop-linked-summary.png' });
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   await page.getByRole('button', { name: 'Summarize', exact: true }).click();
   await page.getByLabel('Measure field', { exact: true }).selectOption(lookup.id);
   await page.getByText('$10.00', { exact: true }).waitFor();
@@ -123,7 +121,7 @@ export async function verifyLookupWorkflow(page) {
   await select(2);
   await page.getByRole('button', { name: 'Open record', exact: true }).click();
   assert.equal(await page.getByLabel('Project budget', { exact: true }).textContent(), '$15.00');
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   for (const name of ['Lookup tasks', 'Lookup projects']) {
     await page.getByRole('navigation', { name: 'Tables', exact: true }).getByRole('button', { name, exact: true }).click();
     await ready();

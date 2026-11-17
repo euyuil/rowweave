@@ -1,3 +1,4 @@
+import { waitForLiveSync, waitForAutosave } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyViewportCache(page, application) {
@@ -30,13 +31,13 @@ export async function verifyViewportCache(page, application) {
     ]).flat();
     table = await call(root + '/fields', 'POST', { expectedVersion: table.version, name: 'Group', type: 'singleSelect', options });
     const field = table.fields[1];
-    const records = (await call(root + '/records', 'POST', options.flatMap(option => Array.from({ length: option.id.startsWith('heavy') ? 100 : 1 }, (_, index) => ({
-      values: { [name]: option.name + ' record ' + index, [field.id]: option.id },
-    }))))).records;
     const view = (await call(root + '/views'))[0];
     const nextPage = page.waitForResponse(response => new URL(response.url()).pathname === root + '/views/' + view.id + '/query' &&
       response.ok() && response.request().postDataJSON()?.offset === 100);
-    await page.getByRole('button', { name: 'Reload', exact: true }).click();
+    const records = (await call(root + '/records', 'POST', options.flatMap(option => Array.from({ length: option.id.startsWith('heavy') ? 100 : 1 }, (_, index) => ({
+      values: { [name]: option.name + ' record ' + index, [field.id]: option.id },
+    }))))).records;
+    await waitForLiveSync(page);
     await nextPage;
     const scroller = page.locator('.dvn-scroller');
     assert.equal(await scroller.evaluate(element => element.scrollTop), 0, 'The next page should load before scrolling.');
@@ -44,7 +45,7 @@ export async function verifyViewportCache(page, application) {
     await cell(100).filter({ hasText: /^Visible 0 record 0$/ }).waitFor({ state: 'attached' });
     await scroller.evaluate(element => { element.scrollTop = 0; });
     await call(root + '/views/' + view.id, 'PATCH', { expectedVersion: view.version, groupBy: field.id });
-    await page.getByRole('button', { name: 'Reload', exact: true }).click();
+    await waitForLiveSync(page);
     await ready();
     await page.getByRole('button', { name: 'Collapse all', exact: true }).click();
     for (let index = 0; index < 14; index++) {
@@ -73,13 +74,12 @@ export async function verifyViewportCache(page, application) {
     await editor.dispatchEvent('keydown', { key: 'Enter', code: 'Enter', isComposing: true });
     assert.equal(await editor.inputValue(), '保留可见草稿');
     await editor.dispatchEvent('compositionend', { data: '保留可见草稿' }); await page.keyboard.press('Tab');
-    await page.getByText('1 unsaved cell', { exact: true }).waitFor();
+    await waitForAutosave(page);
     await page.getByRole('button', { name: 'Undo', exact: true }).click();
     await page.getByText('All changes saved', { exact: true }).waitFor();
     assert.equal(await cell(2).textContent(), 'Visible 0 record 0');
     await page.getByRole('button', { name: 'Redo', exact: true }).click();
-    await page.getByText('1 unsaved cell', { exact: true }).waitFor();
-    await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+    await waitForAutosave(page);
     await page.getByText('All changes saved', { exact: true }).waitFor(); await ready();
     assert.equal((await call(root + '/records/' + records[100].id)).values[name], '保留可见草稿');
     const last = await call(root + '/records/' + records.at(-1).id);

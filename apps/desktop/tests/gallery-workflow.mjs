@@ -1,3 +1,4 @@
+import { waitForLiveSync, closeSavedRecord, cancelDialog } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 import { waitForResponse } from './wait-for-response.mjs';
 
@@ -53,7 +54,7 @@ export async function verifyGalleryWorkflow(page, application) {
     [notes]: index === 0 ? 'A long note with multiple lines.\nSecond line, preserved in the full editor.\nThird line.' : 'A place for ideas and the details that matter.',
     [hidden]: 'Complete details ' + index,
   } })))).records;
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await page.getByText('45 records · 5 fields', { exact: true }).waitFor();
   const reads = [], downloads = [];
   const capture = request => {
@@ -87,7 +88,7 @@ export async function verifyGalleryWorkflow(page, application) {
   assert.equal(await dialog.getByLabel('Hidden', { exact: true }).inputValue(), 'Complete details 0');
   assert.equal(await dialog.getByLabel('Notes', { exact: true }).inputValue(), records[0].values[notes]);
   await dialog.getByLabel('Name', { exact: true }).fill('Edited gallery card');
-  await dialog.getByRole('button', { name: 'Save record', exact: true }).click();
+  await closeSavedRecord(page);
   await title(0).filter({ hasText: 'Edited gallery card' }).waitFor();
   assert.equal(await title(0).evaluate(element => element === window.document.activeElement), true, 'Saving record details returns keyboard focus to its card.');
   await gallery.getByRole('button', { name: 'Next records', exact: true }).click();
@@ -167,7 +168,7 @@ export async function verifyGalleryAfterRestart(page, fixture) {
   assert.equal(await gallery.evaluate(element => element.classList.contains('gallery-small')), true);
   await page.getByRole('button', { name: 'Display', exact: true }).click();
   assert.equal(await page.getByRole('dialog').getByLabel('Gallery cover field', { exact: true }).inputValue(), view.gallery.coverFieldId ?? '');
-  await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   await page.getByRole('button', { name: 'Delete table', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Delete table', exact: true }).click();
   await page.getByRole('dialog').waitFor({ state: 'detached' });

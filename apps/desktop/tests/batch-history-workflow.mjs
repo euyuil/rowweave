@@ -1,3 +1,4 @@
+import { waitForLiveSync, waitForAutosave } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyBatchHistoryWorkflow(page, application) {
@@ -28,7 +29,7 @@ export async function verifyBatchHistoryWorkflow(page, application) {
   let noisy = rows[11];
   for (let index = 0; index < 11; index++) noisy = (await call(`${root}/records`, 'PATCH', [{ id: noisy.id, expectedVersion: noisy.version, values: { [cost]: index } }])).records[0];
   const ready = () => page.waitForFunction(() => document.querySelector('.grid-host')?.getAttribute('aria-busy') === 'false');
-  const reload = async () => { await page.getByRole('button', { name: 'Reload', exact: true }).click(); await ready(); };
+  const reload = async () => { await waitForLiveSync(page); await ready(); };
   await reload();
   const bounds = await page.locator('canvas').first().boundingBox();
   await page.mouse.click(bounds.x + 280, bounds.y + 58);
@@ -41,7 +42,7 @@ export async function verifyBatchHistoryWorkflow(page, application) {
   assert.equal(await page.getByRole('button', { name: 'Saved changes', exact: true }).isDisabled(), true);
   await page.keyboard.press('Enter');
   assert.equal(await page.getByRole('button', { name: 'Saved changes', exact: true }).isDisabled(), true);
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await waitForAutosave(page);
   await page.getByText('All changes saved', { exact: true }).waitFor();
   const saved = (await call(`${root}/batches/query`, 'POST', {})).batches[0];
   await call(`${root}/records`, 'PATCH', [{ id: rows[1].id, expectedVersion: 1, values: { [cost]: 8 } }]);

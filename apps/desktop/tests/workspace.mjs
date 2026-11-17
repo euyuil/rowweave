@@ -1,3 +1,4 @@
+import { waitForLiveSync, waitForAutosave, closeSavedRecord, cancelDialog } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -128,10 +129,10 @@ async function recordLifecycle() {
     if (!response.ok) throw new Error('Could not prepare the concurrent record update.');
   }, { id: table.id, record, fieldId: table.primaryFieldId });
   const reload = async () => {
-    await page.getByRole('button', { name: 'Reload', exact: true }).click();
-    await page.waitForFunction(() => ![...document.querySelectorAll('button')].find(button => button.textContent === 'Reload').disabled);
+    await waitForLiveSync(page);
   };
   const selectAll = async () => {
+    if (await page.getByText('2 selected', { exact: true }).count()) return;
     const bounds = await page.locator('canvas').first().boundingBox();
     await page.mouse.click(bounds.x + 15, bounds.y + 20);
     await page.getByText('2 selected', { exact: true }).waitFor();
@@ -165,13 +166,13 @@ async function recordLifecycle() {
   await page.getByRole('dialog').getByText(created.id, { exact: true }).waitFor();
   assert.equal(await page.getByLabel('Notes', { exact: true }).inputValue(), 'Line one\n中文第二行');
   await page.getByLabel('Cost *', { exact: true }).fill('not a number');
-  await page.getByRole('button', { name: 'Save record', exact: true }).click();
   await page.getByRole('dialog').getByRole('alert').filter({ hasText: 'decimal number' }).waitFor();
   assert.equal((await records())[0].values[field('Cost').id], 0);
   await page.getByLabel('Cost *', { exact: true }).fill('12.5');
   await page.getByRole('button', { name: 'Clear Notes', exact: true }).click();
   assert.equal(await page.getByLabel('Notes', { exact: true }).evaluate(element => element === document.activeElement), true);
   await page.keyboard.press('Control+s');
+  await closeSavedRecord(page);
   await page.getByRole('dialog').waitFor({ state: 'detached' });
   assert.equal((await records())[0].values[field('Notes').id], null);
   assert.equal((await records())[0].values[field('Cost').id], 12.5);
@@ -185,17 +186,19 @@ async function recordLifecycle() {
   assert.deepEqual(copied.values[field('Tags').id], created.values[field('Tags').id]);
   await selectRow(0);
   await page.getByRole('button', { name: 'Open record', exact: true }).click();
+  await page.getByLabel('Name', { exact: true }).dispatchEvent('compositionstart');
   await page.getByLabel('Name', { exact: true }).fill('Keep conflict draft');
   await externalChange((await records())[0]);
-  await page.getByRole('button', { name: 'Save record', exact: true }).click();
+  await page.getByLabel('Name', { exact: true }).dispatchEvent('compositionend');
   await page.getByRole('dialog').getByRole('alert').filter({ hasText: 'changed' }).waitFor();
   assert.equal(await page.getByLabel('Name', { exact: true }).inputValue(), 'Keep conflict draft');
-  await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Discard changes', exact: true }).click();
   await reload();
   // Header checkbox selects both records; the delete preview retains their versions.
   await selectAll();
   await page.getByRole('button', { name: 'Delete records', exact: true }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   assert.equal((await records()).length, 2);
   await page.screenshot({ path: '.artifacts/desktop-records.png' });
   await page.getByRole('button', { name: 'Delete records', exact: true }).click();
@@ -204,7 +207,7 @@ async function recordLifecycle() {
   await page.getByRole('dialog').getByRole('button', { name: 'Delete record', exact: true }).click();
   await page.getByRole('dialog').getByRole('alert').filter({ hasText: 'changed' }).waitFor();
   assert.equal((await records()).length, 2);
-  await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   await reload();
   await selectAll();
   await page.getByRole('button', { name: 'Delete records', exact: true }).click();
@@ -244,7 +247,7 @@ try {
     });
     if (!response.ok) throw new Error('Could not prepare the navigation fixture.');
   }, original);
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await page.getByText('1 record · 1 field', { exact: true }).waitFor();
   const bounds = await page.locator('canvas').first().boundingBox();
   await page.mouse.click(bounds.x + 100, bounds.y + 58);
@@ -252,16 +255,7 @@ try {
   await page.keyboard.press('Enter');
   await page.getByRole('textbox', { name: 'Cell value' }).fill('Keep this draft');
   await page.keyboard.press('Enter');
-  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
-  await application.evaluate(({ dialog }) => {
-    dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
-  });
-  await choose('Tasks');
-  await page.getByRole('heading', { name: 'Projects 项目', exact: true }).waitFor();
-  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
-  await application.evaluate(({ dialog }) => {
-    dialog.showMessageBox = async () => ({ response: 1, checkboxChecked: false });
-  });
+  await waitForAutosave(page);
   await choose('Tasks');
   await page.getByRole('heading', { name: 'Tasks', exact: true }).waitFor();
   await choose('Projects 项目');
@@ -280,7 +274,7 @@ try {
   await page.getByRole('dialog').waitFor({ state: 'detached' });
 
   await page.getByRole('button', { name: 'Delete table', exact: true }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   assert.equal((await tables()).length, 2);
   await verifySchemaWorkflow(page);
   await recordLifecycle();

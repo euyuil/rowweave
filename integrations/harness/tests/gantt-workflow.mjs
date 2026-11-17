@@ -1,3 +1,4 @@
+import { waitForLiveSync, closeSavedRecord, cancelDialog } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyHarnessGantt(page, service) {
@@ -10,7 +11,7 @@ export async function verifyHarnessGantt(page, service) {
   table = service.createField(table.id, { expectedVersion: table.version, name: 'Start', type: 'datetime' });
   const start = table.fields[1].id;
   const record = service.createRecords(table.id, [{ values: { [table.primaryFieldId]: 'Local-zone task', [start]: '2024-02-28T18:30:00.000Z' } }]).records[0];
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await page.getByText('1 record · 2 fields', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'New view', exact: true }).click();
   await dialog.getByLabel('View name', { exact: true }).fill('Timeline');
@@ -28,7 +29,7 @@ export async function verifyHarnessGantt(page, service) {
   assert.equal(await bar.evaluate(element => element === document.activeElement), true);
   await page.keyboard.press('Enter');
   await dialog.getByLabel('Name', { exact: true }).fill('Edited timeline');
-  await dialog.getByRole('button', { name: 'Save record', exact: true }).click();
+  await closeSavedRecord(page);
   await timeline.getByRole('button', { name: 'Edited timeline', exact: true }).waitFor();
   await timeline.getByLabel('Timeline scale', { exact: true }).selectOption('week');
   await timeline.locator('.gantt-axis > span').nth(167).waitFor();
@@ -38,7 +39,7 @@ export async function verifyHarnessGantt(page, service) {
   table = service.createField(table.id, { expectedVersion: table.version, name: 'Created', type: 'createdTime' });
   const automatic = table.fields.at(-1).id;
   service.createView(table.id, { name: 'Created dates', type: 'gantt', gantt: { startFieldId: automatic, timeZone: 'UTC', scale: 'day' } });
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await page.getByRole('tab', { name: 'Created dates', exact: true }).click();
   const readonly = page.getByRole('region', { name: 'Created dates timeline', exact: true });
   await readonly.getByLabel('Timeline start', { exact: true }).fill(service.getRecord(table.id, record.id).values[automatic].slice(0, 10));
@@ -49,7 +50,7 @@ export async function verifyHarnessGantt(page, service) {
   await page.keyboard.press('ArrowRight'); assert.deepEqual(service.getRecord(table.id, record.id), before);
   await page.keyboard.press('Enter');
   assert.equal(await dialog.getByLabel('Name', { exact: true }).inputValue(), 'Edited timeline');
-  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   await page.getByRole('button', { name: 'Delete table', exact: true }).click();
   await dialog.getByRole('button', { name: 'Delete table', exact: true }).click();
   await dialog.waitFor({ state: 'detached' });

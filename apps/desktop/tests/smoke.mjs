@@ -1,3 +1,4 @@
+import { waitForAutosave } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, rm, readFile } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
@@ -93,7 +94,7 @@ try {
   assert.equal(page.isClosed(), false);
   assert.equal(await page.getByRole('textbox', { name: 'Cell value' }).inputValue(), 'Desktop smoke 🌱');
   await page.keyboard.press('Enter');
-  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
+  await waitForAutosave(page);
   await selectCell();
   await clearClipboard();
   assert.equal(await copyCell(), 'Desktop smoke 🌱');
@@ -103,16 +104,9 @@ try {
   await clearClipboard();
   assert.equal(await copyCell(), '');
   await page.keyboard.press('Control+y');
-  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
+  await waitForAutosave(page);
   await clearClipboard();
   assert.equal(await copyCell(), 'Desktop smoke 🌱');
-
-  await application.evaluate(({ dialog, BrowserWindow }) => {
-    dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
-    BrowserWindow.getAllWindows()[0].close();
-  });
-  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
-  assert.equal(page.isClosed(), false);
 
   await page.keyboard.press('Enter');
   await page.getByRole('textbox', { name: 'Cell value' }).fill('Cancel this edit');
@@ -146,7 +140,7 @@ try {
   await selectCell();
   await page.keyboard.press('Enter');
   await page.getByRole('textbox', { name: 'Cell value' }).fill('Save from the editor');
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await waitForAutosave(page);
   await page.getByText('All changes saved', { exact: true }).waitFor();
   assert.equal((await records(0, 1))[0].values.field_1, 'Save from the editor');
 
@@ -156,7 +150,7 @@ try {
   assert.equal(await page.getByRole('textbox', { name: 'Cell value' }).inputValue(), 'x');
   await page.keyboard.press('y');
   assert.equal(await page.getByRole('textbox', { name: 'Cell value' }).inputValue(), 'xy');
-  assert.equal(await page.getByRole('button', { name: 'Save changes', exact: true }).isEnabled(), true);
+  assert.equal(await page.getByRole('button', { name: 'Save changes', exact: true }).count(), 0);
   await page.keyboard.press('Escape');
   await page.getByText('All changes saved', { exact: true }).waitFor();
 
@@ -175,7 +169,7 @@ try {
   await selectCell();
   await application.evaluate(({ clipboard }, text) => clipboard.writeText(text), literalCells);
   await page.keyboard.press('Control+v');
-  await page.getByText('6 unsaved cells', { exact: true }).waitFor();
+  await waitForAutosave(page);
   await selectCell(0, 3);
   await selectCell();
   await page.keyboard.press('Shift+ArrowRight');
@@ -192,15 +186,15 @@ try {
   await application.evaluate(({ clipboard }, text) => clipboard.writeText(text), pasted);
   await selectCell();
   await page.keyboard.press('Control+v');
-  await page.getByText('10,000 unsaved cells', { exact: true }).waitFor({ timeout: 30_000 });
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await waitForAutosave(page);
+  await waitForAutosave(page);
   await page.getByText('All changes saved', { exact: true }).waitFor({ timeout: 30_000 });
   assert.equal((await records(999, 1))[0].values.field_10, 'Paste 999/9 🌱');
 
   await selectCell();
   await page.keyboard.press('Enter');
+  await page.getByRole('textbox', { name: 'Cell value' }).dispatchEvent('compositionstart');
   await page.getByRole('textbox', { name: 'Cell value' }).fill('Preserve this draft');
-  await page.keyboard.press('Enter');
   await page.evaluate(async () => {
     const connection = await window.rowweave.connection();
     const headers = { Authorization: `Bearer ${connection.token}`, 'Content-Type': 'application/json' };
@@ -210,7 +204,8 @@ try {
       body: JSON.stringify([{ id: records[0].id, expectedVersion: records[0].version, values: { field_1: 'External change' } }]),
     });
   });
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Cell value' }).dispatchEvent('compositionend');
+  await page.keyboard.press('Enter');
   await page.getByRole('alert').filter({ hasText: 'changed' }).waitFor();
   await selectCell();
   await clearClipboard();
@@ -235,7 +230,7 @@ try {
     process.kill(service.pid);
   });
   await page.getByRole('status').filter({ hasText: 'Service unavailable' }).waitFor();
-  assert.equal(await page.getByRole('button', { name: 'Save changes', exact: true }).isDisabled(), true);
+  assert.equal(await page.getByRole('button', { name: '+ New record', exact: true }).isDisabled(), true);
   assert.deepEqual(errors, []);
   console.log('Desktop smoke passed: editing, cancellation, keyboard selection, native clipboard, 1000×10 paste, composition guard, conflict feedback, restart persistence and service failure.');
 } catch (error) {

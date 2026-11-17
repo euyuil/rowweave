@@ -1,3 +1,4 @@
+import { waitForLiveSync, waitForAutosave, cancelDialog } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 const call = (page, path, method = 'GET', body) => page.evaluate(async ({ path, method, body }) => {
@@ -35,7 +36,7 @@ export async function verifyNestedGroups(page) {
   const records = (await call(page, root + '/records', 'POST', [
     ['Alpha', 'a', false, 1], ['Bravo', 'a', true, 2], ['Delta', 'b', false, 4], ['Echo', 'b', true, 5],
   ].map(values => ({ values: { [title]: values[0], [team]: values[1], [category]: 'Shared', [done]: values[2], [amount]: values[3] } })))).records;
-  await page.getByRole('button', { name: 'Reload', exact: true }).click(); await ready(page);
+  await waitForLiveSync(page); await ready(page);
   await page.getByRole('button', { name: 'Groups', exact: true }).click();
   await page.getByLabel('Grid group field', { exact: true }).selectOption(team);
   await page.getByRole('button', { name: 'Add grouping level', exact: true }).click();
@@ -69,7 +70,7 @@ export async function verifyNestedGroups(page) {
   assert.equal(await page.getByLabel('Grid group field 3', { exact: true }).inputValue(), done);
   await page.getByRole('button', { name: 'Remove group 2', exact: true }).click();
   assert.equal(await page.getByLabel('Grid group field 2', { exact: true }).inputValue(), done);
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
 
   await click(page, 5); if (await page.locator('.rowweave-cell-editor').count()) await page.keyboard.press('Escape');
   await page.waitForFunction(() => document.querySelector('canvas')?.contains(document.activeElement));
@@ -80,17 +81,17 @@ export async function verifyNestedGroups(page) {
   await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowLeft');
   await page.waitForFunction(() => document.querySelectorAll('canvas [role="gridcell"][aria-selected="true"]').length === 1);
   await page.evaluate(() => navigator.clipboard.writeText('Pasted Delta\nPasted Echo')); await page.keyboard.press('Control+v');
-  await page.getByText('2 unsaved cells', { exact: true }).waitFor();
+  await waitForAutosave(page);
   await page.getByRole('button', { name: 'Undo', exact: true }).click(); await page.getByText('All changes saved', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Redo', exact: true }).click(); await page.getByText('2 unsaved cells', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click(); await page.getByText('All changes saved', { exact: true }).waitFor(); await ready(page);
+  await page.getByRole('button', { name: 'Redo', exact: true }).click(); await waitForAutosave(page);
+  await waitForAutosave(page); await page.getByText('All changes saved', { exact: true }).waitFor(); await ready(page);
   assert.equal((await call(page, root + '/records/' + records[2].id)).values[title], 'Pasted Delta');
   assert.equal((await call(page, root + '/records/' + records[3].id)).values[title], 'Pasted Echo');
   for (const record of records.slice(0, 2)) assert.deepEqual(await call(page, root + '/records/' + record.id), record);
 
   await click(page, 5, 2); if (!await page.locator('.rowweave-cell-editor').count()) await page.keyboard.press('Enter');
   await page.getByLabel('Cell value', { exact: true }).fill('Other'); await page.keyboard.press('Enter');
-  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
+  await waitForAutosave(page);
   await page.keyboard.press('Control+s'); await page.getByText('All changes saved', { exact: true }).waitFor(); await ready(page);
   await cell(page, 3, '▾ Other'); await cell(page, 5, 'Pasted Delta');
   assert.equal((await call(page, root + '/records/' + records[2].id)).values[category], 'Other');

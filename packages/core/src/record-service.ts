@@ -490,8 +490,31 @@ export class RecordService {
         if (!field) return invalid(`Unknown field: ${id}.`);
         return [id, validateValue(field, value)];
       }));
+      let expectedValues: Record<string, CellValue> | undefined;
+      let expectedFieldVersions: Record<string, number> | undefined;
+      if (item['expectedValues'] !== undefined) {
+        const expected = item['expectedValues'];
+        if (!expected || typeof expected !== 'object' || Array.isArray(expected) ||
+            Object.keys(expected).length !== entries.length || entries.some(([id]) => !Object.hasOwn(expected, id))) {
+          return invalid('Expected values must contain exactly the changed fields.');
+        }
+        if (!Number.isSafeInteger(item['expectedSchemaVersion']) || (item['expectedSchemaVersion'] as number) < 1) {
+          return invalid('Expected values require a positive expectedSchemaVersion.');
+        }
+        if (item['expectedSchemaVersion'] !== table.version) throw new ServiceError('SCHEMA_CONFLICT', 'The fields changed. Review the current schema before editing.', 409);
+        expectedValues = Object.fromEntries(entries.map(([id]) => [id, validateValue({ ...fields.get(id)!, required: false }, (expected as Record<string, unknown>)[id])]));
+        const versions = item['expectedFieldVersions'];
+        if (versions !== undefined) {
+          if (!versions || typeof versions !== 'object' || Array.isArray(versions) || Object.keys(versions).length !== entries.length ||
+              entries.some(([id]) => !Object.hasOwn(versions, id) || !Number.isSafeInteger((versions as Record<string, unknown>)[id]) || ((versions as Record<string, number>)[id] ?? 0) < 1)) {
+            return invalid('Expected field versions must contain a positive version for every changed field.');
+          }
+          expectedFieldVersions = versions as Record<string, number>;
+        }
+      }
+      if (!expectedValues && item['expectedFieldVersions'] !== undefined) return invalid('Expected field versions require expected values.');
       return { id: item['id'], expectedVersion: item['expectedVersion'] as number,
-        values: checked };
+        values: checked, ...(expectedValues ? { expectedValues, expectedSchemaVersion: table.version, ...(expectedFieldVersions ? { expectedFieldVersions } : {}) } : {}) };
     });
     return this.store.updateBatch(updates, id, table.version);
   }

@@ -1,3 +1,4 @@
+import { waitForLiveSync, closeSavedRecord } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyDateFormulaWorkflow(page) {
@@ -17,7 +18,7 @@ export async function verifyDateFormulaWorkflow(page) {
   table = await call('/tables/' + table.id + '/fields', 'POST', { expectedVersion: table.version, name: 'Start', type: 'date' });
   const start = table.fields[1].id;
   const record = (await call('/tables/' + table.id + '/records', 'POST', [{ values: { [table.primaryFieldId]: 'Renewal', [start]: '2024-01-31' } }])).records[0];
-  await page.getByRole('button', { name: 'Reload', exact: true }).click(); await ready();
+  await waitForLiveSync(page); await ready();
   await page.getByText('1 record · 2 fields', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Manage fields', exact: true }).click();
   for (const [name, type, expression] of [['Due', 'date', 'DATEADD(["Start"], 1, "month")'], ['Midnight', 'datetime', 'DATETIMEVALUE(["Due"])']]) {
@@ -45,7 +46,7 @@ export async function verifyDateFormulaWorkflow(page) {
   assert.equal(await dialog.getByLabel('Midnight (UTC)', { exact: true }).textContent(), '2024-02-29T00:00:00.000Z');
   await page.screenshot({ path: '.artifacts/desktop-date-formula-record.png' });
   await dialog.getByLabel('Start', { exact: true }).fill('2024-02-29');
-  await dialog.getByRole('button', { name: 'Save record', exact: true }).click();
+  await closeSavedRecord(page);
   await dialog.waitFor({ state: 'detached' }); await ready();
   const changed = await call('/tables/' + table.id + '/records/' + record.id);
   assert.equal(changed.values[due], '2024-03-29'); assert.equal(changed.values[midnight], '2024-03-29T00:00:00.000Z');

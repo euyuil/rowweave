@@ -1,3 +1,4 @@
+import { waitForAutosave } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { cpus, totalmem, platform, release, arch } from 'node:os';
@@ -113,7 +114,7 @@ for (const [rows, columns] of [[10_000, 20], [100_000, 100]]) {
       result.pasteWallMs = performance.now() - pasteStart;
       result.memoryWithDrafts = await memory(application);
       const saveStart = performance.now();
-      await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+      await waitForAutosave(page);
       await page.getByText('All changes saved', { exact: true }).waitFor();
       result.save1000x10Ms = performance.now() - saveStart;
       if (trial === 0) {

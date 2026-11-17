@@ -1,3 +1,4 @@
+import { waitForLiveSync, waitForAutosave, cancelDialog } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 import { waitForResponse } from './wait-for-response.mjs';
 
@@ -18,7 +19,7 @@ export async function verifyExternalRefresh(page, application) {
   table = await call(root + '/fields', 'POST', { expectedVersion: table.version, name: 'Rank', type: 'number' });
   const rank = table.fields[1].id, name = table.primaryFieldId;
   const records = (await call(root + '/records', 'POST', ['Alpha', 'Beta', 'Gamma'].map((value, index) => ({ values: { [name]: value, [rank]: index + 1 } })))).records;
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await page.getByText('3 records · 2 fields', { exact: true }).waitFor();
   const cell = (column, row) => page.locator('canvas').first().locator(`[aria-rowindex="${row + 2}"] [role="gridcell"][aria-colindex="${column + 1}"]`);
   const waitCell = (column, row, text) => page.waitForFunction(({ column, row, text }) =>
@@ -73,7 +74,7 @@ export async function verifyExternalRefresh(page, application) {
     assert.equal(await form.inputValue(), 'Unsaved form 中文');
     assert.equal(await form.evaluate(element => element === document.activeElement), true);
     assert.equal(await cell(0, 0).textContent(), 'Beta');
-    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await cancelDialog(page);
     await waitCell(0, 0, 'Remote Beta');
 
     let release, arrived, completed;
@@ -116,6 +117,7 @@ export async function verifyExternalRefresh(page, application) {
       await application.evaluate(({ BrowserWindow }, size) => BrowserWindow.getAllWindows()[0].setSize(...size), previousSize);
       await editor.evaluate(element => element.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '保留输入草稿' })));
       await page.keyboard.press('Enter');
+      await page.getByRole('alert').filter({ hasText: 'changed' }).waitFor();
       await page.getByText('1 unsaved cell', { exact: true }).waitFor();
       assert.equal((await call(root + '/records/' + records[2].id)).values[name], 'Remote Gamma');
     } finally {
@@ -129,7 +131,7 @@ export async function verifyExternalRefresh(page, application) {
     await page.getByRole('button', { name: 'Refresh view', exact: true }).click();
     await page.getByRole('tab', { name: 'Changed while editing', exact: true }).waitFor();
     await page.getByText('1 unsaved cell', { exact: true }).waitFor();
-    await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+    await page.getByRole('button', { name: 'Retry saving', exact: true }).click();
     await page.getByRole('alert').filter({ hasText: 'changed' }).waitFor();
     await page.getByText('1 unsaved cell', { exact: true }).waitFor();
     await application.evaluate(({ dialog }) => { dialog.showMessageBox = async () => ({ response: 1, checkboxChecked: false }); });

@@ -1,3 +1,4 @@
+import { waitForLiveSync, cancelDialog } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyBusinessDayWorkflow(page, application) {
@@ -24,7 +25,7 @@ export async function verifyBusinessDayWorkflow(page, application) {
     const value = new Date(origin + (i - 20) * 86_400_000).toISOString();
     return { values: { [table.primaryFieldId]: value.slice(0, 10), [day]: value.slice(0, 10), [at]: value } };
   }))).records;
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await page.getByText('41 records · 3 fields', { exact: true }).waitFor();
   const view = (await call(root + '/views'))[0];
   const open = () => page.getByRole('button', { name: 'Filters', exact: true }).click();
@@ -63,7 +64,7 @@ export async function verifyBusinessDayWorkflow(page, application) {
     assert.equal(await page.getByLabel('Relative period', { exact: true }).inputValue(), period);
     assert.equal(await page.getByLabel('Business days', { exact: true }).inputValue(), '5');
   }
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   await page.getByRole('button', { name: 'Delete table', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Delete table', exact: true }).click();
   await page.getByRole('dialog').waitFor({ state: 'detached' });

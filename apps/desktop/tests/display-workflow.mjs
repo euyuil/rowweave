@@ -1,3 +1,4 @@
+import { waitForLiveSync, waitForAutosave, cancelDialog } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 export async function verifyDisplayWorkflow(page) {
@@ -23,7 +24,7 @@ export async function verifyDisplayWorkflow(page) {
     await call(`/tables/${table.id}/views`, 'POST', { name: 'Default layout' });
     return table;
   });
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await waitForLiveSync(page);
   await page.getByText('3 records · 12 fields', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Display', exact: true }).click();
   assert.equal(await page.getByLabel('Row density', { exact: true }).inputValue(), '36');
@@ -48,8 +49,8 @@ export async function verifyDisplayWorkflow(page) {
     const clipboardData = new DataTransfer(); clipboardData.setData('text/plain', '布局测试');
     document.activeElement.dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true }));
   });
-  await page.getByText('1 unsaved cell', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await waitForAutosave(page);
+  await waitForAutosave(page);
   await page.getByText('All changes saved', { exact: true }).waitFor();
   const rows = await page.evaluate(async id => {
     const connection = await window.rowweave.connection();
@@ -62,7 +63,7 @@ export async function verifyDisplayWorkflow(page) {
   await page.getByRole('button', { name: 'Display', exact: true }).click();
   assert.equal(await page.getByLabel('Row density', { exact: true }).inputValue(), '36');
   assert.equal(await page.getByLabel('Frozen columns', { exact: true }).inputValue(), '0');
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   await page.getByRole('tab', { name: 'All records', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('.grid-host')?.getAttribute('aria-busy') === 'false');
   await page.reload();
@@ -71,7 +72,7 @@ export async function verifyDisplayWorkflow(page) {
   assert.equal(await page.getByLabel('Row density', { exact: true }).inputValue(), '48');
   assert.equal(await page.getByLabel('Frozen columns', { exact: true }).inputValue(), '1');
   await page.screenshot({ path: '.artifacts/desktop-display-settings.png' });
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await cancelDialog(page);
   await page.getByRole('button', { name: 'Delete table', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Delete table', exact: true }).click();
   await page.getByRole('dialog').waitFor({ state: 'detached' });

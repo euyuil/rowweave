@@ -1,3 +1,4 @@
+import { waitForLiveSync, requestLiveSync, closeSavedRecord } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 import { ganttApi } from './gantt-workflow.mjs';
 import { waitForResponse } from './wait-for-response.mjs';
@@ -33,10 +34,10 @@ export async function verifyGanttRefresh(page, fixture) {
   const input = dialog.getByLabel('Name', { exact: true });
   await input.fill('时间线草稿'); await input.dispatchEvent('compositionstart');
   await update(5, { [name]: 'Remote task 005' });
-  await page.getByText('Updates are available. Finish editing to load them automatically, or use Refresh view to keep cell drafts. Reload resets local undo history.', { exact: true }).waitFor();
+  await page.getByText('Updates are available and will load automatically when editing finishes.', { exact: true }).waitFor();
   assert.equal(await input.inputValue(), '时间线草稿'); assert.equal(await input.evaluate(element => element === document.activeElement), true);
   await input.dispatchEvent('compositionend', { data: '时间线草稿' });
-  await dialog.getByRole('button', { name: 'Save record', exact: true }).click();
+  await closeSavedRecord(page);
   await row(4).getByRole('button', { name: '时间线草稿', exact: true }).waitFor();
   await row(5).getByRole('button', { name: 'Remote task 005', exact: true }).waitFor();
 
@@ -116,7 +117,7 @@ export async function verifyGanttRefresh(page, fixture) {
   };
   await page.route('**' + root, slowSchema);
   try {
-    await page.getByRole('button', { name: 'Reload', exact: true }).click(); await waitForResponse(schemaReady, 'Gantt schema reload');
+    await requestLiveSync(page); await waitForResponse(schemaReady, 'Gantt schema reload');
     assert.equal(await timeline.count(), 1); assert.equal(await timeline.getByLabel('Timeline start', { exact: true }).inputValue(), '2024-02-26');
     releaseSchema(); await waitForResponse(schemaSettled, 'released Gantt schema');
     await row(0).getByRole('button', { name: 'Set a start date', exact: true }).waitFor();
@@ -130,11 +131,12 @@ export async function verifyGanttRefresh(page, fixture) {
     body: JSON.stringify({ error: { code: 'SERVICE_UNAVAILABLE', message: 'Timeline temporarily unavailable.' } }) });
   await page.route(path, unavailable);
   try {
-    await page.getByRole('button', { name: 'Reload', exact: true }).click();
-    await page.getByRole('alert').filter({ hasText: 'Timeline temporarily unavailable.' }).waitFor();
+    await update(0, { [name]: (await current(0)).values[name] });
+    await requestLiveSync(page);
+    await page.getByRole('status').filter({ hasText: 'Timeline temporarily unavailable.' }).waitFor();
     assert.equal(await timeline.getByLabel('Timeline start', { exact: true }).inputValue(), '2024-02-26');
   } finally { await page.unroute(path, unavailable); }
-  await page.getByRole('button', { name: 'Reload', exact: true }).click(); await bar(0).waitFor();
+  await waitForLiveSync(page); await bar(0).waitFor();
   console.log('Gantt external refresh, focus, composition drafts, stale gestures, paging and atomic schema reload passed.');
   return { ...fixture, table, view, start: replacement };
 }

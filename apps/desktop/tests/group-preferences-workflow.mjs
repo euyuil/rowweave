@@ -1,3 +1,4 @@
+import { waitForLiveSync } from '../../../tests/live-ui.mjs';
 import assert from 'node:assert/strict';
 
 const call = (page, path, method = 'GET', body) => page.evaluate(async ({ path, method, body }) => {
@@ -45,7 +46,7 @@ export async function verifyGroupPreferences(page) {
   let view = (await call(page, root + '/views'))[0];
   view = await call(page, root + '/views/' + view.id, 'PATCH', { expectedVersion: view.version, groupBy: category });
   await call(page, root + '/views', 'POST', { name: 'Alternate groups', groupBy: category });
-  await page.getByRole('button', { name: 'Reload', exact: true }).click(); await ready(page);
+  await waitForLiveSync(page); await ready(page);
   await page.getByRole('button', { name: 'Collapse all', exact: true }).click(); await ready(page);
   await heading(page, 0); await waitCell(page, 1, 'Alpha');
   await heading(page, 3); await waitCell(page, 3, '▾ Unused · 0 records');
