@@ -11,7 +11,12 @@ const ready = page => page.waitForFunction(() => document.querySelector('.grid-h
 const cell = (page, row, text) => page.waitForFunction(({ row, text }) =>
   document.querySelector(`canvas [aria-rowindex="${row + 2}"] [role="gridcell"][aria-colindex="1"]`)?.textContent.includes(text), { row, text });
 const click = async (page, row, column = 0) => {
-  await ready(page); const bounds = await page.locator('canvas').first().boundingBox();
+  await ready(page);
+  await page.locator('.dvn-scroller').evaluate(element => {
+    element.scrollTop = 0;
+    return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  });
+  const bounds = await page.locator('canvas').first().boundingBox();
   await page.mouse.click(bounds.x + 100 + column * 180, bounds.y + 58 + row * 36, { delay: 50 });
   assert.equal((await page.locator('canvas').first().boundingBox()).y, bounds.y, 'Selection wording must not move the grid during a click.');
 };
