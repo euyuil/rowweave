@@ -39,6 +39,7 @@ import { captureGanttFocus } from './gantt-focus.js';
 import { prepareGanttSnapshot, type GanttSnapshot, type GanttWindow } from '../../client/src/gantt-refresh.js';
 import type { GanttConfig, RecordSchedule } from '../../contracts/src/index.js';
 import { ViewTabs } from './view-tabs.js';
+import { ActionButton } from './action-button.js';
 import { useGroupedRows } from './use-grouped-rows.js';
 import { refreshSelection } from './refresh-selection.js';
 import { selectionRanges } from './selection-ranges.js';
@@ -178,7 +179,9 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   const rootHost = useRef<HTMLElement>(null);
   const grid = useRef<DataEditorRef>(null);
   const busyRef = useRef(false);
-  const locked = busy || model.saving || history.busy || offline || transfers > 0;
+  const contentWorking = busy || model.saving || transfers > 0;
+  const working = contentWorking || history.busy;
+  const locked = working || offline;
   const pending = model.pendingCells;
   const grouping = useGroupedRows(model, api, view, appliedSearch.current, visible);
   const measureLabels = useMemo(() => {
@@ -305,11 +308,11 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   }, [api, model, tableId]);
 
   applyView.current = async (selected, text = selected.query.search ?? '') => {
-    if (busyRef.current || model.saving) return;
+    if (busyRef.current || model.saving || history.busy) return;
     if (activeEditor.current) {
       if (!activeEditor.current.finish(true)) return;
       await new Promise(resolve => setTimeout(resolve, 0));
-      if (busyRef.current || model.saving) return;
+      if (busyRef.current || model.saving || history.busy) return;
     }
     const initialSearch = searchDraft.current;
     busyRef.current = true;
@@ -484,10 +487,10 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   }, []);
 
   useEffect(() => {
-    if (!ready || offline || busy || model.saving || searchComposing || search === appliedSearch.current || !currentView.current) return;
+    if (!ready || offline || busy || model.saving || history.busy || searchComposing || search === appliedSearch.current || !currentView.current) return;
     const timer = setTimeout(() => { void applyView.current!(currentView.current!, search); }, 200);
     return () => clearTimeout(timer);
-  }, [search, searchComposing, ready, offline, busy, model.saving]);
+  }, [search, searchComposing, ready, offline, busy, model.saving, history.busy]);
 
   useEffect(() => {
     let active = true;
@@ -545,7 +548,7 @@ export function TableApp({ tableId, model, api, host, onManage }: {
       await model.saveLive();
       if (model.queryVersion !== previousQuery) {
         setSelection({ columns: CompactSelection.empty(), rows: CompactSelection.empty() });
-        setNotice('Changes saved. The selection was cleared; select records again before editing.');
+        setNotice('The selection was cleared. Select records again before editing.');
       }
       if (model.lastSavedBatchId !== previousBatch) setSavedAction(model.lastSavedBatchId ? { batchId: model.lastSavedBatchId, redo: false } : undefined);
       wakeSync.current();
@@ -648,7 +651,14 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   };
 
   const table = model.table;
-  const recordActionsLocked = locked || !ready || model.stale || pending > 0 || editorDirty || (grouping.enabled && (!grouping.rows || grouping.pending || grouping.stale));
+  const message = error ?? model.error ?? grouping.error;
+  const failedDraft = pending > 0 && !!message;
+  const recordActionsDisabled = offline || !ready || model.stale || failedDraft || (grouping.enabled && (!grouping.rows || grouping.pending || grouping.stale));
+  const recordActionsBlocked = working || pending > 0 || editorDirty;
+  const recordActionsLocked = recordActionsDisabled || recordActionsBlocked;
+  // The native modal already blocks interaction with its background during record saves.
+  const viewLocked = contentWorking || (history.busy && recordAction?.kind !== 'edit');
+  const recordViewDisabled = recordActionsDisabled || pending > 0 || editorDirty || viewLocked;
   const openColumnActions = (column: number, bounds: Rectangle) => {
     if (column < 0) return;
     if (recordActionsLocked || busyRef.current || !view) {
@@ -754,8 +764,8 @@ export function TableApp({ tableId, model, api, host, onManage }: {
     if (mapped?.kind === 'group') return groupHeadingCell(mapped.group, column, (view!.frozenColumns || fields.length) - 1, measureLabels);
     const index = recordIndex(row);
     return gridCell(index === undefined ? undefined : model.getRecord(index), fields[column],
-      locked || model.stale || grouping.pending || grouping.stale, index ?? row, row);
-  }, [model, fields, locked, revision, grouping.rows, grouping.enabled, grouping.pending, grouping.stale, view, measureLabels]);
+      offline || viewLocked || model.stale || grouping.pending || grouping.stale, index ?? row, row);
+  }, [model, fields, offline, viewLocked, revision, grouping.rows, grouping.enabled, grouping.pending, grouping.stale, view, measureLabels]);
 
   const getCellsForSelection = (rectangle: Rectangle, signal: AbortSignal) => async () => {
     if (rectangle.height > maxBatchRecords || rectangle.width * rectangle.height > maxBatchCells) {
@@ -807,94 +817,94 @@ export function TableApp({ tableId, model, api, host, onManage }: {
   const status = offline ? 'Service unavailable' : !ready ? 'Loading table…' : model.saving || history.busy ? 'Saving…' : busy ? 'Loading rows…'
     : editorDirty ? 'Editing cell…'
     : pending ? `${pending.toLocaleString()} unsaved ${pending === 1 ? 'cell' : 'cells'}` : 'All changes saved';
-  const message = error ?? model.error ?? grouping.error;
+  const viewHint = view?.type === 'board' ? 'Move records by dragging or choosing a status' : view?.type === 'calendar'
+    ? 'Arrow keys to navigate dates · Enter to browse records' : view?.type === 'gantt' ? 'Drag to adjust dates · Enter opens record details'
+    : view?.type === 'gallery' ? 'Arrow keys to navigate cards · Enter opens record details'
+      : 'Ctrl+Z to undo · Ctrl+Y to redo';
+  const updateStatus = externalUpdate === 'pending' ? 'Updates are available and will load automatically when editing finishes.' : undefined;
+  const updateFailure = !offline && refreshFailure ? `Could not check for updates: ${refreshFailure}` : undefined;
+  const missingTable = externalUpdate === 'missing' ? 'This table was deleted elsewhere. Visible edits are retained. Choose another table when ready.' : undefined;
+  const recovery = !!(message || refreshFailure || model.stale);
+  const historyBlocked = working || (pending > 0 && !failedDraft);
   return <AttachmentContext.Provider value={{ table, pending: transfers > 0, transfer, saveFile: host.saveFile }}><section className="table-workspace" ref={rootHost}
     data-table-id={tableId} data-revision={model.dataRevision} data-schema-version={table?.version} data-views-revision={knownViewsRevision}>
     <section className="table-heading">
       <div className="table-title"><h1>{table?.name ?? 'Loading table…'}</h1>
-        <div className="table-management"><button disabled={recordActionsLocked} onClick={() => setManagingFields(true)}>Manage fields</button>
-          <button disabled={!table || locked} onClick={() => onManage('rename', table!)}>Rename table</button>
-          <button disabled={!table || locked || pending > 0 || editorDirty} onClick={() => onManage('delete', table!)}>Delete table</button></div></div>
+        <div className="table-management"><ActionButton disabled={recordActionsDisabled} blocked={recordActionsBlocked} onClick={() => setManagingFields(true)}>Manage fields</ActionButton>
+          <ActionButton disabled={!table || offline} blocked={working} onClick={() => onManage('rename', table!)}>Rename table</ActionButton>
+          <ActionButton disabled={!table || offline || failedDraft} blocked={recordActionsBlocked} onClick={() => onManage('delete', table!)}>Delete table</ActionButton></div></div>
       <div className="actions">
-        <button onClick={() => model.canUndo ? model.undo() : void moveHistory()} disabled={locked || !(model.canUndo || history.canUndo)}>Undo</button>
-        <button onClick={() => model.canRedo ? model.redo() : void moveHistory(true)} disabled={locked || !(model.canRedo || history.canRedo)}>Redo</button>
-        {(pending > 0 || model.stale || externalUpdate === 'pending') && <button onClick={() => void reload(false)} disabled={locked || editorDirty}
-          title="Refresh saved data and view settings while keeping drafts. Unsaved edit history resets.">Refresh view</button>}
-        {(message || refreshFailure || model.stale) && <button onClick={() => void reload()} disabled={locked}>{pending || editorDirty ? 'Discard edits' : 'Reconnect'}</button>}
-        {pending > 0 && message && <button onClick={() => void save()} disabled={locked}>Retry saving</button>}
+        <ActionButton onClick={() => model.canUndo ? model.undo() : void moveHistory()} blocked={historyBlocked}
+          disabled={offline || !(history.hasUndo || failedDraft && model.canUndo)}>Undo</ActionButton>
+        <ActionButton onClick={() => model.canRedo ? model.redo() : void moveHistory(true)} blocked={historyBlocked}
+          disabled={offline || !(history.hasRedo || model.canRedo)}>Redo</ActionButton>
+        <ActionButton onClick={() => void reload(false)} disabled={!ready || offline} blocked={working || editorDirty}
+          title="Refresh saved data and view settings while keeping drafts. Unsaved edit history resets.">Refresh view</ActionButton>
       </div>
     </section>
-    {message && <div role="alert" className="error-banner">{message}
-      {model.conflicted && <span> Your edits are still here. Copy them before discarding and reloading the current records.</span>}
-    </div>}
-    {notice && <div role="status" className="notice-banner"><span>{notice}</span><button onClick={() => setNotice(undefined)}>Dismiss</button></div>}
-    {externalUpdate && <div role="status" className="notice-banner">{externalUpdate === 'missing'
-      ? 'This table was deleted elsewhere. Visible edits are retained. Choose another table when ready.'
-      : 'Updates are available and will load automatically when editing finishes.'}</div>}
-    {!offline && refreshFailure && <div role="status" className="notice-banner">Could not check for updates: {refreshFailure}</div>}
-    <ViewTabs views={views} selected={view?.id} disabled={!ready || locked} panelId={`table-view-${tableId}`}
+    <ViewTabs views={views} selected={view?.id} disabled={!ready || offline} blocked={working} panelId={`table-view-${tableId}`}
       onSelect={selected => void applyView.current!(selected)} onCreate={() => setViewAction('create')} />
     <section className="table-panel" id={`table-view-${tableId}`} role="tabpanel" aria-label={view?.name ?? 'Loading view'}>
     <div className="record-toolbar">
-      <button className="primary" disabled={recordActionsLocked} onClick={() => void openRecord('create')}>+ New record</button>
-      {view?.type === 'grid' && <><button disabled={recordActionsLocked || selectedCount !== 1} onClick={() => void openRecord('edit')}>Open record</button>
-      <button disabled={recordActionsLocked || selectedCount !== 1} onClick={() => void openRecord('duplicate')}>Duplicate</button>
-      <button disabled={recordActionsLocked || !selectedCount} onClick={() => void openRecord('delete')}>Delete records</button></>}
-      <button disabled={recordActionsLocked} onClick={() => setCsvAction('import')}>Import CSV</button>
-      <button disabled={recordActionsLocked} onClick={() => setTrashOpen(true)}>Trash</button>
-      <button disabled={recordActionsLocked} onClick={() => setBatchHistory({})}>Saved changes</button>
-      {savedAction && <button disabled={recordActionsLocked} onClick={() => setBatchHistory(savedAction)}>{savedAction.redo ? 'Redo saved change' : 'Undo saved change'}</button>}
-      <button disabled={recordActionsLocked || !view || searchComposing} onClick={() => setCsvAction('export')}>Export CSV</button>
-      <span>{pending > 0 || editorDirty ? 'Save or discard grid edits to manage records.'
-        : view?.type === 'board' ? 'Open a card to edit, or move it to another group.'
+      <ActionButton className="primary" disabled={recordActionsDisabled} blocked={recordActionsBlocked} onClick={() => void openRecord('create')}>+ New record</ActionButton>
+      {view?.type === 'grid' && <><ActionButton disabled={recordActionsDisabled || selectedCount !== 1} blocked={recordActionsBlocked} onClick={() => void openRecord('edit')}>Open record</ActionButton>
+      <ActionButton disabled={recordActionsDisabled || selectedCount !== 1} blocked={recordActionsBlocked} onClick={() => void openRecord('duplicate')}>Duplicate</ActionButton>
+      <ActionButton disabled={recordActionsDisabled || !selectedCount} blocked={recordActionsBlocked} onClick={() => void openRecord('delete')}>Delete records</ActionButton></>}
+      <ActionButton disabled={recordActionsDisabled} blocked={recordActionsBlocked} onClick={() => setCsvAction('import')}>Import CSV</ActionButton>
+      <ActionButton disabled={recordActionsDisabled} blocked={recordActionsBlocked} onClick={() => setTrashOpen(true)}>Trash</ActionButton>
+      <ActionButton disabled={recordActionsDisabled} blocked={recordActionsBlocked} onClick={() => setBatchHistory({})}>Saved changes</ActionButton>
+      <ActionButton className="saved-action" disabled={recordActionsDisabled || !savedAction} blocked={recordActionsBlocked}
+        onClick={() => setBatchHistory(savedAction)}>{savedAction?.redo ? 'Redo saved change' : 'Undo saved change'}</ActionButton>
+      <ActionButton disabled={recordActionsDisabled || !view || searchComposing} blocked={recordActionsBlocked} onClick={() => setCsvAction('export')}>Export CSV</ActionButton>
+      <span>{view?.type === 'board' ? 'Open a card to edit, or move it to another group.'
           : view?.type === 'calendar' ? 'Choose a date to browse its records, or open a preview to edit.'
           : view?.type === 'gantt' ? 'Adjust dates on the timeline or open a record to edit its details.'
           : view?.type === 'gallery' ? 'Browse cards and open a record to edit its details.'
           : selectedCount === undefined ? 'Loading selection…' : selectedCount ? `${selectedCount.toLocaleString()} selected` : 'Select a row or cell to open a record.'}</span>
     </div>
       <div className="view-toolbar">
-        <button disabled={!view || locked} onClick={() => setViewAction('edit')}>View settings</button>
-        <button aria-label="Filters" aria-haspopup="dialog" aria-expanded={viewAction === 'filter'}
-          disabled={!view || locked || searchComposing} onClick={event => { setQueryAnchor(event.currentTarget.getBoundingClientRect()); setViewAction('filter'); }}>
-          Filters{view?.query.filter && (view.query.filter.conditions.length > 0 || view.query.filter.conjunction === 'or') && <span className="query-badge" aria-hidden="true">On</span>}</button>
-        <button aria-label="Sort" aria-haspopup="dialog" aria-expanded={viewAction === 'sort'}
-          disabled={!view || locked || searchComposing} onClick={event => { setQueryAnchor(event.currentTarget.getBoundingClientRect()); setViewAction('sort'); }}>
-          Sort{!!view?.query.sort?.length && <span className="query-badge" aria-hidden="true">{view.query.sort.length}</span>}</button>
-        <button disabled={!view || locked} onClick={() => setViewAction('display')}>Display</button>
-        {view?.type === 'grid' && <button aria-label="Groups" aria-haspopup="dialog" aria-expanded={viewAction === 'group'} disabled={locked}
+        <ActionButton disabled={!view || offline} blocked={working} onClick={() => setViewAction('edit')}>View settings</ActionButton>
+        <ActionButton aria-label="Filters" aria-haspopup="dialog" aria-expanded={viewAction === 'filter'}
+          disabled={!view || offline || searchComposing} blocked={working} onClick={event => { setQueryAnchor(event.currentTarget.getBoundingClientRect()); setViewAction('filter'); }}>
+          Filters{view?.query.filter && (view.query.filter.conditions.length > 0 || view.query.filter.conjunction === 'or') && <span className="query-badge" aria-hidden="true">On</span>}</ActionButton>
+        <ActionButton aria-label="Sort" aria-haspopup="dialog" aria-expanded={viewAction === 'sort'}
+          disabled={!view || offline || searchComposing} blocked={working} onClick={event => { setQueryAnchor(event.currentTarget.getBoundingClientRect()); setViewAction('sort'); }}>
+          Sort{!!view?.query.sort?.length && <span className="query-badge" aria-hidden="true">{view.query.sort.length}</span>}</ActionButton>
+        <ActionButton disabled={!view || offline} blocked={working} onClick={() => setViewAction('display')}>Display</ActionButton>
+        {view?.type === 'grid' && <ActionButton aria-label="Groups" aria-haspopup="dialog" aria-expanded={viewAction === 'group'} disabled={offline} blocked={working}
           onClick={event => { setQueryAnchor(event.currentTarget.getBoundingClientRect()); setViewAction('group'); }}>
-          Groups{view.groupBy && <span className="query-badge" aria-hidden="true">{groupFieldIds(view.groupBy).length}</span>}</button>}
-        <button disabled={!view || recordActionsLocked || searchComposing} onClick={() => setSummarizing(true)}>Summarize</button>
-        <button disabled={!view || locked || views.length < 2} onClick={() => setViewAction('delete')}>Delete view</button>
+          Groups{view.groupBy && <span className="query-badge" aria-hidden="true">{groupFieldIds(view.groupBy).length}</span>}</ActionButton>}
+        <ActionButton disabled={!view || recordActionsDisabled || searchComposing} blocked={recordActionsBlocked} onClick={() => setSummarizing(true)}>Summarize</ActionButton>
+        <ActionButton disabled={!view || offline || views.length < 2} blocked={working} onClick={() => setViewAction('delete')}>Delete view</ActionButton>
         <input type="search" aria-label="Search records" placeholder="Search records…" value={search}
-          disabled={!ready || model.saving || offline} onChange={event => setSearch(event.target.value)}
+          disabled={!ready || offline} onChange={event => setSearch(event.target.value)}
           onCompositionStart={() => setSearchComposing(true)} onCompositionEnd={() => setSearchComposing(false)} />
       </div>
       {grouping.enabled && <div className="group-tools" aria-label="Record groups">
         <span>Grouped by {groupFieldIds(view?.groupBy).map(id => model.table?.fields.find(field => field.id === id)?.name).join(' → ')}</span>
-        <button disabled={locked || editorDirty || grouping.pending || !grouping.rows} onClick={() => collapseGroups({ defaultCollapsed: true, exceptions: [] })}>Collapse all</button>
-        <button disabled={locked || editorDirty || grouping.pending || !grouping.rows} onClick={() => collapseGroups({ defaultCollapsed: false, exceptions: [] })}>Expand all</button>
+        <ActionButton disabled={offline || grouping.pending || !grouping.rows} blocked={working || editorDirty} onClick={() => collapseGroups({ defaultCollapsed: true, exceptions: [] })}>Collapse all</ActionButton>
+        <ActionButton disabled={offline || grouping.pending || !grouping.rows} blocked={working || editorDirty} onClick={() => collapseGroups({ defaultCollapsed: false, exceptions: [] })}>Expand all</ActionButton>
         <small>Click a group heading or press Enter to expand or collapse.</small>
       </div>}
       {ready && table && view?.type === 'board' ? <BoardView table={table} view={view} search={appliedSearch.current} generation={queryVersion} api={api}
         revision={model.dataRevision!} dateContext={model.dateContext} onWindow={boardWindowChanged} onDragChange={boardDragChanged}
         prepared={preparedBoard?.generation === queryVersion ? preparedBoard.snapshot : undefined}
-        disabled={recordActionsLocked} onOpen={record => void openViewRecord(record)} onRefresh={() => void reload()}
+        disabled={recordViewDisabled} onOpen={record => void openViewRecord(record)} onRefresh={() => void reload()}
         onCreate={lane => setRecordAction({ kind: 'create', records: [], initialValues: { [view.groupBy!]: lane } })} onMove={moveBoardRecord} />
         : ready && table && view?.type === 'calendar' ? <CalendarView key={view.id} table={table} view={view} search={appliedSearch.current}
           generation={queryVersion} revision={model.dataRevision!} dateContext={model.dateContext} api={api}
           prepared={preparedCalendar?.generation === queryVersion ? preparedCalendar.snapshot : undefined}
-          disabled={recordActionsLocked} onWindow={calendarWindowChanged} onOpen={record => void openViewRecord(record)} onRefresh={() => void reload()}
+          disabled={recordViewDisabled} onWindow={calendarWindowChanged} onOpen={record => void openViewRecord(record)} onRefresh={() => void reload()}
           onCreate={values => setRecordAction({ kind: 'create', records: [], initialValues: values })} />
         : ready && table && view?.type === 'gantt' ? <GanttView key={view.id} table={table} view={view} search={appliedSearch.current}
           generation={queryVersion} revision={model.dataRevision!} dateContext={model.dateContext} total={model.rowCount} api={api}
           prepared={preparedGantt?.generation === queryVersion ? preparedGantt.snapshot : undefined}
-          disabled={recordActionsLocked} onWindow={ganttWindowChanged} onDragChange={ganttDragChanged} onOpen={record => void openViewRecord(record)}
+          disabled={recordViewDisabled} onWindow={ganttWindowChanged} onDragChange={ganttDragChanged} onOpen={record => void openViewRecord(record)}
           onSchedule={scheduleGanttRecord} onScale={changeGanttScale} onRefresh={() => void reload()} />
         : ready && table && view?.type === 'gallery' ? <GalleryView key={view.id} table={table} view={view} search={appliedSearch.current}
           generation={queryVersion} revision={model.dataRevision!} dateContext={model.dateContext} total={model.rowCount} api={api}
           prepared={preparedGallery?.generation === queryVersion ? preparedGallery.snapshot : undefined}
-          disabled={recordActionsLocked} recordOpen={!!recordAction} onWindow={galleryWindowChanged} onOpen={record => void openViewRecord(record)} onRefresh={() => void reload()} />
+          disabled={recordViewDisabled} recordOpen={!!recordAction} onWindow={galleryWindowChanged} onOpen={record => void openViewRecord(record)} onRefresh={() => void reload()} />
         : <div className="grid-host" aria-busy={locked || !ready || grouping.pending} ref={gridHost} onCopyCapture={event => {
         if (!gridHost.current?.querySelector('canvas')?.contains(document.activeElement)) return;
         event.preventDefault();
@@ -981,12 +991,25 @@ export function TableApp({ tableId, model, api, host, onManage }: {
         /></EditorContext.Provider> : <div className="loading-state" role="status">{message ? 'Could not load the table. Try Reconnect.' : grouping.enabled ? 'Loading groups…' : 'Opening your workspace…'}</div>}
       </div>}
     </section>
-    <footer><span role="status" className={pending ? 'pending-status' : ''}>{status}</span>
+    <footer className="table-status">
+      <span role="status" className={failedDraft ? 'pending-status' : ''} title={status}>{status}</span>
       <span>{table ? `${model.rowCount.toLocaleString()} ${model.rowCount === 1 ? 'record' : 'records'} · ${fields.length} ${fields.length === 1 ? 'field' : 'fields'}` : 'Loading records…'}</span>
-      <span>{view?.type === 'board' ? 'Move records by dragging or choosing a status' : view?.type === 'calendar'
-        ? 'Arrow keys to navigate dates · Enter to browse records' : view?.type === 'gantt' ? 'Drag to adjust dates · Enter opens record details'
-        : view?.type === 'gallery' ? 'Arrow keys to navigate cards · Enter opens record details'
-          : 'Changes save automatically · Ctrl+Z to undo · Ctrl+Y to redo'}</span></footer>
+      <span role="status" title={updateStatus ?? viewHint}>{updateStatus ?? viewHint}</span>
+    </footer>
+    {(recovery || missingTable || notice) && <div className="table-notifications">
+      {missingTable && <div role="status" className="table-notice">{missingTable}</div>}
+      {notice && <div className="table-notice"><span role="status">{notice}</span><button onClick={() => setNotice(undefined)}>Dismiss</button></div>}
+      {recovery && <div className="table-notice table-error">
+        {message && <span role="alert">{message}
+          {model.conflicted && ' Your edits are still here. Copy them before discarding and reloading the current records.'}
+        </span>}
+        {updateFailure && <span role="status">{updateFailure}</span>}
+        <div className="actions">
+          <button onClick={() => void reload()} disabled={locked}>{pending || editorDirty ? 'Discard edits' : 'Reconnect'}</button>
+          {failedDraft && <button onClick={() => void save()} disabled={locked}>Retry saving</button>}
+        </div>
+      </div>}
+    </div>}
     {recordAction?.kind === 'edit' && table && <LiveRecordDialog original={recordAction.records[0]!} table={table} api={api} history={history} setDirty={setFormDirty}
       onClose={() => { setRecordAction(undefined); wakeSync.current(); }} onSaved={records => { model.acceptSaved(records); wakeSync.current(); }} />}
     {recordAction && recordAction.kind !== 'edit' && table && <RecordDialog action={recordAction} table={table} api={api} setDirty={setFormDirty}

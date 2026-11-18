@@ -70,7 +70,7 @@ export async function verifyExternalRefresh(page, application) {
     const form = dialog.getByLabel('Title', { exact: true });
     await form.fill('Unsaved form 中文');
     await update(records[1], { [name]: 'Remote Beta' });
-    await page.waitForFunction(() => [...document.querySelectorAll('.notice-banner')].some(element => element.textContent.includes('Updates are available')), undefined, { polling: 100 });
+    await page.locator('.table-status').getByText('Updates are available', { exact: false }).waitFor();
     assert.equal(await form.inputValue(), 'Unsaved form 中文');
     assert.equal(await form.evaluate(element => element === document.activeElement), true);
     assert.equal(await cell(0, 0).textContent(), 'Beta');

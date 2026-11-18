@@ -31,6 +31,11 @@ These guidelines define the contribution workflow and implementation boundaries 
 - Call the record-label field the **primary display field** in product copy and documentation. A record's immutable UUID is its primary key; a column has a separate stable field UUID. Selecting a display field does not imply uniqueness or a required value.
 - Validate untrusted input at real system boundaries and rely on checked types and invariants internally. Avoid speculative abstractions, redundant checks, silent fallbacks, and retries of non-idempotent writes. Add compatibility paths only for concrete supported consumers.
 
+## Interface Stability
+
+- Preserve the position and size of existing interface elements when notices appear or disappear. Use a reserved status area or an overlay such as a floating notice or dialog. Never insert temporary banners into the main layout or let status text wrap the layout into additional rows.
+- Show routine autosave feedback in a quiet, persistent status area, for example **All changes saved**. Surface failures and conflicts where users can act on them. Keep controls and their focus visually stable during autosave and background refreshes. Avoid flashing, fading, remounting, or temporarily dimming controls during those operations.
+
 ## Testing
 
 - Add regression tests for meaningful behavior changes and bug fixes. Test observable behavior rather than duplicating implementation details.

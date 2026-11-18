@@ -176,8 +176,10 @@ export async function verifyChainedLookups(page, application) {
     for (const field of [back, self]) await call(rootPath(root.id) + '/fields/' + field.id, 'DELETE', { expectedVersion: (await call(rootPath(root.id))).version });
     await waitForLiveSync(page);
     await page.getByText('1 record · 7 fields', { exact: true }).waitFor();
-    await openChainRecord(page); await panel.getByRole('button', { name: 'Close', exact: true }).click();
-    await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowRight');
+    await openChainRecord(page); await closeSavedRecord(page);
+    const bounds = await page.locator('canvas').first().boundingBox();
+    await page.mouse.click(bounds.x + 460, bounds.y + 58);
+    await page.waitForFunction(() => document.querySelector('canvas')?.contains(document.activeElement));
     await page.keyboard.press('Enter'); assert.equal(await page.locator('.rowweave-cell-editor').count(), 0);
     await page.keyboard.press('Control+c');
     await page.waitForFunction(async () => await navigator.clipboard.readText() === '[0,30]');

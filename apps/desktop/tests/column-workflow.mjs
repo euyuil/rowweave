@@ -121,7 +121,7 @@ export async function verifyColumnWorkflow(page) {
   assert.equal((await readView()).query.sort[0].direction, 'desc');
   await menu(0);
   await renameView('Changed with menu open');
-  await page.waitForFunction(() => [...document.querySelectorAll('.notice-banner')].some(element => element.textContent.includes('Updates are available')));
+  await page.locator('.table-status').getByText('Updates are available', { exact: false }).waitFor();
   assert.equal(await page.getByRole('tab', { name: 'Updated elsewhere', exact: true }).count(), 1);
   await page.getByRole('button', { name: 'Sort ascending', exact: true }).click();
   await page.getByRole('dialog').getByRole('alert').filter({ hasText: 'view changed' }).waitFor();

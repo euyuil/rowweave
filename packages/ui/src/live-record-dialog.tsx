@@ -4,6 +4,7 @@ import type { WorkspaceApi } from '../../client/src/http-client.js';
 import type { LiveHistory } from '../../client/src/live-history.js';
 import { cellDisplay, sameValue } from '../../client/src/cell-values.js';
 import { Dialog } from './dialog.js';
+import { ActionButton } from './action-button.js';
 import { FieldInput } from './field-input.js';
 import { AttachmentContext } from './attachment-context.js';
 import { RecordHistoryPanel } from './record-history.js';
@@ -105,7 +106,7 @@ export function LiveRecordDialog({ original, table, api, history, setDirty, onCl
   };
   const primary = table.fields.find(field => field.id === table.primaryFieldId)!;
   return <Dialog title={cellDisplay(primary, base.values[primary.id]) || 'Untitled record'} subtitle={`${table.name} · Record details`}
-    onClose={() => changed ? setConfirmClose(true) : onClose()} busy={history.busy || transferring || composing || restoring} drawer>
+    onClose={() => changed ? setConfirmClose(true) : onClose()} busy={transferring || composing || restoring} closingBlocked={history.busy} drawer>
     <nav className="record-sections" aria-label="Record sections">
       <button type="button" disabled={composing || restoring} aria-pressed={!showHistory} onClick={() => setShowHistory(false)}>Details</button>
       <button type="button" disabled={composing || restoring} aria-pressed={showHistory} onClick={() => setShowHistory(true)}>History</button>
@@ -127,9 +128,9 @@ export function LiveRecordDialog({ original, table, api, history, setDirty, onCl
     {error && <p className="form-error" role="alert">{error} Your unsaved changes are retained.</p>}
     {syncError && <p role="status">{syncError}</p>}
     <div className="dialog-actions"><span className="record-save-status" role="status">{history.busy ? 'Saving…' : changed ? error ? 'Not saved' : 'Waiting to save…' : 'All changes saved'}</span>
-      <button disabled={changed || composing || !history.canUndo} onClick={() => void move(false)}>Undo</button>
-      <button disabled={changed || composing || !history.canRedo} onClick={() => void move(true)}>Redo</button>
+      <ActionButton disabled={composing || !history.hasUndo || changed && !!error} blocked={changed || history.busy} onClick={() => void move(false)}>Undo</ActionButton>
+      <ActionButton disabled={composing || !history.hasRedo || changed && !!error} blocked={changed || history.busy} onClick={() => void move(true)}>Redo</ActionButton>
       {error && changed && <button disabled={history.busy || composing} onClick={() => void save()}>Retry saving</button>}
-      <button disabled={history.busy || transferring || composing || restoring} onClick={() => changed ? setConfirmClose(true) : onClose()}>Close</button></div>
+      <ActionButton disabled={transferring || composing || restoring} blocked={history.busy} onClick={() => changed ? setConfirmClose(true) : onClose()}>Close</ActionButton></div>
   </Dialog>;
 }

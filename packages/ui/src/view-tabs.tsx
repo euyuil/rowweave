@@ -1,8 +1,9 @@
 import React, { useEffect, useRef } from 'react';
 import type { GridView } from '../../contracts/src/index.js';
+import { ActionButton } from './action-button.js';
 
-export function ViewTabs({ views, selected, disabled, panelId, onSelect, onCreate }: {
-  views: GridView[]; selected: string | undefined; disabled: boolean; panelId: string;
+export function ViewTabs({ views, selected, disabled, blocked, panelId, onSelect, onCreate }: {
+  views: GridView[]; selected: string | undefined; disabled: boolean; blocked: boolean; panelId: string;
   onSelect(view: GridView): void; onCreate(): void;
 }) {
   const list = useRef<HTMLDivElement>(null);
@@ -25,12 +26,13 @@ export function ViewTabs({ views, selected, disabled, panelId, onSelect, onCreat
       tabs[next]!.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     }}>
       {views.map(view => <button key={view.id} role="tab" aria-selected={view.id === selected}
-        aria-controls={panelId} tabIndex={view.id === selected ? 0 : -1} aria-disabled={disabled}
-        title={`${view.name} · ${view.type === 'board' ? 'Board' : view.type === 'calendar' ? 'Calendar' : view.type === 'gantt' ? 'Gantt' : view.type === 'gallery' ? 'Gallery' : 'Grid'}`} onClick={() => { if (!disabled && view.id !== selected) onSelect(view); }}>
+        aria-controls={panelId} tabIndex={view.id === selected ? 0 : -1} aria-disabled={disabled || blocked}
+        data-unavailable={disabled || undefined}
+        title={`${view.name} · ${view.type === 'board' ? 'Board' : view.type === 'calendar' ? 'Calendar' : view.type === 'gantt' ? 'Gantt' : view.type === 'gallery' ? 'Gallery' : 'Grid'}`} onClick={() => { if (!disabled && !blocked && view.id !== selected) onSelect(view); }}>
         <span aria-hidden="true" className="view-type-icon">{view.type === 'board' ? '▥' : view.type === 'calendar' ? '▣' : view.type === 'gantt' ? '☷' : view.type === 'gallery' ? '▧' : '▦'}</span>
         <span className="view-tab-name">{view.name}</span>
       </button>)}
     </div>
-    <button className="new-view" aria-label="New view" title="New view" disabled={disabled} onClick={onCreate}>+</button>
+    <ActionButton className="new-view" aria-label="New view" title="New view" disabled={disabled} blocked={blocked} onClick={onCreate}>+</ActionButton>
   </div>;
 }
