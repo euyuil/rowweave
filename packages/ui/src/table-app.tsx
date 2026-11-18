@@ -13,7 +13,7 @@ import { prepareBoardSnapshot, type BoardSnapshot, type BoardWindow } from '../.
 import { prepareCalendarSnapshot, type CalendarSnapshot, type CalendarWindow } from '../../client/src/calendar-refresh.js';
 import { calendarToday } from '../../client/src/calendar-dates.js';
 import { parseTextValue } from '../../core/src/field-values.js';
-import { CellEditor, EditorContext, type EditableCell, type EditorHandle } from './cell-editor.js';
+import { CellEditor, EditorContext, isInlineTextField, type EditableCell, type EditorHandle } from './cell-editor.js';
 import { drawSelectCell } from './select-values.js';
 import { AttachmentContext } from './attachment-context.js';
 import { parseClipboard, serializeClipboard } from './clipboard.js';
@@ -940,7 +940,8 @@ export function TableApp({ tableId, model, api, host, onManage }: {
             if (cell.kind !== GridCellKind.Text) return undefined;
             const editable = cell as EditableCell;
             const bounds = grid.current?.getBounds(fields.findIndex(field => field.id === editable.field.id), editable.gridRow);
-            return { editor: CellEditor, ...(bounds ? { styleOverride: { left: bounds.x - 1, top: bounds.y - 1 } } : {}) };
+            return { editor: CellEditor, disablePadding: isInlineTextField(editable.field),
+              ...(bounds ? { styleOverride: { left: bounds.x - 1, top: bounds.y - 1 } } : {}) };
           }}
           isOutsideClick={event => {
             const editor = activeEditor.current;

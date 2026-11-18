@@ -241,7 +241,13 @@
 .rowweave-app .sort-rule { margin: 8px 0; }
 .rowweave-app .sort-rule select { min-width: 0; flex: 1; }
 .rowweave-cell-editor { box-sizing: border-box; min-width: 120px; }
-.rowweave-cell-editor > textarea { width: 100%; resize: vertical; border: 0; outline: 0; font: inherit; color: inherit; background: transparent; box-sizing: border-box; }
+/* Include the overlay's 1px outset and the canvas text's half-pixel offset. */
+.rowweave-cell-editor:not(.typed-cell-editor) { padding-inline: calc(var(--gdg-cell-horizontal-padding) + 1.5px); }
+.rowweave-cell-editor > textarea {
+  display: block; width: 100%; box-sizing: border-box; resize: none;
+  padding: 0 0 3px; border: 0; outline: 0; background: transparent;
+  font: var(--gdg-base-font-style) var(--gdg-font-family); color: var(--gdg-text-dark);
+}
 .rowweave-cell-editor .cell-error { padding: 8px 0; color: #9a382a; font-size: 12px; white-space: normal; }
 .typed-cell-editor { min-width: 240px; padding: 8px; }
 .typed-cell-editor .form-field { display: flex; flex-direction: column; gap: 8px; margin: 0; }
