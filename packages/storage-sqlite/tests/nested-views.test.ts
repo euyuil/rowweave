@@ -1,3 +1,4 @@
+import { workspaceFormat } from '../src/migrations.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
@@ -45,7 +46,7 @@ test('saved nested views align bounded groups, record order, CSV, restart and ba
   assert.deepEqual(reopened.queryGroups(table.id, query), layout);
   const backup = data.path + '.backup', restored = data.path + '.restored';
   t.after(async () => { await Promise.all([backup, restored].map(path => rm(path, { force: true }))); });
-  assert.equal((await backupWorkspace(data.path, backup)).version, 38);
+  assert.equal((await backupWorkspace(data.path, backup)).version, workspaceFormat);
   await restoreWorkspace(backup, restored);
   const db = new DatabaseSync(restored);
   try {
@@ -100,12 +101,11 @@ test('nested saved groups can read a linked scalar at a later level without crea
   assert.ok(service.queryGroups(table.id, { viewId: saved.id }).groups.some(group => group.key === 7));
 });
 
-test('format 31 preserves scalar views, UUIDs and history when upgrading format 30', t => {
+test('Scalar views, UUIDs and history survive reopening before adding nested groups', t => {
   const { data, store, service, table, status, view, rows } = setup(t);
   const scalar = service.updateView(table.id, view.id, { expectedVersion: view.version, groupBy: status });
   const history = service.recordHistory(table.id, rows[0]!.id, {}), state = service.workspaceState({ tableId: table.id, viewId: view.id });
   store.close();
-  const db = new DatabaseSync(data.path); db.exec('PRAGMA user_version = 30'); db.close();
   const reopened = new RecordService(data.open());
   assert.deepEqual(reopened.getView(table.id, view.id), scalar);
   assert.deepEqual(reopened.getRecord(table.id, rows[0]!.id), rows[0]);

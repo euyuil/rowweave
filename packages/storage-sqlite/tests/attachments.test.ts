@@ -1,9 +1,10 @@
+import { workspaceFormat } from '../src/migrations.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { fixture, removeWorkspaceState } from './helpers.js';
+import { fixture } from './helpers.js';
 import { RecordService } from '../../core/src/record-service.js';
 import { maxAttachmentBytes } from '../../contracts/src/index.js';
 import { SqliteRecordStore } from '../src/record-store.js';
@@ -25,7 +26,7 @@ test('attachments retain exact binary bytes and immutable metadata across restar
   const reopened = new RecordService(data.open());
   assert.deepEqual(reopened.getAttachment(table.id, file.id), file);
   const backup = join(dirname(data.path), 'files-backup.sqlite'), restored = join(dirname(data.path), 'restored.sqlite');
-  assert.equal((await backupWorkspace(data.path, backup)).version, 38);
+  assert.equal((await backupWorkspace(data.path, backup)).version, workspaceFormat);
   await restoreWorkspace(backup, restored);
   const restoredStore = new SqliteRecordStore(restored);
   try { assert.deepEqual(Buffer.from(new RecordService(restoredStore).downloadAttachment(table.id, file.id).bytes), bytes); }
@@ -73,10 +74,9 @@ test('attachment pages are bounded and stable while new uploads arrive, and file
   assert.throws(() => service.deleteAttachment(table.id, files[0]!.id), { code: 'ATTACHMENT_NOT_FOUND' });
 });
 
-test('format 22 workspaces gain file storage without changing records or schema', t => {
+test('Records, schema and attachment storage survive reopening', t => {
   const data = fixture(t), store = data.open(), service = new RecordService(store), before = service.getTable();
   const records = service.readPage(0, 12); store.close();
-  const db = new DatabaseSync(data.path); removeWorkspaceState(db); db.exec('DROP TABLE attachments; PRAGMA user_version = 22;'); db.close();
   const reopened = new RecordService(data.open());
   assert.deepEqual(reopened.getTable(), before); assert.deepEqual(reopened.readPage(0, 12), records);
   assert.equal(reopened.uploadAttachment(before.id, upload(Buffer.from('new capability'))).size, 14);

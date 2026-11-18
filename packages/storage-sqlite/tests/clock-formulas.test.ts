@@ -1,8 +1,10 @@
+import { recordTable } from '../src/record-tables.js';
+import { workspaceFormat } from '../src/migrations.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { dirname, join } from 'node:path';
-import { fixture, removeWorkspaceState } from './helpers.js';
+import { fixture } from './helpers.js';
 import { RecordService } from '../../core/src/record-service.js';
 import { SqliteRecordStore } from '../src/record-store.js';
 import { backupWorkspace, restoreWorkspace } from '../src/backup.js';
@@ -100,7 +102,7 @@ test('a late clock refresh failure rolls back earlier pages and cleans up tempor
   const before = service.queryRecords(table.id, { limit: 500 });
   const db = new DatabaseSync(data.path);
   try {
-    db.exec("CREATE TRIGGER reject_clock_test BEFORE UPDATE ON records WHEN OLD.position = 202 BEGIN SELECT RAISE(ABORT, 'clock refresh test failure'); END;");
+    db.exec(`CREATE TRIGGER reject_clock_test BEFORE UPDATE ON ${recordTable(table.id)} WHEN OLD.position = 202 BEGIN SELECT RAISE(ABORT, 'clock refresh test failure'); END;`);
     now = new Date('2024-02-29T12:01:00Z');
     assert.throws(() => service.refreshCalculations(), /clock refresh test failure/);
     assert.deepEqual(service.queryRecords(table.id, { limit: 500 }), before);
@@ -166,17 +168,16 @@ test('constant clock propagation retains JSON numbers, booleans, nulls, text and
   assert.equal(service.getRecord(table.id, row.id).formulaErrors, undefined);
 });
 
-test('clock semantics migration preserves deterministic formulas, values and saved versions', t => {
+test('Reopening preserves deterministic formulas, values and saved versions', t => {
   const data = fixture(t, null), store = data.open(), service = new RecordService(store);
   let table = service.createTable({ name: 'Existing formulas' });
   table = service.createField(table.id, { expectedVersion: table.version, name: 'Total', type: 'formula', formula: { expression: 'ARRAYSUM(ARRAY(1, 2))', resultType: 'number' } });
   service.createRecords(table.id, [{ values: {} }]);
   const schema = service.getTable(table.id), records = service.queryRecords(table.id, {}), views = service.listViews(table.id);
   store.close();
-  const db = new DatabaseSync(data.path); removeWorkspaceState(db); db.exec('PRAGMA user_version = 26;'); db.close();
   const reopened = new RecordService(data.open());
   assert.deepEqual(reopened.getTable(table.id), schema); assert.deepEqual(reopened.queryRecords(table.id, {}), records); assert.deepEqual(reopened.listViews(table.id), views);
   assert.equal(reopened.refreshCalculations().changedRecords, 0);
   const check = new DatabaseSync(data.path);
-  try { assert.equal(check.prepare('PRAGMA user_version').get()!['user_version'], 38); } finally { check.close(); }
+  try { assert.equal(check.prepare('PRAGMA user_version').get()!['user_version'], workspaceFormat); } finally { check.close(); }
 });

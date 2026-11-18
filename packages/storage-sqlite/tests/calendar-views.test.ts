@@ -1,3 +1,4 @@
+import { workspaceFormat } from '../src/migrations.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
@@ -95,22 +96,21 @@ test('calendar settings reject invalid input and view conversion clears irreleva
   assert.equal(service.queryCalendar(table.id, { viewId: view.id, calendar, from: '2026-11-01', toExclusive: '2026-11-03' }).scheduledRecords, 3);
 });
 
-test('calendar migration preserves earlier workspaces and saved calendars survive backup and restore', async t => {
+test('Saved calendars survive reopening, backup and restore', async t => {
   const { data, store, service, table, calendar } = setup(t);
   const previousViews = service.listViews(table.id), previousRecords = service.queryRecords(table.id, {});
   store.close();
-  const old = new DatabaseSync(data.path); old.exec('PRAGMA user_version = 34'); old.close();
   const reopened = new RecordService(data.open());
   assert.deepEqual(reopened.listViews(table.id), previousViews);
   assert.deepEqual(reopened.queryRecords(table.id, {}), previousRecords);
   const view = reopened.createView(table.id, { name: 'Backed-up schedule', type: 'calendar', calendar });
   const backup = data.path + '.backup', restored = data.path + '.restored';
   t.after(async () => { await Promise.all([backup, restored].map(path => rm(path, { force: true }))); });
-  assert.equal((await backupWorkspace(data.path, backup)).version, 38);
+  assert.equal((await backupWorkspace(data.path, backup)).version, workspaceFormat);
   await restoreWorkspace(backup, restored);
   const db = new DatabaseSync(restored);
   try {
-    assert.equal(db.prepare('PRAGMA user_version').get()!['user_version'], 38);
+    assert.equal(db.prepare('PRAGMA user_version').get()!['user_version'], workspaceFormat);
     const config = JSON.parse(db.prepare('SELECT config_json FROM views WHERE id = ?').get(view.id)!['config_json'] as string);
     assert.equal(config.type, 'calendar'); assert.deepEqual(config.calendar, calendar);
   } finally { db.close(); }

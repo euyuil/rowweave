@@ -1,8 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
 import { dirname, join } from 'node:path';
-import { fixture, removeWorkspaceState } from './helpers.js';
+import { fixture } from './helpers.js';
 import { RecordService } from '../../core/src/record-service.js';
 import { SqliteRecordStore } from '../src/record-store.js';
 import { backupWorkspace, restoreWorkspace } from '../src/backup.js';
@@ -87,12 +86,12 @@ test('date-derived values propagate across linked summaries and date lookups ins
   assert.equal(service.queryRecords(source.id, { filter: { conjunction: 'and', conditions: [{ fieldId: lookup, operator: 'eq', value: '2024-03-01' }] } }).total, 1);
 });
 
-test('format 24 upgrades preserve existing formulas, saved values and versions', t => {
+test('Date calculation schema, saved values and versions survive reopening', t => {
   const data = fixture(t, null), store = data.open(), service = new RecordService(store);
   let table = service.createTable({ name: 'Previous formulas' });
   table = service.createField(table.id, { expectedVersion: table.version, name: 'Value', type: 'formula', formula: { expression: '1 + 2', resultType: 'number' } });
   const row = service.createRecords(table.id, [{ values: {} }]).records[0]!, views = service.listViews(table.id), before = service.getTable(table.id);
-  store.close(); const db = new DatabaseSync(data.path); removeWorkspaceState(db); db.exec('PRAGMA user_version = 24;'); db.close();
+  store.close();
   const reopened = new RecordService(data.open());
   assert.deepEqual(reopened.getTable(table.id), before); assert.deepEqual(reopened.getRecord(table.id, row.id), row);
   assert.deepEqual(reopened.listViews(table.id), views);

@@ -1,3 +1,4 @@
+import { recordTable, scalarColumn } from './record-tables.js';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import { valueField, isLookupSummary, type Field, type GroupCollapse, type GroupLayout, type GroupWindow, type ScalarValue, type SummaryMeasure, type Table } from '../../contracts/src/index.js';
 import { fieldText } from '../../core/src/field-display.js';
@@ -10,15 +11,13 @@ export function groupLayout(db: DatabaseSync, table: Table, field: Field, collap
   const selected = valueField(field);
   const configured = selected.type === 'singleSelect' ? [...selected.options!.map(option => option.id), null]
     : selected.type === 'checkbox' ? [false, true, null] : [null];
-  const expression = isLookupSummary(field) ? lookupSql(field) : 'json_extract(r.values_json, :groupPath)';
-  const measureParameters: Record<string, SQLInputValue> = {};
+  const expression = isLookupSummary(field) ? lookupSql(field) : scalarColumn(field, 'r');
   const columns = new Map([[field.id, { name: 'key', expression: 'input.key' }]]);
   for (const measure of measures) {
     if (columns.has(measure.fieldId)) continue;
     const definition = table.fields.find(field => field.id === measure.fieldId)!;
     const name = `groupMeasure${columns.size}`;
-    if (!isLookupSummary(definition)) measureParameters[`:${name}`] = `$.${JSON.stringify(definition.id)}`;
-    columns.set(definition.id, { name, expression: isLookupSummary(definition) ? lookupSql(definition) : `json_extract(r.values_json, :${name})` });
+    columns.set(definition.id, { name, expression: isLookupSummary(definition) ? lookupSql(definition) : scalarColumn(definition, 'r') });
   }
   const functions = { sum: 'SUM', average: 'AVG', min: 'MIN', max: 'MAX' };
   const aggregates = measures.map((measure, index) =>
@@ -33,7 +32,7 @@ export function groupLayout(db: DatabaseSync, table: Table, field: Field, collap
       SELECT * FROM layout WHERE ${range} ORDER BY rowStart LIMIT :groupLimit
     ), measureInput AS MATERIALIZED (
       SELECT ${[...columns.values()].map(column => `${column.expression} AS ${column.name}`).join(', ')}
-      FROM input JOIN records r ON r.id = input.recordId
+      FROM input JOIN ${recordTable(table.id)} r ON r.id = input.recordId
       WHERE input.key IN (SELECT key FROM selected) OR (input.key IS NULL AND EXISTS (SELECT 1 FROM selected WHERE key IS NULL))
     ), measured AS (SELECT key${aggregates} FROM measureInput GROUP BY key)` : '';
   const page = measures.length ? `SELECT selected.*, ${measures.map((_, index) => `measured.measure${index}`).join(', ')}
@@ -42,7 +41,7 @@ export function groupLayout(db: DatabaseSync, table: Table, field: Field, collap
 
   // Prefix sums keep record offsets independent of collapsed display rows; only intersecting groups leave SQLite.
   const row = db.prepare(`WITH input AS MATERIALIZED (
-      SELECT ${expression} AS key${measures.length ? ', r.id AS recordId' : ''} FROM records r WHERE ${where}
+      SELECT ${expression} AS key${measures.length ? ', r.id AS recordId' : ''} FROM ${recordTable(table.id)} r WHERE ${where}
     ), actual AS MATERIALIZED (SELECT key, COUNT(*) AS count FROM input GROUP BY key),
     groups AS MATERIALIZED (
       SELECT * FROM actual UNION ALL SELECT value, 0 FROM json_each(:groupConfigured) configured
@@ -61,8 +60,7 @@ export function groupLayout(db: DatabaseSync, table: Table, field: Field, collap
       (SELECT json_group_array(json_object('key', key, 'count', count, 'recordOffset', recordOffset,
         'rowStart', rowStart, 'expandedOffset', expandedOffset, 'collapsed', collapsed${values})) FROM (
         ${page}
-      )) AS segments FROM layout`).get({ ...parameters, ...measureParameters,
-        ...(!isLookupSummary(field) ? { ':groupPath': `$.${JSON.stringify(field.id)}` } : {}),
+      )) AS segments FROM layout`).get({ ...parameters,
         ':groupConfigured': JSON.stringify(configured), ':groupExceptions': JSON.stringify(collapse.exceptions),
         ':groupCollapsed': Number(collapse.defaultCollapsed), ':groupOffset': offset, ':groupLimit': limit })!;
   const segments = JSON.parse(row['segments'] as string) as Array<{ key: ScalarValue; count: number; recordOffset: number; rowStart: number; expandedOffset: number; collapsed: number; values?: Array<number | null> }>;

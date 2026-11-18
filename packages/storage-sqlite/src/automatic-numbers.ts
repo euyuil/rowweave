@@ -1,3 +1,4 @@
+import { recordPatch, recordTable } from './record-tables.js';
 import type { DatabaseSync } from 'node:sqlite';
 import type { CellValue, Field, Table } from '../../contracts/src/index.js';
 import { ServiceError } from '../../core/src/errors.js';
@@ -25,11 +26,11 @@ export class AutomaticNumbers {
     if (!added.length) return changed;
     const create = this.db.prepare('INSERT INTO field_sequences (field_id, last_value) VALUES (?, 0)');
     for (const field of added) create.run(field.id);
-    const write = this.db.prepare('UPDATE records SET values_json = ?, version = version + 1 WHERE id = ?');
-    for (const row of this.db.prepare('SELECT id, values_json FROM records WHERE table_id = ? ORDER BY position').iterate(table.id)) {
-      const values = JSON.parse(row['values_json'] as string) as Record<string, CellValue>;
+    const write = recordPatch(this.db, table.id, added.map(field => field.id));
+    for (const row of this.db.prepare(`SELECT id FROM ${recordTable(table.id)} ORDER BY position`).iterate()) {
+      const values: Record<string, CellValue> = {};
       this.assign(added, values);
-      write.run(JSON.stringify(values), row['id']!);
+      write(row['id'] as string, values, 1);
       changed.add(row['id'] as string);
     }
     return changed;

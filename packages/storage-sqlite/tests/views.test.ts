@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
-import { fixture, removeWorkspaceState } from './helpers.js';
+import { fixture } from './helpers.js';
 import { RecordService, ServiceError } from '../../core/src/record-service.js';
 
 test('saved views persist query and column settings and detect changed continuation views', t => {
@@ -103,9 +102,6 @@ test('version-three workspaces receive an initial view while preserving records 
   const before = store.getTable();
   const records = store.readPage(0, 12);
   store.close();
-  const db = new DatabaseSync(data.path);
-  removeWorkspaceState(db); db.exec('DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; DROP TABLE field_lookups; DROP TABLE relation_edges; DROP TABLE field_relations; DROP TABLE views; ALTER TABLE records DROP COLUMN formula_errors_json; PRAGMA user_version = 3;');
-  db.close();
   const reopened = data.open();
   assert.deepEqual(reopened.getTable(), before);
   assert.deepEqual(reopened.readPage(0, 12), records);

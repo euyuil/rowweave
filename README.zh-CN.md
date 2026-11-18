@@ -19,6 +19,8 @@ Windows 评估版本可从成功的 [CI 运行记录](https://github.com/euyuil/
 
 从空白工作区开始：创建表，添加字段，再录入或导入记录。单元格结束编辑即自动保存，记录详情在输入短暂停顿后自动保存，其他客户端的修改也会自动同步。[实时编辑说明](docs/live-editing.md)介绍了冲突保护和当前会话的撤销、重做机制。
 
+从旧版工作区切换到此版本时，请使用单独的目录创建新工作区。参见[工作区版本说明（英文）](docs/backup.md#changing-versions)。
+
 [桌面连接（英文）](docs/connections.md) · [CSV 指南（英文）](docs/data-exchange.md) · [验收步骤（英文）](docs/acceptance.md)
 
 ## 连接你的软件

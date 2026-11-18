@@ -1,9 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
 import { randomBytes } from 'node:crypto';
 import { dirname, join } from 'node:path';
-import { fixture, removeWorkspaceState } from './helpers.js';
+import { fixture } from './helpers.js';
 import { RecordService } from '../../core/src/record-service.js';
 import { SqliteRecordStore } from '../src/record-store.js';
 import { backupWorkspace, restoreWorkspace } from '../src/backup.js';
@@ -134,7 +133,7 @@ test('reciprocal and connected formula writes share one batch and coalesce inter
   assert.deepEqual(service.recordHistory(orders.id, order.id, {}).changes[0]!.restoredFrom, { changeId: change.id, snapshot: 'before' });
 });
 
-test('history survives restart and backup, retains deletion snapshots and migrates old records without invented events', async t => {
+test('History survives restart and backup and retains deletion snapshots', async t => {
   const { data, store, service, table, amount } = setup(t);
   const row = service.createRecords(table.id, [{ values: { [amount]: 1 } }]).records[0]!;
   service.updateBatch([{ id: row.id, expectedVersion: 1, values: { [amount]: 2 } }], table.id);
@@ -156,18 +155,6 @@ test('history survives restart and backup, retains deletion snapshots and migrat
   assert.equal(reopened.recordChange(table.id, row.id, deletion.id).before!.values[amount], 2);
   reopened.deleteTable(table.id, { expectedVersion: table.version });
   reopenedStore.close();
-  const old = fixture(t, null), oldStore = old.open(), oldService = new RecordService(oldStore);
-  const oldTable = oldService.createTable({ name: 'Old workspace' });
-  const oldRecord = oldService.createRecords(oldTable.id, [{ values: { [oldTable.primaryFieldId]: 'Kept' } }]).records[0]!;
-  oldStore.close();
-  const db = new DatabaseSync(old.path);
-  removeWorkspaceState(db); db.exec('DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; PRAGMA user_version = 15;'); db.close();
-  const migrated = new RecordService(old.open());
-  assert.deepEqual(migrated.getRecord(oldTable.id, oldRecord.id), oldRecord);
-  assert.deepEqual(migrated.recordHistory(oldTable.id, oldRecord.id, {}), { changes: [] });
-  migrated.updateBatch([{ id: oldRecord.id, expectedVersion: 1, values: { [oldTable.primaryFieldId]: 'New' } }], oldTable.id);
-  const entry = migrated.recordHistory(oldTable.id, oldRecord.id, {}).changes[0]!;
-  assert.deepEqual(migrated.recordChange(oldTable.id, oldRecord.id, entry.id).before, oldRecord);
 });
 
 test('HTTP and SDK share history paging, snapshot restore and stale-write rejection', async t => {

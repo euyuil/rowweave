@@ -1,8 +1,9 @@
+import { workspaceFormat } from '../src/migrations.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { dirname, join } from 'node:path';
-import { fixture, removeWorkspaceState } from './helpers.js';
+import { fixture } from './helpers.js';
 import { RecordService } from '../../core/src/record-service.js';
 import { SqliteRecordStore } from '../src/record-store.js';
 import { backupWorkspace, restoreWorkspace } from '../src/backup.js';
@@ -122,25 +123,24 @@ test('another connection exposes linked-label edits and clock calculation revisi
   assert.equal(calculated.table!.viewsRevision, linked.table!.viewsRevision);
 });
 
-test('format 28 migration preserves saved identities and versions and state survives restart and backup', async t => {
+test('Saved identities, versions and workspace state survive restart and backup', async t => {
   const data = fixture(t, null), store = data.open(), service = new RecordService(store);
   const table = service.createTable({ name: 'Existing' });
   const record = service.createRecords(table.id, [{ values: { [table.primaryFieldId]: 'Preserved' } }]).records[0]!;
   const schema = service.getTable(table.id), views = service.listViews(table.id), history = service.recordHistory(table.id, record.id, {});
+  const request = { tableId: table.id, viewId: views[0]!.id }, before = service.workspaceState(request);
   store.close();
-  const db = new DatabaseSync(data.path);
-  removeWorkspaceState(db); db.exec('PRAGMA user_version = 27'); db.close();
   const reopened = new RecordService(data.open());
   assert.deepEqual(reopened.getTable(table.id), schema);
   assert.deepEqual(reopened.getRecord(table.id, record.id), record);
   assert.deepEqual(reopened.listViews(table.id), views);
   assert.deepEqual(reopened.recordHistory(table.id, record.id, {}), history);
-  const request = { tableId: table.id, viewId: views[0]!.id }, state = reopened.workspaceState(request);
-  assert.equal(state.catalogRevision, 1); assert.equal(state.table!.viewsRevision, 1);
+  const state = reopened.workspaceState(request);
+  assert.deepEqual(state, before);
   assert.deepEqual(new RecordService(data.open()).workspaceState(request), state);
   const backup = join(dirname(data.path), 'backup.sqlite'), restored = join(dirname(data.path), 'restored.sqlite');
-  assert.equal((await backupWorkspace(data.path, backup)).version, 38);
-  assert.equal((await restoreWorkspace(backup, restored)).version, 38);
+  assert.equal((await backupWorkspace(data.path, backup)).version, workspaceFormat);
+  assert.equal((await restoreWorkspace(backup, restored)).version, workspaceFormat);
   const copy = new SqliteRecordStore(restored);
   try {
     assert.deepEqual(copy.workspaceState(request), state);

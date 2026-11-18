@@ -1,3 +1,4 @@
+import { recordTable, scalarColumn } from './record-tables.js';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import { valueField, isLookupSummary, type Field, type GroupPathCollapse, type GroupLayout, type GroupSegment, type GroupWindow, type ScalarValue, type SummaryMeasure, type Table } from '../../contracts/src/index.js';
 import { ServiceError } from '../../core/src/errors.js';
@@ -14,25 +15,20 @@ export function nestedGroupLayout(db: DatabaseSync, table: Table, fields: readon
     const layout = groupLayout(db, table, fields[0]!, { defaultCollapsed: true, exceptions: [] }, where, parameters, offset, limit, window, measures);
     return { ...layout, groups: layout.groups.map(group => ({ ...group, path: [group.key], leaf: false })) };
   }
-  const bindings: Record<string, SQLInputValue> = {};
-  const expression = (field: Field, name: string) => {
-    if (isLookupSummary(field)) return lookupSql(field);
-    bindings[`:${name}`] = `$.${JSON.stringify(field.id)}`;
-    return `json_extract(r.values_json, :${name})`;
-  };
+  const expression = (field: Field) => isLookupSummary(field) ? lookupSql(field) : scalarColumn(field, 'r');
   const keys = fields.map((_, index) => `key${index}`), last = fields.length - 1;
-  const expressions = fields.map((field, index) => expression(field, `nestedKey${index}`));
+  const expressions = fields.map(expression);
   const inputKeys = expressions.map((expression, index) => `${expression} AS ${keys[index]}`);
   const selectedFields = fields.map(valueField), root = selectedFields[0]!;
   const configured = root.type === 'singleSelect' ? [...root.options!.map(option => option.id), null] : root.type === 'checkbox' ? [false, true, null] : [null];
   const order = fields.flatMap((field, index) => groupOrder(field, keys[index]!));
   // Zero-count seeds retain empty root headings without creating synthetic child groups.
   const statement = db.prepare(`WITH input AS (
-    SELECT ${inputKeys.join(', ')}, 1 AS weight FROM records r WHERE ${where}
+    SELECT ${inputKeys.join(', ')}, 1 AS weight FROM ${recordTable(table.id)} r WHERE ${where}
     UNION ALL SELECT configured.value${keys.slice(1).map(() => ', NULL').join('')}, 0 FROM json_each(:nestedConfigured) configured)
     SELECT * FROM input ORDER BY ${order.join(', ')}`);
   statement.setReturnArrays(true);
-  const iterator = statement.iterate({ ...parameters, ...bindings, ':nestedConfigured': JSON.stringify(configured) }) as unknown as Iterable<ScalarValue[]>;
+  const iterator = statement.iterate({ ...parameters, ':nestedConfigured': JSON.stringify(configured) }) as unknown as Iterable<ScalarValue[]>;
   const rootExceptions = new Set<ScalarValue>(), childExceptions = new Map<ScalarValue, Set<string>>();
   for (const path of collapse.exceptions) {
     if (path.length === 1) rootExceptions.add(path[0]!);
@@ -79,7 +75,7 @@ export function nestedGroupLayout(db: DatabaseSync, table: Table, fields: readon
   if (measures.length && groups.length) {
     const columns = new Map<string, string>();
     for (const measure of measures) if (!columns.has(measure.fieldId)) columns.set(measure.fieldId,
-      expression(table.fields.find(field => field.id === measure.fieldId)!, `nestedMeasure${columns.size}`));
+      expression(table.fields.find(field => field.id === measure.fieldId)!));
     const functions = { sum: 'SUM', average: 'AVG', min: 'MIN', max: 'MAX' };
     const rootFilter = groups.every(group => group.path![0] === null) ? `${expressions[0]} IS NULL`
       : `${expressions[0]} IN (SELECT key0 FROM selected)` + (groups.some(group => group.path![0] === null) ? ` OR ${expressions[0]} IS NULL` : '');
@@ -87,13 +83,13 @@ export function nestedGroupLayout(db: DatabaseSync, table: Table, fields: readon
       SELECT key AS groupIndex, json_array_length(value) AS depth, ${keys.map((key, index) => `json_extract(value, '$[${index}]') AS ${key}`).join(', ')}
       FROM json_each(:nestedSelected)
     ), input AS MATERIALIZED (
-      SELECT ${inputKeys.join(', ')}, ${[...columns].map(([_, expression], index) => `${expression} AS measureInput${index}`).join(', ')} FROM records r WHERE ${where} AND
+      SELECT ${inputKeys.join(', ')}, ${[...columns].map(([_, expression], index) => `${expression} AS measureInput${index}`).join(', ')} FROM ${recordTable(table.id)} r WHERE ${where} AND
         (${rootFilter})
     ), measureInput AS MATERIALIZED (
       ${fields.map((_, index) => `SELECT selected.groupIndex, ${[...columns].map((_, index) => `input.measureInput${index}`).join(', ')} FROM selected JOIN input ON
         ${keys.slice(0, index + 1).map(key => `input.${key} IS selected.${key}`).join(' AND ')} WHERE selected.depth = ${index + 1}`).join(' UNION ALL ')}
     ) SELECT groupIndex, ${measures.map((measure, index) => `${functions[measure.operation]}(CAST(measureInput${[...columns.keys()].indexOf(measure.fieldId)} AS REAL)) AS measure${index}`).join(', ')}
-      FROM measureInput GROUP BY groupIndex`).all({ ...parameters, ...bindings,
+      FROM measureInput GROUP BY groupIndex`).all({ ...parameters,
       ':nestedSelected': JSON.stringify(groups.map(group => group.path!.map(key => typeof key === 'boolean' ? Number(key) : key))) });
     for (const group of groups) group.values = measures.map(() => null);
     for (const row of measured) groups[row['groupIndex'] as number]!.values = measures.map((_, index) => row[`measure${index}`] as number | null);

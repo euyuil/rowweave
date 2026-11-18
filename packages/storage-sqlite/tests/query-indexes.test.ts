@@ -1,7 +1,8 @@
+import { workspaceFormat } from '../src/migrations.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { fixture, removeWorkspaceState } from './helpers.js';
+import { fixture } from './helpers.js';
 import { RecordService } from '../../core/src/record-service.js';
 import type { FieldCreate, ViewQuery } from '../../contracts/src/index.js';
 import { parseQuery } from '../../core/src/record-query.js';
@@ -45,8 +46,8 @@ test('saved queries use shared indexes for rows and counts, maintain writes, and
   assert.equal(service.queryView(table.id, view.id, {}).total, 50);
   const sql = querySql(table, parseQuery(table, query), new Map());
   for (const statement of [
-    `SELECT r.id, r.version, r.values_json FROM records r WHERE ${sql.where} ORDER BY ${sql.order} LIMIT 100`,
-    `SELECT COUNT(*) FROM records r WHERE ${sql.where}`,
+    `SELECT r.id, r.version, r.values_json FROM ${sql.source} r WHERE ${sql.where} ORDER BY ${sql.order} LIMIT 100`,
+    `SELECT COUNT(*) FROM ${sql.source} r WHERE ${sql.where}`,
   ]) {
     const plan = db.prepare(`EXPLAIN QUERY PLAN ${statement}`).all(sql.parameters);
     assert.ok(plan.some(row => String(row['detail']).includes('rowweave_view_')), JSON.stringify(plan));
@@ -113,30 +114,15 @@ test('select label changes rebuild sorting/search indexes and failed conversions
   assert.equal(service.queryView(table.id, sorted.id, {}).total, 3);
 });
 
-test('version-six migration builds saved-query indexes and preserves records, views, and revisions', t => {
+test('Saved-query indexes, records, views and revisions survive reopening', t => {
   const { data, store, service, table, amount, name, db, indexes } = dataset(t);
   service.createRecords(table.id, [{ values: { [name]: 'Kept', [amount]: 42 } }]);
   const view = service.createView(table.id, { name: 'Sorted', query: { sort: [{ fieldId: amount, direction: 'desc' }] } });
   const before = service.queryView(table.id, view.id, {});
   store.close();
-  for (const index of indexes()) db.exec(`DROP INDEX "${index['name']}"`);
-  removeWorkspaceState(db); db.exec('DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; ALTER TABLE records DROP COLUMN formula_errors_json; PRAGMA user_version = 6;');
   const reopened = new RecordService(data.open());
-  assert.equal(db.prepare('PRAGMA user_version').get()!['user_version'], 38);
+  assert.equal(db.prepare('PRAGMA user_version').get()!['user_version'], workspaceFormat);
   assert.equal(indexes().length, 1);
   assert.deepEqual(reopened.getView(table.id, view.id), view);
   assert.deepEqual(reopened.queryView(table.id, view.id, {}), before);
-});
-
-test('a corrupt saved view aborts migration without leaving indexes or advancing the database version', t => {
-  const { data, store, service, table, amount, db, indexes } = dataset(t);
-  service.createView(table.id, { name: 'Sorted', query: { sort: [{ fieldId: amount, direction: 'asc' }] } });
-  const other = service.createTable({ name: 'Damaged metadata' });
-  store.close();
-  for (const index of indexes()) db.exec(`DROP INDEX "${index['name']}"`);
-  db.prepare("UPDATE views SET config_json = 'invalid json' WHERE table_id = ?").run(other.id);
-  removeWorkspaceState(db); db.exec('DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; ALTER TABLE records DROP COLUMN formula_errors_json; PRAGMA user_version = 6;');
-  assert.throws(() => data.open(), /JSON/);
-  assert.equal(db.prepare('PRAGMA user_version').get()!['user_version'], 6);
-  assert.equal(indexes().length, 0);
 });

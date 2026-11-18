@@ -1,10 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
-import { DatabaseSync } from 'node:sqlite';
 import type { FieldCreate } from '../../contracts/src/index.js';
 import { RecordService, ServiceError } from '../../core/src/record-service.js';
-import { fixture, removeWorkspaceState } from './helpers.js';
+import { fixture } from './helpers.js';
 import { startServer } from '../../../apps/server/src/http-server.js';
 import { createWorkspaceClient } from '../../client/src/http-client.js';
 import { TableModel } from '../../client/src/table-model.js';
@@ -128,7 +127,7 @@ test('lookup queries compare typed members, search labels, project and sort by t
   assert.deepEqual(model.getRecord(0)!.values[lookups[1]!.id], [99, 10]);
 });
 
-test('version-five migration preserves existing linked records and views', t => {
+test('Reopening preserves existing linked records and views', t => {
   const data = fixture(t, null);
   const store = data.open();
   const service = new RecordService(store);
@@ -139,10 +138,7 @@ test('version-five migration preserves existing linked records and views', t => 
   const before = service.getRecord(table.id, record.id);
   const views = service.listViews(table.id);
   store.close();
-  const db = new DatabaseSync(data.path);
-  removeWorkspaceState(db); db.exec('DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; DROP TABLE field_lookups; ALTER TABLE records DROP COLUMN formula_errors_json; PRAGMA user_version = 5;');
-  db.close();
-  const migrated = new RecordService(data.open());
-  assert.deepEqual(migrated.getRecord(table.id, record.id), before);
-  assert.deepEqual(migrated.listViews(table.id), views);
+  const reopened = new RecordService(data.open());
+  assert.deepEqual(reopened.getRecord(table.id, record.id), before);
+  assert.deepEqual(reopened.listViews(table.id), views);
 });

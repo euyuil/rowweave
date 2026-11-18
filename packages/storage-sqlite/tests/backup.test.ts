@@ -1,3 +1,5 @@
+import { recordSource } from '../src/record-tables.js';
+import { workspaceFormat } from '../src/migrations.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
@@ -25,12 +27,12 @@ test('online backups include committed WAL data and restore independent schemas,
   const backup = join(dirname(data.path), 'snapshot.sqlite');
   const result = await backupWorkspace(data.path, backup);
   assert.equal(result.path, backup);
-  assert.equal(result.version, 38);
+  assert.equal(result.version, workspaceFormat);
   assert.equal(result.bytes, (await stat(backup)).size);
   assert.deepEqual(service.listTables(), expectedTables);
   service.updateBatch([{ id: project.id, expectedVersion: project.version, values: { [projects.primaryFieldId]: 'After backup' } }], projects.id);
   const restoredPath = join(dirname(data.path), 'restored.sqlite');
-  assert.equal((await restoreWorkspace(backup, restoredPath)).version, 38);
+  assert.equal((await restoreWorkspace(backup, restoredPath)).version, workspaceFormat);
   const restoredStore = new SqliteRecordStore(restoredPath);
   try {
     const restored = new RecordService(restoredStore);
@@ -44,38 +46,10 @@ test('online backups include committed WAL data and restore independent schemas,
   const snapshot = new DatabaseSync(backup, { readOnly: true });
   try {
     assert.equal(snapshot.prepare('PRAGMA journal_mode').get()!['journal_mode'], 'delete');
-    assert.deepEqual(JSON.parse(snapshot.prepare('SELECT values_json FROM records WHERE id = ?').get(project.id)!['values_json'] as string), project.values);
+    assert.deepEqual(JSON.parse(snapshot.prepare(`SELECT values_json FROM ${recordSource(projects.id)} WHERE id = ?`).get(project.id)!['values_json'] as string), project.values);
   } finally { snapshot.close(); }
   assert.ok(!(await readdir(dirname(data.path))).some(name => name.startsWith('.rowweave-backup-')));
   assert.ok(!(await readdir(dirname(backup))).includes('snapshot.sqlite-wal'));
-});
-
-test('restoring an old snapshot migrates only the copy and preserves the original backup', async t => {
-  const data = fixture(t, null);
-  const legacy = new DatabaseSync(data.path);
-  const fields = [{ id: 'field_1', name: 'Name', type: 'text' }];
-  const values = { field_1: 'Preserved 中文 🌱' };
-  legacy.exec(`CREATE TABLE table_metadata (id TEXT PRIMARY KEY, fields_json TEXT NOT NULL);
-    CREATE TABLE records (id TEXT PRIMARY KEY, position INTEGER NOT NULL UNIQUE,
-      version INTEGER NOT NULL DEFAULT 1, values_json TEXT NOT NULL);
-    PRAGMA user_version = 1;`);
-  legacy.prepare('INSERT INTO table_metadata VALUES (?, ?)').run('prototype', JSON.stringify(fields));
-  legacy.prepare('INSERT INTO records VALUES (?, ?, ?, ?)').run('saved-record', 7, 9, JSON.stringify(values));
-  legacy.close();
-  const sourceBytes = await readFile(data.path);
-  const backup = join(dirname(data.path), 'legacy-backup.sqlite');
-  assert.equal((await backupWorkspace(data.path, backup)).version, 1);
-  const snapshotBytes = await readFile(backup);
-  const restored = join(dirname(data.path), 'upgraded.sqlite');
-  assert.equal((await restoreWorkspace(backup, restored)).version, 38);
-  const store = new SqliteRecordStore(restored);
-  try {
-    assert.deepEqual(store.getTable().fields, fields);
-    assert.deepEqual(store.readPage(0, 10).records, [{ id: 'saved-record', version: 9, values }]);
-    assert.equal(store.listViews('prototype').length, 1);
-  } finally { store.close(); }
-  assert.deepEqual(await readFile(data.path), sourceBytes);
-  assert.deepEqual(await readFile(backup), snapshotBytes);
 });
 
 test('backup and restore refuse existing destinations and leave sources and unrelated files untouched', async t => {
@@ -111,14 +85,14 @@ test('missing, corrupt, uninitialized and unsupported restore inputs produce no 
   const before = await readFile(newer);
   await assert.rejects(restoreWorkspace(newer, destination), /Unsupported database version: 99/);
   assert.deepEqual(await readFile(newer), before);
-  const broken = join(directory, 'broken-migration.sqlite');
+  const broken = join(directory, 'earlier-format.sqlite');
   const legacy = new DatabaseSync(broken);
   legacy.exec(`CREATE TABLE table_metadata (id TEXT PRIMARY KEY, fields_json TEXT NOT NULL);
     CREATE TABLE records (id TEXT PRIMARY KEY, position INTEGER, version INTEGER, values_json TEXT);
     INSERT INTO table_metadata VALUES ('prototype', 'invalid json'); PRAGMA user_version = 1;`);
   legacy.close();
   const legacyBytes = await readFile(broken);
-  await assert.rejects(restoreWorkspace(broken, destination), SyntaxError);
+  await assert.rejects(restoreWorkspace(broken, destination), /Unsupported database version: 1/);
   assert.deepEqual(await readFile(broken), legacyBytes);
   assert.ok(!(await readdir(directory)).includes('restored.sqlite'));
   assert.ok(!(await readdir(directory)).some(name => name.startsWith('.rowweave-backup-')));
@@ -129,7 +103,7 @@ test('referential corruption is rejected before a snapshot is published', async 
   const service = new RecordService(data.open());
   service.createTable({ name: 'Keep' });
   const corrupt = new DatabaseSync(data.path, { enableForeignKeyConstraints: false });
-  corrupt.prepare('INSERT INTO records (id, table_id, position, values_json) VALUES (?, ?, ?, ?)').run('orphan', 'missing-table', 0, '{}');
+  corrupt.prepare('INSERT INTO record_ids (id, table_id) VALUES (?, ?)').run('orphan', 'missing-table');
   corrupt.close();
   const destination = join(dirname(data.path), 'bad-backup.sqlite');
   await assert.rejects(backupWorkspace(data.path, destination), /integrity check/);

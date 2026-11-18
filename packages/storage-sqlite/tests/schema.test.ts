@@ -1,9 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
+import { readFileSync } from 'node:fs';
 import { fixture } from './helpers.js';
 import { RecordService, ServiceError } from '../../core/src/record-service.js';
 import { SqliteRecordStore } from '../src/record-store.js';
+import { fieldColumn, recordTable } from '../src/record-tables.js';
+import { maxFields, type Field } from '../../contracts/src/index.js';
 
 const hasCode = (code: string) => (error: unknown) => error instanceof ServiceError && error.code === code;
 
@@ -13,6 +16,68 @@ test('a fresh workspace starts empty unless a fixture is explicitly requested', 
   try { assert.deepEqual(store.listTables(), []); }
   finally { store.close(); }
   assert.deepEqual(data.open().listTables(), []);
+});
+
+test('each table stores its own records and column changes are visible in SQLite', t => {
+  const data = fixture(t, null), service = new RecordService(data.open());
+  let first = service.createTable({ name: 'Invoices' });
+  const second = service.createTable({ name: 'Suppliers' });
+  const text = '客户\0🚀';
+  const row = service.createRecords(first.id, [{ values: { [first.primaryFieldId]: text } }]).records[0]!;
+  const other = service.createRecords(second.id, [{ values: { [second.primaryFieldId]: 'Other' } }]).records[0]!;
+  const db = new DatabaseSync(data.path, { readOnly: true });
+  try {
+    const columns = () => db.prepare(`PRAGMA table_info(${recordTable(first.id)})`).all().map(column => column['name']);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM sqlite_schema WHERE type = 'table' AND name GLOB 'rowweave_data_*'").get()!['n'], 2);
+    assert.equal(db.prepare("SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'records'").get(), undefined);
+    assert.equal(db.prepare(`SELECT id FROM ${recordTable(first.id)}`).get()!['id'], row.id);
+    assert.equal(db.prepare(`SELECT id FROM ${recordTable(second.id)}`).get()!['id'], other.id);
+
+    first = service.createField(first.id, { expectedVersion: first.version, name: 'Amount', type: 'number' });
+    const amount = first.fields.at(-1)!.id;
+    assert.ok(columns().includes(`field_${amount}`));
+    assert.equal(Object.hasOwn(service.getRecord(first.id, row.id).values, amount), false);
+    const saved = service.updateBatch([{ id: row.id, expectedVersion: row.version, values: { [amount]: Number.MAX_VALUE } }], first.id).records[0]!;
+    const raw = db.prepare(`SELECT ${fieldColumn(amount)} AS amount, typeof(${fieldColumn(amount)}) AS type FROM ${recordTable(first.id)}`).get()!;
+    assert.deepEqual({ ...raw }, { amount: Number.MAX_VALUE, type: 'real' });
+    assert.deepEqual(service.getRecord(first.id, row.id), saved);
+    service.createView(first.id, { name: 'Amounts', query: { sort: [{ fieldId: amount, direction: 'asc' }] } });
+    first = service.deleteField(first.id, amount, { expectedVersion: first.version });
+    assert.ok(!columns().includes(`field_${amount}`));
+    const [last] = service.recordHistory(first.id, row.id, {}).changes;
+    const history = service.recordChange(first.id, row.id, last!.id);
+    assert.equal(history.before!.values[amount], Number.MAX_VALUE);
+    assert.equal(Object.hasOwn(history.after!.values, amount), false);
+    service.deleteTable(first.id, { expectedVersion: first.version });
+    assert.equal(db.prepare("SELECT 1 FROM sqlite_schema WHERE name = ?").get(`rowweave_data_${first.id}`), undefined);
+    assert.deepEqual(service.getRecord(second.id, other.id), other);
+    assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
+  } finally { db.close(); }
+});
+
+test('the full field limit retains scalar types, arrays and explicit nulls in records and history', t => {
+  const store = fixture(t, null).open();
+  const primaryFieldId = 'field_0';
+  const fields: Field[] = Array.from({ length: maxFields }, (_, index) => ({ id: `field_${index}`, name: `Field ${index}`, type: 'text' }));
+  fields[3]!.type = 'checkbox';
+  fields[4]!.type = 'number';
+  fields[5] = { ...fields[5]!, type: 'multiSelect', options: [{ id: 'choice', name: 'Choice' }] };
+  const table = store.createTable({ id: 'wide', name: 'Wide', version: 1, revision: 1, total: 0, primaryFieldId, fields });
+  const values = Object.fromEntries(fields.map((field, index) => [field.id, `Value ${index}`]));
+  const row = store.createRecords(table, [{ ...values, [primaryFieldId]: '\uD800', field_1: null, field_2: '', field_3: false, field_4: 1, field_5: ['choice'] }]).records[0]!;
+  assert.deepEqual(store.getRecord(table.id, row.id), row);
+  const change = store.recordHistory(table.id, row.id, {}).changes[0]!;
+  assert.deepEqual(store.recordChange(table.id, row.id, change.id).after, row);
+});
+
+test('opening an earlier workspace rejects its format and leaves the file intact', t => {
+  const data = fixture(t, null), old = new DatabaseSync(data.path);
+  old.exec(`CREATE TABLE records (id TEXT PRIMARY KEY, values_json TEXT);
+    INSERT INTO records VALUES ('original', '{}'); PRAGMA user_version = 38`);
+  old.close();
+  const before = readFileSync(data.path);
+  assert.throws(() => data.open(), /Unsupported database version: 38.*Create a new RowWeave workspace/);
+  assert.deepEqual(readFileSync(data.path), before);
 });
 
 test('tables and fields retain identities through rename, reorder, primary changes and restart', t => {
@@ -80,47 +145,8 @@ test('record operations are scoped to their table and deleting the prototype nev
   assert.deepEqual(reopened.listTables(), [second]);
   const check = new DatabaseSync(data.path, { readOnly: true });
   try {
-    assert.equal(check.prepare('SELECT COUNT(*) AS total FROM records').get()!['total'], 0);
+    assert.equal(check.prepare('SELECT COUNT(*) AS total FROM record_ids').get()!['total'], 0);
     assert.equal(check.prepare('SELECT COUNT(*) AS total FROM fields').get()!['total'], 1);
     assert.deepEqual(check.prepare('PRAGMA foreign_key_check').all(), []);
   } finally { check.close(); }
-});
-
-test('version-one migration preserves schema, ordering, record IDs, values and versions', t => {
-  const data = fixture(t, null);
-  const legacy = new DatabaseSync(data.path);
-  const fields = [{ id: 'field_1', name: 'Name', type: 'text' }, { id: 'field_2', name: 'Notes', type: 'text' }];
-  const values = { field_1: '保存的项目 🌱', field_2: 'line 1\nline 2' };
-  legacy.exec(`CREATE TABLE table_metadata (id TEXT PRIMARY KEY, fields_json TEXT NOT NULL);
-    CREATE TABLE records (id TEXT PRIMARY KEY, position INTEGER NOT NULL UNIQUE,
-      version INTEGER NOT NULL DEFAULT 1, values_json TEXT NOT NULL);
-    PRAGMA user_version = 1;`);
-  legacy.prepare('INSERT INTO table_metadata VALUES (?, ?)').run('prototype', JSON.stringify(fields));
-  legacy.prepare('INSERT INTO records VALUES (?, ?, ?, ?)').run('record_7', 6, 4, JSON.stringify(values));
-  legacy.close();
-  const store = data.open();
-  assert.deepEqual(store.getTable().fields, fields);
-  assert.equal(store.getTable().total, 1);
-  assert.deepEqual(store.readPage(0, 10).records, [{ id: 'record_7', version: 4, values }]);
-  store.close();
-  assert.deepEqual(data.open().readPage(0, 10).records, [{ id: 'record_7', version: 4, values }]);
-});
-
-test('failed migration rolls back the old schema and unsupported versions are not replaced', t => {
-  const data = fixture(t, null);
-  const legacy = new DatabaseSync(data.path);
-  legacy.exec(`CREATE TABLE table_metadata (id TEXT PRIMARY KEY, fields_json TEXT NOT NULL);
-    CREATE TABLE records (id TEXT PRIMARY KEY, position INTEGER, version INTEGER, values_json TEXT);
-    INSERT INTO table_metadata VALUES ('prototype', 'invalid json');
-    PRAGMA user_version = 1;`);
-  legacy.close();
-  assert.throws(() => data.open(), SyntaxError);
-  const check = new DatabaseSync(data.path);
-  try {
-    assert.equal(check.prepare('PRAGMA user_version').get()!['user_version'], 1);
-    assert.equal(check.prepare("SELECT name FROM sqlite_schema WHERE name = 'records'").get()!['name'], 'records');
-    assert.equal(check.prepare("SELECT name FROM sqlite_schema WHERE name = 'tables'").get(), undefined);
-    check.exec('PRAGMA user_version = 99;');
-  } finally { check.close(); }
-  assert.throws(() => data.open(), /Unsupported database version: 99/);
 });

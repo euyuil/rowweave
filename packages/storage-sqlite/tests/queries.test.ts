@@ -1,6 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
 import { fixture } from './helpers.js';
 import { RecordService, ServiceError } from '../../core/src/record-service.js';
 import type { FieldCreate, FieldFilter, FilterGroup, RecordQuery } from '../../contracts/src/index.js';
@@ -111,22 +110,4 @@ test('wide select schemas remain searchable without exhausting SQL bind paramete
   const field = table.fields.at(-1)!;
   const row = service.createRecords(table.id, [{ values: { [field.id]: 'option_199' } }]).records[0]!;
   assert.deepEqual(service.queryRecords(table.id, { search: 'Choice 199' }).records.map(record => record.id), [row.id]);
-});
-
-test('version-two databases gain query revisions without losing existing values', t => {
-  const data = fixture(t, null);
-  const db = new DatabaseSync(data.path);
-  db.exec(`CREATE TABLE tables (id TEXT PRIMARY KEY, name TEXT NOT NULL, version INTEGER NOT NULL, primary_field_id TEXT NOT NULL);
-    CREATE TABLE fields (id TEXT PRIMARY KEY, table_id TEXT NOT NULL REFERENCES tables(id) ON DELETE CASCADE, position INTEGER NOT NULL, definition_json TEXT NOT NULL);
-    CREATE TABLE records (id TEXT PRIMARY KEY, table_id TEXT NOT NULL REFERENCES tables(id) ON DELETE CASCADE, position INTEGER NOT NULL,
-      version INTEGER NOT NULL DEFAULT 1, values_json TEXT NOT NULL, UNIQUE(table_id, position));
-    INSERT INTO tables VALUES ('table', 'Existing', 7, 'name'); PRAGMA user_version = 2;`);
-  db.prepare('INSERT INTO fields VALUES (?, ?, ?, ?)').run('name', 'table', 0, JSON.stringify({ id: 'name', name: 'Name', type: 'text' }));
-  db.prepare('INSERT INTO records VALUES (?, ?, ?, ?, ?)').run('record', 'table', 0, 3, JSON.stringify({ name: 'Saved data' }));
-  db.close();
-  const service = new RecordService(data.open());
-  const page = service.queryRecords('table', {});
-  assert.equal(page.revision, 1);
-  assert.equal(page.schemaVersion, 7);
-  assert.deepEqual(page.records, [{ id: 'record', version: 3, values: { name: 'Saved data' } }]);
 });

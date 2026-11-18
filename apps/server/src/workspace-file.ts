@@ -9,9 +9,9 @@ async function run(): Promise<void> {
 Usage: npm run workspace:file -- <backup|restore> <source.sqlite> <new-destination.sqlite>
 
 backup   Create a consistent snapshot, including committed WAL data.
-restore  Check a snapshot and migrate its copy to the current workspace format.
+restore  Check a current-format snapshot and restore it to a new file.
 
-The source is never migrated or replaced. The destination must not exist, and its
+The source stays intact. The destination must not exist, and its
 parent directory must exist. Use only a completed successful result as a backup.
 For JSON output without npm banners, invoke this compiled file with Node directly.
 After restoring, stop the current service before switching to the new workspace.

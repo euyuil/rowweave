@@ -1,3 +1,4 @@
+import { workspaceFormat } from '../src/migrations.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
@@ -34,7 +35,7 @@ test('saved measures include complete groups, support read overrides and survive
   await backupWorkspace(data.path, backup); await restoreWorkspace(backup, restored);
   const db = new DatabaseSync(restored);
   try {
-    assert.equal(db.prepare('PRAGMA user_version').get()!['user_version'], 38);
+    assert.equal(db.prepare('PRAGMA user_version').get()!['user_version'], workspaceFormat);
     const config = JSON.parse(db.prepare('SELECT config_json FROM views WHERE id = ?').get(view.id)!['config_json'] as string);
     assert.deepEqual(config.groupMeasures, measures);
   } finally { db.close(); }
@@ -68,21 +69,17 @@ test('saved measures validate configuration and clear when grouping is removed',
   assert.equal(regrouped.groupMeasures, undefined);
 });
 
-test('format 30 upgrades older workspaces without changing views, records or history', t => {
+test('Reopening preserves views, records and history for saved group measures', t => {
   const { data, store, service, table } = setup(t);
   const original = service.listViews(table.id)[0]!;
   const record = service.createRecords(table.id, [{ values: { [table.primaryFieldId]: 'Keep' } }]).records[0]!;
   store.close();
-  const old = new DatabaseSync(data.path);
-  try {
-    old.exec("UPDATE views SET config_json = json_remove(config_json, '$.groupMeasures'); PRAGMA user_version = 29;");
-  } finally { old.close(); }
   const reopened = new RecordService(data.open());
   assert.deepEqual(reopened.getView(table.id, original.id), original);
   assert.deepEqual(reopened.getRecord(table.id, record.id), record);
   const check = new DatabaseSync(data.path);
   try {
-    assert.equal(check.prepare('PRAGMA user_version').get()!['user_version'], 38);
+    assert.equal(check.prepare('PRAGMA user_version').get()!['user_version'], workspaceFormat);
     assert.equal(check.prepare('SELECT count(*) AS n FROM record_changes').get()!['n'], 1);
   } finally { check.close(); }
 });

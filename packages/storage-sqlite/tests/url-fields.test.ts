@@ -1,9 +1,9 @@
+import { workspaceFormat } from '../src/migrations.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
 import { dirname, join } from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { fixture, removeWorkspaceState } from './helpers.js';
+import { fixture } from './helpers.js';
 import { RecordService } from '../../core/src/record-service.js';
 import { backupWorkspace, restoreWorkspace } from '../src/backup.js';
 import { SqliteRecordStore } from '../src/record-store.js';
@@ -38,20 +38,19 @@ test('URL fields preserve typed values through defaults, queries, CSV, history a
   assert.throws(() => service.updateField(table.id, link, { expectedVersion: table.version, required: true }), { code: 'INVALID_VALUE' });
 });
 
-test('URL schema upgrades preserve existing data and survive restart and backups', async t => {
+test('URL fields preserve existing values and survive restart and backups', async t => {
   const data = fixture(t, null), store = data.open(), service = new RecordService(store);
   const original = service.createTable({ name: 'Existing table' });
   const row = service.createRecords(original.id, [{ values: { [original.primaryFieldId]: 'Keep me' } }]).records[0]!;
   store.close();
-  const db = new DatabaseSync(data.path); removeWorkspaceState(db); db.exec('DROP TABLE attachments; DROP TABLE field_sequences; PRAGMA user_version = 19'); db.close();
-  const upgraded = new RecordService(data.open());
-  assert.deepEqual(upgraded.getRecord(original.id, row.id), row);
-  const table = upgraded.createField(original.id, { expectedVersion: original.version, name: 'Website', type: 'url' });
-  upgraded.updateBatch([{ id: row.id, expectedVersion: 1, values: { [table.fields[1]!.id]: 'https://example.com' } }], table.id);
-  const current = upgraded.getRecord(table.id, row.id);
+  const reopened = new RecordService(data.open());
+  assert.deepEqual(reopened.getRecord(original.id, row.id), row);
+  const table = reopened.createField(original.id, { expectedVersion: original.version, name: 'Website', type: 'url' });
+  reopened.updateBatch([{ id: row.id, expectedVersion: 1, values: { [table.fields[1]!.id]: 'https://example.com' } }], table.id);
+  const current = reopened.getRecord(table.id, row.id);
   assert.deepEqual(new RecordService(data.open()).getRecord(table.id, row.id), current);
   const backup = join(dirname(data.path), 'backup.sqlite'), restored = join(dirname(data.path), 'restored.sqlite');
-  await backupWorkspace(data.path, backup); assert.equal((await restoreWorkspace(backup, restored)).version, 38);
+  await backupWorkspace(data.path, backup); assert.equal((await restoreWorkspace(backup, restored)).version, workspaceFormat);
   const restoredStore = new SqliteRecordStore(restored);
   try { assert.deepEqual(restoredStore.getTable(table.id).fields, table.fields); assert.deepEqual(new RecordService(restoredStore).getRecord(table.id, row.id), current); }
   finally { restoredStore.close(); }

@@ -1,8 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
 import { dirname, join } from 'node:path';
-import { fixture, removeWorkspaceState } from './helpers.js';
+import { fixture } from './helpers.js';
 import { RecordService } from '../../core/src/record-service.js';
 import { SqliteRecordStore } from '../src/record-store.js';
 import { backupWorkspace, restoreWorkspace } from '../src/backup.js';
@@ -199,7 +198,7 @@ test('same-table summaries and downstream formulas handle existing records and s
   assert.throws(() => service.updateField(table.id, summary, { expectedVersion: table.version, lookup: { relationFieldId: link, fieldId: final, operation: 'sum' } }), /dependency cycle/);
 });
 
-test('connected calculations survive backup restoration and older workspace migration preserves versions', async t => {
+test('Connected calculations survive backup restoration', async t => {
   const { data, service, items, orders, rows, amount, link, total } = setup(t);
   const record = service.createRecords(orders.id, [{ values: { [link]: [rows[0]!.id] } }]).records[0]!;
   const backup = join(dirname(data.path), 'backup.sqlite'), restoredPath = join(dirname(data.path), 'restored.sqlite');
@@ -213,15 +212,4 @@ test('connected calculations survive backup restoration and older workspace migr
     assert.equal(restored.getRecord(orders.id, record.id).values[total], 33);
     assert.equal(service.getRecord(orders.id, record.id).values[total], 11);
   } finally { store.close(); }
-  const old = fixture(t, null), previous = old.open(), original = new RecordService(previous);
-  const table = original.createTable({ name: 'Existing' });
-  const row = original.createRecords(table.id, [{ values: {} }]).records[0]!;
-  const schema = original.getTable(table.id);
-  previous.close();
-  const db = new DatabaseSync(old.path);
-  removeWorkspaceState(db); db.exec('DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; PRAGMA user_version = 12;');
-  db.close();
-  const migrated = new RecordService(old.open());
-  assert.deepEqual(migrated.getTable(table.id), schema);
-  assert.deepEqual(migrated.getRecord(table.id, row.id), row);
 });
