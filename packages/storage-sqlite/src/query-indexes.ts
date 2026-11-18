@@ -2,8 +2,8 @@ import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { groupFieldIds, type FieldFilter, type FilterGroup, type RecordQuery, type Table, type ViewQuery } from '../../contracts/src/index.js';
 import { querySql } from './query-sql.js';
+import { identifier, recordTable } from './record-tables.js';
 
-const identifier = (name: string) => `"${name.replaceAll('"', '""')}"`;
 const prefix = (tableId: string) => `rowweave_view_${tableId}_`;
 
 type IndexedQuery = ViewQuery & Pick<RecordQuery, 'groupBy'>;
@@ -27,7 +27,7 @@ function definition(table: Pick<Table, 'id' | 'fields'>, query: IndexedQuery): s
   if (query.sort?.some(sort => ['relation', 'lookup', 'multiSelect', 'attachment'].includes(fields.get(sort.fieldId)!.type))) return;
   if (query.search && table.fields.some(field => ['relation', 'lookup', 'multiSelect', 'attachment'].includes(field.type))) return;
   const sql = querySql(table, { ...query, offset: 0, limit: 1 }, new Map(), { forIndex: true });
-  return `ON records(table_id, ${sql.order}) WHERE ${sql.where}`;
+  return `ON ${recordTable(table.id)}(table_id, ${sql.order}) WHERE ${sql.where}`;
 }
 
 export function syncQueryIndexes(db: DatabaseSync, table: Pick<Table, 'id' | 'fields'>, queries: readonly IndexedQuery[]): void {
@@ -50,5 +50,5 @@ export function syncQueryIndexes(db: DatabaseSync, table: Pick<Table, 'id' | 'fi
     changed = true;
   }
   // Refresh the table's existing index statistics too, so unknown row counts do not defeat the new indexes.
-  if (changed) db.exec('ANALYZE records');
+  if (changed) db.exec(`ANALYZE ${recordTable(table.id)}`);
 }

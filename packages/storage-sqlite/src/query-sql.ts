@@ -1,3 +1,4 @@
+import { recordSource, recordTable, scalarColumn } from './record-tables.js';
 import type { SQLInputValue } from 'node:sqlite';
 import type { CellValue, Field, FieldFilter, FilterGroup, Table } from '../../contracts/src/index.js';
 import type { CheckedQuery } from '../../core/src/record-query.js';
@@ -38,12 +39,14 @@ export function querySql(table: Pick<Table, 'id' | 'fields'>, query: CheckedQuer
       return `r.${column.name}`;
     }
     if (field.type === 'lookup') return lookupSql(field, alias);
-    const path = `$.${JSON.stringify(field.id)}`;
-    return `json_extract(${alias ? `${alias}.` : ''}values_json, '${path.replaceAll("'", "''")}')`;
+    return scalarColumn(field, alias);
   };
-  function formatted(field: Field, value: string): string {
+  function formatted(field: Field, value: string, sorting = false): string {
     field = valueField(field);
     if (field.type === 'checkbox') return `(CASE ${value} WHEN 1 THEN 'true' WHEN 0 THEN 'false' END)`;
+    if (field.type === 'number' && !sorting) {
+      return `(CASE WHEN ${value} = CAST(${value} AS INTEGER) THEN CAST(${value} AS INTEGER) ELSE ${value} END)`;
+    }
     if (field.type === 'attachment') return `(SELECT group_concat(filename, ', ') FROM (SELECT file.filename FROM json_each(${value}) selected
       JOIN attachments file ON file.id = selected.value ORDER BY CAST(selected.key AS INTEGER)))`;
     if (field.type === 'singleSelect' || field.type === 'multiSelect') {
@@ -62,17 +65,17 @@ export function querySql(table: Pick<Table, 'id' | 'fields'>, query: CheckedQuer
       const target = targets.get(field.relation!.tableId)!;
       const primary = target.fields.find(item => item.id === target.primaryFieldId)!;
       return `(SELECT group_concat(label, ', ') FROM (SELECT ${display(primary, 'linked')} AS label
-        FROM relation_edges edge JOIN records linked ON linked.id = edge.target_record_id
+        FROM relation_edges edge JOIN ${recordTable(target.id)} linked ON linked.id = edge.target_record_id
         WHERE edge.source_record_id = ${alias}.id AND edge.field_id = ${bind(field.id)} ORDER BY edge.position))`;
     }
     if (field.type === 'lookup' && !isLookupSummary(field)) {
       const target = lookupElementField(field);
       if (target.type === 'attachment') return formatted(target, sorting ? `json_array(json_extract(${value}, '$[0]'))` : value);
       const scalar = target.type === 'multiSelect' ? { ...target, type: 'singleSelect' as const } : target;
-      if (sorting) return formatted(scalar, `json_extract(${value}, '$[0]')`);
+      if (sorting) return formatted(scalar, `json_extract(${value}, '$[0]')`, true);
       return `(SELECT group_concat(${formatted(scalar, 'entry.value')}, ', ') FROM json_each(${value}) entry)`;
     }
-    return formatted(field, value);
+    return formatted(field, value, sorting);
   }
   function condition(filter: FieldFilter | FilterGroup): string {
     if ('conjunction' in filter) {
@@ -145,6 +148,6 @@ export function querySql(table: Pick<Table, 'id' | 'fields'>, query: CheckedQuer
     return [`(${expression} IS NULL) ASC`, `${expression} COLLATE NOCASE ${sort.direction === 'asc' ? 'ASC' : 'DESC'}`];
   }));
   order.push(forIndex ? 'position ASC' : 'r.position ASC');
-  return { where: clauses.join(' AND '), order: order.join(', '), parameters, countParameters,
+  return { source: recordSource(table.id), tableId: table.id, where: clauses.join(' AND '), order: order.join(', '), parameters, countParameters,
     computed: [...computed.values()], sourceWhere };
 }

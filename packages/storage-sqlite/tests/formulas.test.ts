@@ -1,8 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
 import { randomBytes } from 'node:crypto';
-import { fixture, removeWorkspaceState } from './helpers.js';
+import { fixture } from './helpers.js';
 import { RecordService } from '../../core/src/record-service.js';
 import { compileFormulas, rewriteFormulaReferences } from '../../core/src/formulas.js';
 import type { Field, Table } from '../../contracts/src/index.js';
@@ -171,14 +170,11 @@ test('formula syntax is bounded and supports conditional, text, Unicode and nume
   assert.equal(rewriteFormulaReferences('CONCAT("[x]", ["x"])', () => 'Name ] "quoted"'), `CONCAT("[x]", [${JSON.stringify('Name ] "quoted"')}])`);
 });
 
-test('version-nine migration preserves board configuration, records and optimistic versions', t => {
+test('Reopening preserves board configuration, records and optimistic versions', t => {
   const { data, store, service, table } = setup(t);
   const row = service.createRecords(table.id, [{ values: { [table.primaryFieldId]: 'Keep' } }]).records[0]!;
   const before = service.getTable(table.id), views = service.listViews(table.id);
   store.close();
-  const db = new DatabaseSync(data.path);
-  removeWorkspaceState(db); db.exec('DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; ALTER TABLE records DROP COLUMN formula_errors_json; PRAGMA user_version = 9;');
-  db.close();
   const reopened = new RecordService(data.open());
   assert.deepEqual(reopened.getTable(table.id), before);
   assert.deepEqual(reopened.listViews(table.id), views);

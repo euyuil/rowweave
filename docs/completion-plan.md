@@ -30,7 +30,7 @@ The current refinement plan adds bounded formulas and status boards. Other addit
 
 - Every implementation task must satisfy a row above or a necessary correctness/performance prerequisite. Record the reason before expanding scope.
 - Prefer one concrete implementation over a framework for hypothetical backends or future hosts. Validate untrusted input at service/protocol boundaries; trust checked internal types and database invariants. Do not silently catch failures, substitute fabricated data, retry non-idempotent writes, or add compatibility fallbacks without a real consumer.
-- Use JSON record values keyed by stable field IDs, relational table/field/view metadata, and normalized relation edges in SQLite. Use parameterized SQL for queries and measured indexes for actual query paths. Schema edits must not require rebuilding physical tables for each field change.
+- The initial delivery used shared JSON record storage with relational metadata and normalized relation edges. The current [storage design](design.md#data-and-operation-model) gives each RowWeave table its own SQLite data table and starts from a fresh workspace.
 - Schema and record operations are transactions. Conversion and import validate the entire operation before exposing any change. Migrations preserve IDs and versions, and reject unsupported newer database formats.
 - Keep frontend loading bounded. Query changes invalidate caches; drafts are keyed by record identity, never by the current sorted position. Avoid per-cell network requests and full-table downloads.
 - Keep this checklist current in each feature PR. Merge focused PRs as soon as CI and relevant verification pass, then branch from updated `main`.

@@ -1,3 +1,4 @@
+import { workspaceFormat } from '../src/migrations.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
@@ -73,21 +74,20 @@ test('Gantt configuration validates dependencies and conversion clears obsolete 
   service.deleteField(table.id, end, { expectedVersion: renamed.version });
 });
 
-test('format 36 preserves existing calendars and Gantt settings survive backup and restore', async t => {
+test('Calendars and Gantt settings survive reopening, backup and restore', async t => {
   const { data, store, service, table, start, gantt } = setup(t);
   service.createView(table.id, { name: 'Calendar', type: 'calendar', calendar: { startFieldId: start, timeZone: 'UTC' } });
   const before = service.listViews(table.id), state = service.workspaceState({ tableId: table.id });
   store.close();
-  const previous = new DatabaseSync(data.path); previous.exec('PRAGMA user_version = 35'); previous.close();
   const reopened = new RecordService(data.open());
   assert.deepEqual(reopened.listViews(table.id), before); assert.deepEqual(reopened.workspaceState({ tableId: table.id }), state);
   const view = reopened.createView(table.id, { name: 'Gantt', type: 'gantt', gantt });
   const backup = data.path + '.backup', restored = data.path + '.restored';
-  assert.equal((await backupWorkspace(data.path, backup)).version, 38);
+  assert.equal((await backupWorkspace(data.path, backup)).version, workspaceFormat);
   await restoreWorkspace(backup, restored);
   const db = new DatabaseSync(restored);
   try {
-    assert.equal(db.prepare('PRAGMA user_version').get()!['user_version'], 38);
+    assert.equal(db.prepare('PRAGMA user_version').get()!['user_version'], workspaceFormat);
     const config = JSON.parse(db.prepare('SELECT config_json FROM views WHERE id = ?').get(view.id)!['config_json'] as string);
     assert.equal(config.type, 'gantt'); assert.deepEqual(config.gantt, gantt);
   } finally { db.close(); }

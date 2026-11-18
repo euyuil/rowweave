@@ -1,3 +1,4 @@
+import { cellJson, fieldColumn, fieldPath, recordPatch, recordSource, recordTable } from './record-tables.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { maxLinkedRecords, type CellValue, type Field, type RowRecord, type Table } from '../../contracts/src/index.js';
 import { ServiceError } from '../../core/src/errors.js';
@@ -36,7 +37,7 @@ export class Relations {
   validateTargets(field: Field, value: CellValue): void {
     const ids = (value ?? []) as string[];
     if (!ids.length) return;
-    const rows = this.db.prepare(`SELECT id FROM records WHERE table_id = ? AND id IN (SELECT value FROM json_each(?))`)
+    const rows = this.db.prepare(`SELECT id FROM record_ids WHERE table_id = ? AND id IN (SELECT value FROM json_each(?))`)
       .all(field.relation!.tableId, JSON.stringify(ids));
     const found = new Set(rows.map(row => row['id']));
     const missing = ids.find(id => !found.has(id));
@@ -95,17 +96,22 @@ export class Relations {
     const alreadyWritten = new Set(changes.map(change => change.id));
     const records = new Map<string, Set<string>>();
     const updatedValues = new Map<string, Record<string, CellValue>>();
-    const read = this.db.prepare('SELECT table_id, values_json FROM records WHERE id = ?');
-    const update = this.db.prepare('UPDATE records SET values_json = ?, version = version + ? WHERE id = ?');
+    const owner = this.db.prepare('SELECT table_id FROM record_ids WHERE id = ?');
+    const patches = new Map<string, ReturnType<typeof recordPatch>>();
     for (const [id, changed] of affected) {
-      const row = read.get(id)!;
-      const values = { ...JSON.parse(row['values_json'] as string) as Record<string, CellValue>, ...changed };
-      update.run(JSON.stringify(values), alreadyWritten.has(id) ? 0 : 1, id);
-      const tableId = row['table_id'] as string;
+      const tableId = owner.get(id)!['table_id'] as string;
+      const fields = Object.keys(changed);
+      const key = JSON.stringify([tableId, fields]);
+      let patch = patches.get(key);
+      if (!patch) { patch = recordPatch(this.db, tableId, fields); patches.set(key, patch); }
+      patch(id, changed, alreadyWritten.has(id) ? 0 : 1);
       const ids = records.get(tableId) ?? new Set<string>();
       ids.add(id);
       records.set(tableId, ids);
-      if (alreadyWritten.has(id)) updatedValues.set(id, values);
+      if (alreadyWritten.has(id)) {
+        const row = this.db.prepare(`SELECT values_json FROM ${recordSource(tableId)} WHERE id = ?`).get(id)!;
+        updatedValues.set(id, JSON.parse(row['values_json'] as string) as Record<string, CellValue>);
+      }
     }
     const remove = this.db.prepare('DELETE FROM relation_edges WHERE source_record_id = ? AND field_id = ?');
     const insert = this.db.prepare('INSERT INTO relation_edges VALUES (?, ?, ?, ?)');
@@ -117,19 +123,19 @@ export class Relations {
   }
 
   pairFields(field: Field, inverse: Field): Map<string, Set<string>> {
-    const copy = this.db.prepare(`INSERT INTO relation_edges (source_record_id, field_id, target_record_id, position)
+    const copy = (sourceId: string) => this.db.prepare(`INSERT INTO relation_edges (source_record_id, field_id, target_record_id, position)
       SELECT edge.target_record_id, ?, edge.source_record_id,
         COALESCE((SELECT MAX(existing.position) FROM relation_edges existing
           WHERE existing.source_record_id = edge.target_record_id AND existing.field_id = ?), -1)
         + ROW_NUMBER() OVER (PARTITION BY edge.target_record_id ORDER BY source.position, source.id)
-      FROM relation_edges edge JOIN records source ON source.id = edge.source_record_id
+      FROM relation_edges edge JOIN ${recordTable(sourceId)} source ON source.id = edge.source_record_id
       WHERE edge.field_id = ? AND NOT EXISTS (SELECT 1 FROM relation_edges existing
         WHERE existing.source_record_id = edge.target_record_id AND existing.field_id = ? AND existing.target_record_id = edge.source_record_id)
       RETURNING source_record_id`);
     const changed = new Map<string, Set<Field>>();
     const writeField = this.db.prepare('UPDATE fields SET definition_json = ? WHERE id = ?');
     for (const [current, reverse] of [[field, inverse], [inverse, field]] as const) {
-      for (const row of copy.iterate(current.id, current.id, reverse.id, current.id)) {
+      for (const row of copy(current.relation!.tableId).iterate(current.id, current.id, reverse.id, current.id)) {
         const id = row['source_record_id'] as string;
         const fields = changed.get(id) ?? new Set<Field>();
         fields.add(current);
@@ -138,13 +144,12 @@ export class Relations {
       current.relation!.inverseFieldId = reverse.id;
       writeField.run(JSON.stringify(current), current.id);
     }
-    const read = this.db.prepare('SELECT table_id, values_json FROM records WHERE id = ?');
+    const owner = this.db.prepare('SELECT table_id FROM record_ids WHERE id = ?');
     const readIds = this.db.prepare('SELECT target_record_id FROM relation_edges WHERE source_record_id = ? AND field_id = ? ORDER BY position LIMIT ?');
-    const write = this.db.prepare('UPDATE records SET values_json = ?, version = version + 1 WHERE id = ?');
     const records = new Map<string, Set<string>>();
     for (const [id, fields] of changed) {
-      const row = read.get(id)!;
-      const values = JSON.parse(row['values_json'] as string) as Record<string, CellValue>;
+      const tableId = owner.get(id)!['table_id'] as string;
+      const values: Record<string, CellValue> = {};
       for (const current of fields) {
         const ids = readIds.all(id, current.id, (current.relation!.multiple ? maxLinkedRecords : 1) + 1).map(edge => edge['target_record_id'] as string);
         try { values[current.id] = validateValue(current, ids); }
@@ -153,8 +158,7 @@ export class Relations {
           throw error;
         }
       }
-      write.run(JSON.stringify(values), id);
-      const tableId = row['table_id'] as string;
+      recordPatch(this.db, tableId, Object.keys(values))(id, values, 1);
       const ids = records.get(tableId) ?? new Set<string>();
       ids.add(id);
       records.set(tableId, ids);
@@ -189,19 +193,21 @@ export class Relations {
       record.links = Object.fromEntries(fields.map(field => [field.id, []]));
       return [record.id, record];
     }));
-    const edges = this.db.prepare(`SELECT e.source_record_id, e.field_id, target.id, target.table_id,
-      target.values_json -> ('$.' || json_quote(t.primary_field_id)) AS value_json,
-      json_extract(target.formula_errors_json, '$.' || json_quote(t.primary_field_id)) AS formula_error
-      FROM relation_edges e JOIN records target ON target.id = e.target_record_id
-      JOIN tables t ON t.id = target.table_id
-      WHERE e.source_record_id IN (SELECT value FROM json_each(?)) AND e.field_id IN (SELECT value FROM json_each(?))
-      ORDER BY e.source_record_id, e.field_id, e.position`)
-      .all(JSON.stringify(records.map(record => record.id)), JSON.stringify(fields.map(field => field.id)));
-    for (const edge of edges) {
-      const value = JSON.parse(edge['value_json'] as string ?? 'null') as CellValue;
-      byId.get(edge['source_record_id'] as string)!.links![edge['field_id'] as string]!.push({
-        id: edge['id'] as string, label: edge['formula_error'] ? `#ERROR: ${edge['formula_error']}` : fieldText(primary.get(edge['table_id'] as string)!, value),
-      });
+    const recordIds = JSON.stringify(records.map(record => record.id));
+    for (const [targetId, display] of primary) {
+      const column = fieldColumn(display.id, 'target');
+      const edges = this.db.prepare(`SELECT e.source_record_id, e.field_id, target.id, ${cellJson(column)} AS value_json,
+        json_extract(target.formula_errors_json, ?) AS formula_error
+        FROM relation_edges e JOIN ${recordTable(targetId)} target ON target.id = e.target_record_id
+        WHERE e.source_record_id IN (SELECT value FROM json_each(?)) AND e.field_id IN (SELECT value FROM json_each(?))
+        ORDER BY e.source_record_id, e.field_id, e.position`)
+        .all(fieldPath(display.id), recordIds, JSON.stringify(fields.filter(field => field.relation!.tableId === targetId).map(field => field.id)));
+      for (const edge of edges) {
+        const value = JSON.parse(edge['value_json'] as string) as CellValue;
+        byId.get(edge['source_record_id'] as string)!.links![edge['field_id'] as string]!.push({
+          id: edge['id'] as string, label: edge['formula_error'] ? `#ERROR: ${edge['formula_error']}` : fieldText(display, value),
+        });
+      }
     }
     return records;
   }

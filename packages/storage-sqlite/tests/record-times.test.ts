@@ -1,8 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
 import { dirname, join } from 'node:path';
-import { fixture, removeWorkspaceState } from './helpers.js';
+import { fixture } from './helpers.js';
 import { RecordService } from '../../core/src/record-service.js';
 import { SqliteRecordStore } from '../src/record-store.js';
 import { backupWorkspace, restoreWorkspace } from '../src/backup.js';
@@ -96,28 +95,26 @@ test('reciprocal edits stamp both sides before local calculations and roll back 
   assert.deepEqual(service.getRecord(target.id, project.id), current); assert.deepEqual(service.getRecord(source.id, task.id), task);
 });
 
-test('CSV assigns service times and legacy records without durable history retain unknown times', t => {
+test('CSV assigns service times and reopening preserves existing timestamps', t => {
   let now = '2026-11-01T00:00:00.000Z';
   const data = fixture(t, null, () => new Date(now)), store = data.open(), service = new RecordService(store);
-  let table = service.createTable({ name: 'Legacy' });
+  let table = service.createTable({ name: 'Times' });
   const row = service.createRecords(table.id, [{ values: { [table.primaryFieldId]: 'Old' } }]).records[0]!;
   store.close();
-  const db = new DatabaseSync(data.path);
-  removeWorkspaceState(db); db.exec('DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; PRAGMA user_version = 15;'); db.close();
-  const upgraded = new RecordService(data.open());
-  table = upgraded.createField(table.id, { expectedVersion: table.version, name: 'Created', type: 'createdTime' });
-  table = upgraded.createField(table.id, { expectedVersion: table.version, name: 'Edited', type: 'updatedTime' });
+  const reopened = new RecordService(data.open());
+  table = reopened.createField(table.id, { expectedVersion: table.version, name: 'Created', type: 'createdTime' });
+  table = reopened.createField(table.id, { expectedVersion: table.version, name: 'Edited', type: 'updatedTime' });
   const created = table.fields[1]!.id, edited = table.fields[2]!.id;
-  assert.equal(upgraded.getRecord(table.id, row.id).values[created], null); assert.equal(upgraded.getRecord(table.id, row.id).values[edited], null);
+  assert.equal(reopened.getRecord(table.id, row.id).values[created], '2026-11-01T00:00:00.000Z'); assert.equal(reopened.getRecord(table.id, row.id).values[edited], now);
   now = '2026-11-02T00:00:00.000Z';
   const csv = { expectedVersion: table.version, hasHeader: true, csv: 'Name,Created,Edited\nImported,2000-01-01T00:00:00Z,2000-01-01T00:00:00Z\n' };
-  assert.deepEqual(upgraded.previewCsv(table.id, csv).mapping, [table.primaryFieldId, null, null]);
-  upgraded.importCsv(table.id, csv);
-  const imported = upgraded.queryRecords(table.id, {}).records[1]!;
+  assert.deepEqual(reopened.previewCsv(table.id, csv).mapping, [table.primaryFieldId, null, null]);
+  reopened.importCsv(table.id, csv);
+  const imported = reopened.queryRecords(table.id, {}).records[1]!;
   assert.equal(imported.values[created], now); assert.equal(imported.values[edited], now);
-  const current = upgraded.getRecord(table.id, row.id);
-  const saved = upgraded.updateBatch([{ id: row.id, expectedVersion: current.version, values: { [table.primaryFieldId]: 'Changed' } }], table.id).records[0]!;
-  assert.equal(saved.values[created], null); assert.equal(saved.values[edited], now);
+  const current = reopened.getRecord(table.id, row.id);
+  const saved = reopened.updateBatch([{ id: row.id, expectedVersion: current.version, values: { [table.primaryFieldId]: 'Changed' } }], table.id).records[0]!;
+  assert.equal(saved.values[created], '2026-11-01T00:00:00.000Z'); assert.equal(saved.values[edited], now);
 });
 
 test('derived recalculation leaves edit times unchanged while timestamp lookups remain typed', t => {

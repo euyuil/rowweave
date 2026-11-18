@@ -1,9 +1,9 @@
+import { workspaceFormat } from '../src/migrations.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
 import { dirname, join } from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { fixture, removeWorkspaceState } from './helpers.js';
+import { fixture } from './helpers.js';
 import { RecordService } from '../../core/src/record-service.js';
 import { SqliteRecordStore } from '../src/record-store.js';
 import { backupWorkspace, restoreWorkspace } from '../src/backup.js';
@@ -77,25 +77,22 @@ test('CSV, deletion and both restoration paths create record-operation receipts'
   assert.equal(service.recordBatches(table.id, {}).batches[0]!.recordWrite, true);
 });
 
-test('format-17 migration preserves history without inventing old receipts and new receipts survive backup', async t => {
+test('Saved history and batch receipts survive reopening and backup', async t => {
   const data = fixture(t, null), store = data.open(), service = new RecordService(store), table = service.createTable({ name: 'Old' });
   const row = service.createRecords(table.id, [{ values: {} }]).records[0]!, history = service.recordHistory(table.id, row.id, {});
   store.close();
-  const db = new DatabaseSync(data.path);
-  removeWorkspaceState(db); db.exec('DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; PRAGMA user_version = 17;'); db.close();
-  const migrated = new RecordService(data.open());
-  assert.deepEqual(migrated.recordHistory(table.id, row.id, {}), history);
-  assert.deepEqual(migrated.recordBatches(table.id, {}), { batches: [] });
-  assert.throws(() => migrated.recordBatchChanges(table.id, history.changes[0]!.batchId, {}), { code: 'HISTORY_NOT_FOUND' });
-  migrated.updateBatch([{ id: row.id, expectedVersion: 1, values: { [table.primaryFieldId]: 'New value' } }], table.id);
-  const batch = migrated.recordBatches(table.id, {}).batches[0]!;
+  const reopened = new RecordService(data.open());
+  assert.deepEqual(reopened.recordHistory(table.id, row.id, {}), history);
+  assert.equal(reopened.recordBatches(table.id, {}).batches[0]!.id, history.changes[0]!.batchId);
+  reopened.updateBatch([{ id: row.id, expectedVersion: 1, values: { [table.primaryFieldId]: 'New value' } }], table.id);
+  const batch = reopened.recordBatches(table.id, {}).batches[0]!;
   const backup = join(dirname(data.path), 'backup.sqlite'), restoredPath = join(dirname(data.path), 'restored.sqlite');
-  await backupWorkspace(data.path, backup); assert.equal((await restoreWorkspace(backup, restoredPath)).version, 38);
+  await backupWorkspace(data.path, backup); assert.equal((await restoreWorkspace(backup, restoredPath)).version, workspaceFormat);
   const restoredStore = new SqliteRecordStore(restoredPath);
   try {
     const restored = new RecordService(restoredStore);
-    assert.deepEqual(restored.recordBatches(table.id, {}), migrated.recordBatches(table.id, {}));
-    assert.deepEqual(restored.recordBatchChanges(table.id, batch.id, {}), migrated.recordBatchChanges(table.id, batch.id, {}));
+    assert.deepEqual(restored.recordBatches(table.id, {}), reopened.recordBatches(table.id, {}));
+    assert.deepEqual(restored.recordBatchChanges(table.id, batch.id, {}), reopened.recordBatchChanges(table.id, batch.id, {}));
   } finally { restoredStore.close(); }
 });
 

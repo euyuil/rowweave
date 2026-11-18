@@ -19,6 +19,8 @@ Windows evaluation builds are available from successful [CI runs](https://github
 
 Start with an empty workspace: create a table, add fields, and enter or import records. Cell edits save when editing finishes; record details save after a short typing pause. Other clients' changes synchronize automatically. [Live editing](docs/live-editing.md) explains conflict protection and session undo/redo.
 
+When coming from an earlier workspace format, use a separate directory for a new local workspace. See [workspace versions](docs/backup.md#changing-versions).
+
 [Desktop connections](docs/connections.md) · [CSV guide](docs/data-exchange.md) · [Acceptance walkthrough](docs/acceptance.md)
 
 ## Connect your software

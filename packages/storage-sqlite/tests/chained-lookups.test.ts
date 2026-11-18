@@ -1,3 +1,4 @@
+import { workspaceFormat } from '../src/migrations.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
@@ -270,13 +271,12 @@ test('chained summaries report numeric overflow and keep numeric formatting acro
   assert.equal(recovered.formulaErrors?.[sum.id], undefined); assert.equal(recovered.formulaErrors?.[values.id], undefined);
 });
 
-test('format 38 preserves existing schemas and chained results survive restart and workspace backup', async t => {
+test('Chained results and field definitions survive reopening and workspace backup', async t => {
   const { data, store, service, leaf, middle, root, add, innerLink, outerLink, inner } = setup(t);
   const amount = add(leaf.id, { name: 'Amount', type: 'number' }), first = inner(amount.id);
   const item = service.createRecords(leaf.id, [{ values: { [amount.id]: 3 } }]).records[0]!;
   const collection = service.createRecords(middle.id, [{ values: { [innerLink.id]: [item.id] } }]).records[0]!;
   const before = service.listTables(); store.close();
-  const old = new DatabaseSync(data.path); old.exec('PRAGMA user_version = 37'); old.close();
   const reopened = new RecordService(data.open());
   assert.deepEqual(reopened.listTables(), before);
   const schema = reopened.createField(root.id, { expectedVersion: reopened.getTable(root.id).version, name: 'Nested amount', type: 'lookup',
@@ -286,7 +286,7 @@ test('format 38 preserves existing schemas and chained results survive restart a
   assert.deepEqual(record.values[field.id], [3]);
   assert.deepEqual(new RecordService(data.open()).getRecord(root.id, record.id), record);
   const backup = data.path + '.backup', restored = data.path + '.restored';
-  assert.equal((await backupWorkspace(data.path, backup)).version, 38);
+  assert.equal((await backupWorkspace(data.path, backup)).version, workspaceFormat);
   await restoreWorkspace(backup, restored);
   const restoredStore = new SqliteRecordStore(restored, null);
   try {
@@ -296,7 +296,7 @@ test('format 38 preserves existing schemas and chained results survive restart a
   } finally { restoredStore.close(); }
   const raw = new DatabaseSync(restored);
   try {
-    assert.equal(raw.prepare('PRAGMA user_version').get()!['user_version'], 38);
+    assert.equal(raw.prepare('PRAGMA user_version').get()!['user_version'], workspaceFormat);
     const saved = JSON.parse(raw.prepare('SELECT definition_json FROM fields WHERE id = ?').get(field.id)!['definition_json'] as string);
     assert.equal(saved.lookupResult, undefined); assert.equal(saved.lookupResultTableId, undefined);
   } finally { raw.close(); }

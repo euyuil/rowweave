@@ -1,8 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
 import { randomBytes } from 'node:crypto';
-import { fixture, removeWorkspaceState } from './helpers.js';
+import { fixture } from './helpers.js';
 import { RecordService, ServiceError } from '../../core/src/record-service.js';
 import { startServer } from '../../../apps/server/src/http-server.js';
 import { createWorkspaceClient } from '../../client/src/http-client.js';
@@ -115,18 +114,15 @@ test('relation queries match IDs, search primary labels and sort deterministical
   await assert.rejects(api.queryRecords(projects.id, { recordIds: ['duplicate', 'duplicate'] }), /unique record IDs/);
 });
 
-test('version-four migration preserves schemas, records and saved views', t => {
+test('Schemas, records and saved views survive reopening', t => {
   const data = fixture(t);
   const store = data.open();
   const table = store.getTable();
   const records = store.readPage(0, 12);
   const views = store.listViews(table.id);
   store.close();
-  const db = new DatabaseSync(data.path);
-  removeWorkspaceState(db); db.exec('DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; DROP TABLE field_lookups; DROP TABLE relation_edges; DROP TABLE field_relations; ALTER TABLE records DROP COLUMN formula_errors_json; PRAGMA user_version = 4;');
-  db.close();
-  const migrated = data.open();
-  assert.deepEqual(migrated.getTable(), table);
-  assert.deepEqual(migrated.readPage(0, 12), records);
-  assert.deepEqual(migrated.listViews(table.id), views);
+  const reopened = data.open();
+  assert.deepEqual(reopened.getTable(), table);
+  assert.deepEqual(reopened.readPage(0, 12), records);
+  assert.deepEqual(reopened.listViews(table.id), views);
 });

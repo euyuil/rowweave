@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { randomBytes } from 'node:crypto';
-import { fixture, removeWorkspaceState } from './helpers.js';
+import { fixture } from './helpers.js';
 import { RecordService } from '../../core/src/record-service.js';
 import { startServer } from '../../../apps/server/src/http-server.js';
 import { createWorkspaceClient } from '../../client/src/http-client.js';
@@ -134,14 +134,11 @@ test('linked summaries validate numeric targets, remain read-only and preserve a
   assert.throws(() => service.deleteField(target.id, amount, { expectedVersion: target.version }), /dependent lookup/);
 });
 
-test('version-ten migration preserves stored formulas, existing lookups and views across reopen', t => {
+test('Stored formulas, existing lookups and views survive reopening', t => {
   const { data, store, service, source, rows, link } = setup(t);
   const record = service.createRecords(source.id, [{ values: { [link]: rows.map(row => row.id) } }]).records[0]!;
   const tables = service.listTables(), views = service.listViews(source.id);
   store.close();
-  const db = new DatabaseSync(data.path);
-  removeWorkspaceState(db); db.exec('DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; PRAGMA user_version = 10');
-  db.close();
   const reopened = new RecordService(data.open());
   assert.deepEqual(reopened.listTables(), tables);
   assert.deepEqual(reopened.listViews(source.id), views);

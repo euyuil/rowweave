@@ -1,8 +1,9 @@
+import { recordSource } from '../src/record-tables.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { dirname, join } from 'node:path';
-import { fixture, removeWorkspaceState } from './helpers.js';
+import { fixture } from './helpers.js';
 import { RecordService } from '../../core/src/record-service.js';
 import { SqliteRecordStore } from '../src/record-store.js';
 import { backupWorkspace, restoreWorkspace } from '../src/backup.js';
@@ -53,7 +54,7 @@ test('array lookup formulas store scalar results and recalculate complete depend
   const before = service.getRecord(source.id, record.id);
   store.close(); assert.deepEqual(new RecordService(data.open()).getRecord(source.id, record.id), before);
   const db = new DatabaseSync(data.path);
-  const values = JSON.parse(db.prepare('SELECT values_json FROM records WHERE id = ?').get(record.id)!['values_json'] as string);
+  const values = JSON.parse(db.prepare(`SELECT values_json FROM ${recordSource(source.id)} WHERE id = ?`).get(record.id)!['values_json'] as string);
   assert.equal(Object.hasOwn(values, amounts), false); assert.equal(Object.hasOwn(values, names), false);
   assert.equal(values[labels], 'Alpha, Beta'); db.close();
 });
@@ -125,13 +126,13 @@ test('multiple-select and file arrays share formulas, CSV, bounded lookup evalua
   finally { restoredStore.close(); }
 });
 
-test('format 25 migration preserves existing date formulas, values, versions and views', t => {
+test('Date formulas, record versions and views survive reopening', t => {
   const data = fixture(t, null), store = data.open(), service = new RecordService(store);
   let table = service.createTable({ name: 'Existing dates' });
   table = service.createField(table.id, { expectedVersion: table.version, name: 'Date', type: 'formula',
     formula: { expression: 'DATE(2024, 2, 29)', resultType: 'date' } });
   const row = service.createRecords(table.id, [{ values: {} }]).records[0]!, schema = service.getTable(table.id), views = service.listViews(table.id);
-  store.close(); const db = new DatabaseSync(data.path); removeWorkspaceState(db); db.exec('PRAGMA user_version = 25;'); db.close();
+  store.close();
   const reopened = new RecordService(data.open());
   assert.deepEqual(reopened.getTable(table.id), schema); assert.deepEqual(reopened.getRecord(table.id, row.id), row);
   assert.deepEqual(reopened.listViews(table.id), views);

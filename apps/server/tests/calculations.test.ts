@@ -1,3 +1,4 @@
+import { recordTable } from '../../../packages/storage-sqlite/src/record-tables.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { setImmediate } from 'node:timers/promises';
@@ -121,7 +122,7 @@ test('HTTP reads a committed WAL snapshot while a calculation owns the writer an
   const held = new Promise<void>(resolve => { started = resolve; });
   const calculations = new Calculations({ refresh: async () => {
     connection.exec('BEGIN IMMEDIATE');
-    connection.prepare('UPDATE records SET version = version + 1 WHERE id = ?').run(record.id);
+    connection.prepare(`UPDATE ${recordTable(table.id)} SET version = version + 1 WHERE id = ?`).run(record.id);
     started();
     try { const result = await pending.promise; connection.exec('COMMIT'); return result; }
     catch (error) { connection.exec('ROLLBACK'); throw error; }

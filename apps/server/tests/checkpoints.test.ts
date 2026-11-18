@@ -1,3 +1,4 @@
+import { recordTable } from '../../../packages/storage-sqlite/src/record-tables.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Worker } from 'node:worker_threads';
@@ -23,7 +24,7 @@ test('passive checkpoints preserve pinned snapshots and finish after the reader 
     await worker.checkpoint();
     store.useBackgroundCheckpoints(() => {});
     reader.exec('BEGIN');
-    const version = () => reader.prepare('SELECT version FROM records WHERE id = ?').get(record.id)!['version'];
+    const version = () => reader.prepare(`SELECT version FROM ${recordTable(table.id)} WHERE id = ?`).get(record.id)!['version'];
     assert.equal(version(), record.version);
     const saved = service.updateBatch([{ id: record.id, expectedVersion: record.version, values: { [table.primaryFieldId]: 'After' } }], table.id);
     const partial = await worker.checkpoint();
@@ -149,7 +150,7 @@ test('a process crash after HTTP acknowledgement recovers uncheckpointed values,
     reader = new DatabaseSync(data.path); observer = new DatabaseSync(data.path);
     observer.exec('PRAGMA wal_checkpoint(TRUNCATE)');
     reader.exec('BEGIN');
-    assert.equal(reader.prepare('SELECT version FROM records WHERE id = ?').get(before.id)!['version'], before.version);
+    assert.equal(reader.prepare(`SELECT version FROM ${recordTable(table.id)} WHERE id = ?`).get(before.id)!['version'], before.version);
     const saved = await api.updateRecords(table.id, [{ id: before.id, expectedVersion: before.version, values: { [table.primaryFieldId]: 'Durable after crash 🌱' } }]);
     const checkpoint = observer.prepare('PRAGMA wal_checkpoint(PASSIVE)').get()!;
     assert.ok(Number(checkpoint['log']) > Number(checkpoint['checkpointed']), 'The acknowledged write must still be in the WAL at process exit.');

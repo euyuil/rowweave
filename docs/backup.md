@@ -1,4 +1,4 @@
-# Backup, restore, and upgrades
+# Backup, restore, and workspace versions
 
 A RowWeave workspace includes its tables, field definitions, records, versions, saved views, relation edges, and lookup definitions in one SQLite database. Use the workspace-file command to make a consistent snapshot, including committed data still in the write-ahead log (WAL). CSV is data exchange, not a complete workspace backup.
 
@@ -12,7 +12,7 @@ npm run workspace:file -- backup /path/to/workspace.sqlite /path/to/backups/work
 
 Replace paths with absolute paths on your machine and quote paths containing spaces. The source must exist, the destination must not exist, and the destination's parent directory must already exist. The service or desktop may remain open. This command runs in a separate Node process; it does not put database work in the desktop's main or renderer process.
 
-The command uses [Node's SQLite online backup API](https://nodejs.org/download/release/v24.22.1/docs/api/sqlite.html#sqlitebackupsourceDb-path-options) with a read-only source connection. It checks the snapshot's SQLite integrity and foreign keys, converts the snapshot to a self-contained journal mode, then copies it to the new destination without replacing an existing file. Temporary work is confined to a newly created directory beside the destination. The source schema is not upgraded during backup.
+The command uses [Node's SQLite online backup API](https://nodejs.org/download/release/v24.22.1/docs/api/sqlite.html#sqlitebackupsourceDb-path-options) with a read-only source connection. It checks the snapshot's SQLite integrity and foreign keys, converts the snapshot to a self-contained journal mode, then copies it to the new destination without replacing an existing file. Temporary work is confined to a newly created directory beside the destination.
 
 On success, exit code 0 and a JSON result identify the completed file, database format version, and byte size. For automation without npm's script banners, invoke `node /path/to/rowweave/dist/apps/server/src/workspace-file.js backup SOURCE DESTINATION` directly. Failure exits 1 with a JSON error on stderr and no success output. `--help` describes usage without opening a database.
 
@@ -28,7 +28,7 @@ Choose your own retention schedule and storage location; RowWeave does not delet
 npm run workspace:file -- restore /path/to/backups/workspace-2026-11-12.sqlite /path/to/restored/workspace.sqlite
 ```
 
-The destination must be a new path in an existing directory. Restore checks a copy of the snapshot and applies the current migrations to that copy before publishing it. It preserves stable identities, record/schema versions, values, and existing views. Older formats receive the metadata added by their migrations, such as an initial grid view. The original snapshot remains unchanged; a failed migration or unsupported newer format does not publish a destination.
+The destination must be a new path in an existing directory. Restore checks a format 39 snapshot before publishing a copy. Table and record identities, versions, field values, saved views and history are preserved.
 
 After a successful restore:
 
@@ -46,12 +46,10 @@ $env:ROWWEAVE_DATA_DIR = 'C:\RowWeave\RestoredWorkspace'
 
 Use your actual paths. Do not rename or overwrite a live database, and do not mix journal sidecars from the old workspace with the restored file. Restoring to a fresh directory avoids that ambiguity. Remote clients need no local database copy; they reconnect to the independently operated service after its workspace switch.
 
-## Upgrade and rollback
+## Changing versions
 
-Create a completed backup before upgrading RowWeave. Starting the new service opens and migrates a supported older database transactionally. The current format is 37; versions 1–36 are upgraded while retaining the data, and a newer unsupported format is rejected. Format 20 introduced URL field semantics; format 21 added persistent per-field automatic-number counters, format 22 added automatic timestamp fields using existing values and history, and format 23 added attachment metadata and file bytes, and format 24 added retention for files saved in records and their history, and format 25 gates typed date calculations, and format 26 adds array formulas and recalculation after reciprocal edits. Format 27 gates current-time formulas and explicit clock refresh. Format 28 adds transactional catalog and saved-view revision counters for lightweight change detection. Format 29 gates saved scalar-field groups; format 30 gates saved group measures; format 31 gates saved nested grouping; format 32 gates saved relative-year filters; format 33 gates saved rolling-hour filters; format 34 gates saved business-day filters; format 35 gates saved calendar views; format 36 gates saved Gantt views; format 37 gates saved gallery views. These migrations do not rewrite existing records or identities. Field descriptions remain in the stored field definitions. Durable record history, trash, saved-operation receipts, automatic values, sequence counters and uploaded file bytes are included in the same snapshot; no external attachment directory is needed. Stop the old service before starting the new version against the same database.
-
-To roll back an application upgrade, stop the new version and run the old version against a separate copy of the pre-upgrade backup. Do not ask an older application to open a database already upgraded by a newer one. The restore command migrates to its own application version; use the matching older tool for an older application. Changes made after the backup are not part of rollback.
+Format 39 gives each RowWeave table its own physical SQLite data table. Start a fresh workspace in a separate location by setting `ROWWEAVE_DB` for the service or `ROWWEAVE_DATA_DIR` for the desktop. Earlier file formats require a compatible earlier release. Keep that release and its workspace together if you need to reopen or back up the earlier data.
 
 ## Verification
 
-Regression tests back up an open workspace with committed WAL data, restore schema/records/views/relations/lookups, and verify that later writes to either workspace remain independent. They restore a version-one snapshot, preserve original backup bytes, and reject existing destinations, missing/corrupt inputs, referential corruption, unsupported versions, and failed migrations without publishing a completed result. A real subprocess test exercises the command, paths with spaces, JSON output, and error exit codes. All tests use temporary workspaces.
+Regression tests back up an open workspace with committed WAL data, restore schema/records/views/relations/lookups, and verify that later writes to either workspace remain independent. They preserve original snapshot bytes and reject existing destinations, missing or corrupt inputs, referential corruption, and unsupported versions. A real subprocess test exercises the command, paths with spaces, JSON output, and error exit codes. All tests use temporary workspaces.

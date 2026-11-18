@@ -1,8 +1,9 @@
+import { workspaceFormat } from '../src/migrations.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { randomBytes } from 'node:crypto';
-import { fixture, removeWorkspaceState } from './helpers.js';
+import { fixture } from './helpers.js';
 import { RecordService, ServiceError } from '../../core/src/record-service.js';
 import { parseCsv } from '../../core/src/csv.js';
 import { querySql } from '../src/query-sql.js';
@@ -46,7 +47,7 @@ test('grouped grids order options before record sorts and keep pagination, summa
   const db = new DatabaseSync(data.path);
   try {
     const sql = querySql(table, { ...view.query, groupBy: status, offset: 0, limit: 100 }, new Map());
-    const plan = db.prepare(`EXPLAIN QUERY PLAN SELECT r.id FROM records r WHERE ${sql.where} ORDER BY ${sql.order} LIMIT 100`).all(sql.parameters);
+    const plan = db.prepare(`EXPLAIN QUERY PLAN SELECT r.id FROM ${sql.source} r WHERE ${sql.where} ORDER BY ${sql.order} LIMIT 100`).all(sql.parameters);
     assert.ok(plan.some(row => String(row['detail']).includes('rowweave_view_')));
     assert.ok(plan.every(row => !String(row['detail']).includes('TEMP B-TREE')));
   } finally { db.close(); }
@@ -92,7 +93,7 @@ test('checkbox groups distinguish false, true and missing values through HTTP an
   assert.equal((await api.updateView(table.id, view.id, { expectedVersion: 1, groupBy: null })).groupBy, undefined);
 });
 
-test('format thirteen migration retains existing view, schema and record versions', t => {
+test('Existing view, schema and record versions survive reopening', t => {
   const data = fixture(t, null), store = data.open(), service = new RecordService(store);
   const table = service.createTable({ name: 'Existing' });
   const row = service.createRecords(table.id, [{ values: { [table.primaryFieldId]: 'Preserved' } }]).records[0]!;
@@ -100,9 +101,6 @@ test('format thirteen migration retains existing view, schema and record version
   const saved = service.updateView(table.id, view.id, { expectedVersion: view.version, rowHeight: 48, frozenColumns: 1 });
   const schema = service.getTable(table.id);
   store.close();
-  const db = new DatabaseSync(data.path);
-  removeWorkspaceState(db); db.exec('DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP TABLE record_changes; PRAGMA user_version = 13;');
-  db.close();
   const reopened = new RecordService(data.open());
   assert.deepEqual(reopened.getRecord(table.id, row.id), row);
   assert.deepEqual(reopened.getTable(table.id), schema);
@@ -159,7 +157,7 @@ test('grouped scalar conversions retain field and record IDs and reject array gr
   assert.throws(() => service.deleteField(table.id, field, { expectedVersion: table.version }), /Update view/);
 });
 
-test('format 29 migration preserves existing schema, records, history and view versions', t => {
+test('Reopening preserves schema, records, history and view versions', t => {
   const data = fixture(t, null), store = data.open(), service = new RecordService(store);
   const table = service.createTable({ name: 'Existing' });
   const record = service.createRecords(table.id, [{ values: { [table.primaryFieldId]: 'Preserved' } }]).records[0]!;
@@ -168,7 +166,6 @@ test('format 29 migration preserves existing schema, records, history and view v
   const schema = service.getTable(table.id);
   const state = service.workspaceState({ tableId: table.id, viewId: view.id }), history = service.recordHistory(table.id, record.id, {});
   store.close();
-  const db = new DatabaseSync(data.path); db.exec('PRAGMA user_version = 28'); db.close();
   const reopened = new RecordService(data.open());
   assert.deepEqual(reopened.getTable(table.id), schema);
   assert.deepEqual(reopened.getRecord(table.id, record.id), record);
@@ -176,7 +173,7 @@ test('format 29 migration preserves existing schema, records, history and view v
   assert.deepEqual(reopened.workspaceState({ tableId: table.id, viewId: view.id }), state);
   assert.deepEqual(reopened.recordHistory(table.id, record.id, {}), history);
   const check = new DatabaseSync(data.path);
-  try { assert.equal(check.prepare('PRAGMA user_version').get()!['user_version'], 38); } finally { check.close(); }
+  try { assert.equal(check.prepare('PRAGMA user_version').get()!['user_version'], workspaceFormat); } finally { check.close(); }
   const grouped = reopened.updateView(table.id, view.id, { expectedVersion: saved.version, groupBy: table.primaryFieldId });
   assert.equal(reopened.queryGroups(table.id, { viewId: grouped.id }).groups[0]!.key, 'Preserved');
 });

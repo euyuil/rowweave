@@ -1,3 +1,4 @@
+import { workspaceFormat } from '../src/migrations.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
@@ -71,20 +72,19 @@ test('gallery configuration validates cover dependencies and supports attachment
   service.deleteField(table.id, cover, { expectedVersion: renamed.version });
 });
 
-test('format 37 preserves existing views and saved galleries survive backup and restore', async t => {
+test('Saved galleries survive reopening, backup and restore', async t => {
   const { data, store, service, table, cover } = setup(t);
   const before = service.listViews(table.id), state = service.workspaceState({ tableId: table.id });
   store.close();
-  const previous = new DatabaseSync(data.path); previous.exec('PRAGMA user_version = 36'); previous.close();
   const reopened = new RecordService(data.open());
   assert.deepEqual(reopened.listViews(table.id), before); assert.deepEqual(reopened.workspaceState({ tableId: table.id }), state);
   const view = reopened.createView(table.id, { name: 'Saved gallery', type: 'gallery', gallery: { cardSize: 'small', coverFit: 'contain', coverFieldId: cover } });
   const backup = data.path + '.backup', restored = data.path + '.restored';
-  assert.equal((await backupWorkspace(data.path, backup)).version, 38);
+  assert.equal((await backupWorkspace(data.path, backup)).version, workspaceFormat);
   await restoreWorkspace(backup, restored);
   const db = new DatabaseSync(restored);
   try {
-    assert.equal(db.prepare('PRAGMA user_version').get()!['user_version'], 38);
+    assert.equal(db.prepare('PRAGMA user_version').get()!['user_version'], workspaceFormat);
     const config = JSON.parse(db.prepare('SELECT config_json FROM views WHERE id = ?').get(view.id)!['config_json'] as string);
     assert.equal(config.type, 'gallery'); assert.deepEqual(config.gallery, view.gallery);
   } finally { db.close(); }

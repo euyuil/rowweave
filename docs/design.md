@@ -120,7 +120,7 @@ The service core will progressively provide:
 
 The prototype starts with a fixed schema and text fields. Basic field types and dynamic schema management come later.
 
-The first release stores record values as JSON keyed by stable field IDs, with relational table/field/view metadata and normalized relation edges. Parameterized SQLite JSON queries and measured indexes support filtering and sorting without rebuilding a physical table for every field change. Field type changes preview conversion failures and apply atomically; incompatible values prevent the conversion without changing existing data.
+Workspace format 39 uses one physical SQLite data table per RowWeave table. Stable table and field IDs identify physical tables and columns. Scalar values use native SQLite storage classes, and ordered collections use JSON in their individual columns. Shared metadata stores field definitions, saved views, and normalized relation edges. A record identity registry gives cross-table links a single foreign-key target. Field type changes preview conversion failures and apply atomically. New workspaces start empty in the current format.
 
 ## First prototype
 

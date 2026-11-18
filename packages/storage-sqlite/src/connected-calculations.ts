@@ -1,3 +1,4 @@
+import { cellBinding, fieldColumn, fieldPath, recordSource, recordTable, recordUpdate } from './record-tables.js';
 import type { DatabaseSync } from 'node:sqlite';
 import type { CellValue, Field, RowRecord, Table } from '../../contracts/src/index.js';
 import { compileFormula } from '../../core/src/formulas.js';
@@ -56,25 +57,12 @@ export class ConnectedCalculations {
     try {
       const dirty = this.db.prepare('INSERT OR IGNORE INTO clock_formula_dirty VALUES (?, ?)');
       const changed = this.db.prepare('INSERT OR IGNORE INTO clock_formula_changed VALUES (?, ?)');
-      const write = this.db.prepare(`UPDATE records SET values_json = ?, formula_errors_json = ?,
-        version = version + CASE WHEN EXISTS (SELECT 1 FROM clock_formula_changed WHERE record_id = records.id) THEN 0 ELSE 1 END WHERE id = ?`);
-      const read = this.db.prepare(`SELECT r.id, r.position, r.version, r.values_json, r.formula_errors_json FROM records r
-        WHERE r.table_id = ? AND r.position > ? AND (? = 1 OR EXISTS (SELECT 1 FROM clock_formula_dirty d
-          WHERE d.record_id = r.id AND d.field_id IN (SELECT value FROM json_each(?)))) ORDER BY r.position LIMIT 100`);
       const sources = this.db.prepare(`INSERT OR IGNORE INTO clock_formula_dirty
         SELECT ?, edge.source_record_id FROM relation_edges edge JOIN clock_formula_dirty d
         ON d.record_id = edge.target_record_id AND d.field_id = ? WHERE edge.field_id = ?`);
       const schemas = new Map<string, Table>();
       const hasDirtyInput = this.db.prepare('SELECT 1 FROM clock_formula_dirty WHERE field_id IN (SELECT value FROM json_each(?)) LIMIT 1');
       const constants = new Map<string, ReturnType<NonNullable<Node['formula']>['calculate']>>();
-      const markConstant = this.db.prepare(`INSERT OR IGNORE INTO clock_formula_dirty SELECT ?, r.id FROM records r
-        WHERE r.table_id = ? AND (? = 1 OR EXISTS (SELECT 1 FROM clock_formula_dirty d WHERE d.record_id = r.id AND d.field_id IN (SELECT value FROM json_each(?))))
-        AND (json_type(r.values_json, ?) IS NOT json_type(?) OR json_extract(r.values_json, ?) IS NOT json_extract(?, '$')
-          OR json_extract(r.formula_errors_json, ?) IS NOT ?)`);
-      const writeConstant = this.db.prepare(`UPDATE records SET values_json = json_set(values_json, ?, json(?)),
-        formula_errors_json = CASE WHEN ? IS NULL THEN json_remove(formula_errors_json, ?) ELSE json_set(formula_errors_json, ?, ?) END,
-        version = version + CASE WHEN EXISTS (SELECT 1 FROM clock_formula_changed WHERE record_id = records.id) THEN 0 ELSE 1 END
-        WHERE id IN (SELECT record_id FROM clock_formula_dirty WHERE field_id = ?)`);
       const changedConstant = this.db.prepare('INSERT OR IGNORE INTO clock_formula_changed SELECT record_id, ? FROM clock_formula_dirty WHERE field_id = ?');
       for (const node of this.ordered) {
         const field = node.field;
@@ -89,18 +77,33 @@ export class ConnectedCalculations {
           const errors = Object.fromEntries(node.dependencies.filter(id => constants.get(id)!.error).map(id => [id, constants.get(id)!.error!]));
           const result = node.formula!.calculate(values, errors, now);
           constants.set(field.id, result);
-          const path = '$.' + JSON.stringify(field.id), value = JSON.stringify(result.value);
-          markConstant.run(field.id, node.tableId, node.formula!.clockDependent ? 1 : 0, JSON.stringify(node.dependencies), path, value, path, value, path, result.error ?? null);
-          if (writeConstant.run(path, value, result.error ?? null, path, path, result.error ?? null, field.id).changes) tables.add(node.tableId);
+          const path = fieldPath(field.id), value = cellBinding(result.value), error = result.error ?? null;
+          const physical = recordTable(node.tableId), column = fieldColumn(field.id);
+          this.db.prepare(`INSERT OR IGNORE INTO clock_formula_dirty SELECT ?, r.id FROM ${physical} r
+            WHERE (? = 1 OR EXISTS (SELECT 1 FROM clock_formula_dirty d WHERE d.record_id = r.id AND d.field_id IN (SELECT value FROM json_each(?))))
+            AND (r.${column} IS NOT ? OR (? IS NULL AND json_type(r.null_fields, ?) IS NULL)
+              OR json_extract(r.formula_errors_json, ?) IS NOT ?)`)
+            .run(field.id, node.formula!.clockDependent ? 1 : 0, JSON.stringify(node.dependencies), value, value, path, path, error);
+          const updated = this.db.prepare(`UPDATE ${physical} AS r SET ${column} = ?,
+            null_fields = CASE WHEN ? IS NULL THEN json_set(null_fields, ?, 1) ELSE json_remove(null_fields, ?) END,
+            formula_errors_json = CASE WHEN ? IS NULL THEN json_remove(formula_errors_json, ?) ELSE json_set(formula_errors_json, ?, ?) END,
+            version = version + CASE WHEN EXISTS (SELECT 1 FROM clock_formula_changed WHERE record_id = r.id) THEN 0 ELSE 1 END
+            WHERE id IN (SELECT record_id FROM clock_formula_dirty WHERE field_id = ?)`)
+            .run(value, value, path, path, error, path, path, error, field.id);
+          if (updated.changes) tables.add(node.tableId);
           changedConstant.run(node.tableId, field.id);
           continue;
         }
         let table = schemas.get(node.tableId);
         if (!table) { table = getTable(node.tableId); schemas.set(node.tableId, table); }
         const lookupIds = node.dependencies.filter(id => this.nodes.get(id)!.field.type === 'lookup');
+        const read = this.db.prepare(`SELECT r.id, r.position, r.version, r.values_json, r.formula_errors_json FROM ${recordSource(node.tableId)} r
+          WHERE r.position > ? AND (? = 1 OR EXISTS (SELECT 1 FROM clock_formula_dirty d
+            WHERE d.record_id = r.id AND d.field_id IN (SELECT value FROM json_each(?)))) ORDER BY r.position LIMIT 100`);
+        const write = recordUpdate(this.db, table);
         let position = -1;
         while (true) {
-          const rows = read.all(node.tableId, position, node.formula!.clockDependent ? 1 : 0, JSON.stringify(node.dependencies));
+          const rows = read.all(position, node.formula!.clockDependent ? 1 : 0, JSON.stringify(node.dependencies));
           if (!rows.length) break;
           position = rows.at(-1)!['position'] as number;
           const records = rows.map(row => ({ id: row['id'] as string, version: row['version'] as number,
@@ -115,8 +118,9 @@ export class ConnectedCalculations {
             record.values[field.id] = result.value;
             if (result.error) record.formulaErrors[field.id] = result.error;
             else delete record.formulaErrors[field.id];
-            write.run(JSON.stringify(record.values), JSON.stringify(record.formulaErrors), record.id);
-            changed.run(record.id, node.tableId); dirty.run(field.id, record.id); tables.add(node.tableId);
+            const increment = changed.run(record.id, node.tableId).changes ? 1 : 0;
+            write(record.id, record.values, increment, JSON.stringify(record.formulaErrors));
+            dirty.run(field.id, record.id); tables.add(node.tableId);
           }
         }
       }
@@ -130,8 +134,6 @@ export class ConnectedCalculations {
     const dirty = new Map<string, Set<string>>();
     for (const [id, node] of this.nodes) if (seeds.has(node.tableId)) dirty.set(id, seeds.get(node.tableId)!);
     const schemas = new Map<string, Table>();
-    const read = this.db.prepare('SELECT id, version, values_json, formula_errors_json FROM records WHERE table_id = ? AND id IN (SELECT value FROM json_each(?))');
-    const write = this.db.prepare('UPDATE records SET values_json = ?, formula_errors_json = ?, version = version + ? WHERE id = ?');
     const sources = this.db.prepare('SELECT DISTINCT source_record_id FROM relation_edges WHERE field_id = ? AND target_record_id IN (SELECT value FROM json_each(?))');
     for (const node of this.ordered) {
       const field = node.field;
@@ -151,10 +153,13 @@ export class ConnectedCalculations {
       let table = schemas.get(node.tableId);
       if (!table) { table = getTable(node.tableId); schemas.set(node.tableId, table); }
       const lookupIds = node.dependencies.filter(id => this.nodes.get(id)!.field.type === 'lookup');
+      const read = this.db.prepare(`SELECT id, version, values_json, formula_errors_json FROM ${recordSource(node.tableId)}
+        WHERE id IN (SELECT value FROM json_each(?))`);
+      const write = recordUpdate(this.db, table);
       const computed = new Set<string>();
       const selected = [...ids];
       for (let offset = 0; offset < selected.length; offset += 100) {
-        const records = read.all(node.tableId, JSON.stringify(selected.slice(offset, offset + 100))).map(row => ({
+        const records = read.all(JSON.stringify(selected.slice(offset, offset + 100))).map(row => ({
           id: row['id'] as string, version: row['version'] as number,
           values: JSON.parse(row['values_json'] as string) as Record<string, CellValue>,
           formulaErrors: JSON.parse(row['formula_errors_json'] as string) as Record<string, string>,
@@ -168,7 +173,7 @@ export class ConnectedCalculations {
           record.values[field.id] = result.value;
           if (result.error) record.formulaErrors[field.id] = result.error;
           else delete record.formulaErrors[field.id];
-          write.run(JSON.stringify(record.values), JSON.stringify(record.formulaErrors), versioned.has(record.id) ? 0 : 1, record.id);
+          write(record.id, record.values, versioned.has(record.id) ? 0 : 1, JSON.stringify(record.formulaErrors));
           versioned.add(record.id);
           computed.add(record.id);
           changed.add(record.id);

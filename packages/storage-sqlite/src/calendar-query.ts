@@ -1,3 +1,4 @@
+import { fieldPath, scalarColumn } from './record-tables.js';
 import type { DatabaseSync } from 'node:sqlite';
 import type { CalendarBucket } from '../../contracts/src/index.js';
 import type { CheckedCalendar, CheckedCalendarWindow } from '../../core/src/calendar-query.js';
@@ -20,21 +21,20 @@ function days(from: string, toExclusive: string, config: CheckedCalendar): Day[]
 }
 
 function* rows(db: DatabaseSync, config: CheckedCalendar, sql: SqlQuery): Iterable<CalendarRow> {
-  const path = (id: string) => '$.' + JSON.stringify(id);
-  const start = 'json_extract(r.values_json, :calendarStart)';
-  const end = config.endField ? 'json_extract(r.values_json, :calendarEnd)' : 'NULL';
+  const start = scalarColumn(config.startField, 'r');
+  const end = config.endField ? scalarColumn(config.endField, 'r') : 'NULL';
   const error = 'json_extract(r.formula_errors_json, :calendarStart) IS NOT NULL' +
     (config.endField ? ' OR json_extract(r.formula_errors_json, :calendarEnd) IS NOT NULL' : '');
   const linked = sql.computed.map((column, index) => ({ ...column, source: `calendarLookup${index}` }));
-  const source = linked.length ? `WITH ${linked.map(column => `${column.source} AS MATERIALIZED (${lookupSummaryRowsSql(column.field)})`).join(', ')},
+  const source = linked.length ? `WITH ${linked.map(column => `${column.source} AS MATERIALIZED (${lookupSummaryRowsSql(column.field, sql.tableId)})`).join(', ')},
     input AS NOT MATERIALIZED (SELECT r.*, ${linked.map(column => `${column.field.lookup!.operation === 'count'
       ? `CASE WHEN ${column.source}.record_id IS NULL THEN 0 ELSE ${column.source}.value END` : `${column.source}.value`} AS ${column.name}`).join(', ')}
-    FROM records r ${linked.map(column => `LEFT JOIN ${column.source} ON ${column.source}.record_id = r.id`).join(' ')}
+    FROM ${sql.source} r ${linked.map(column => `LEFT JOIN ${column.source} ON ${column.source}.record_id = r.id`).join(' ')}
     WHERE ${sql.sourceWhere})` : '';
   const statement = db.prepare(`${source} SELECT r.id, ${start} AS start_value, ${end} AS end_value, (${error}) AS invalid
-    FROM ${sql.computed.length ? 'input' : 'records'} r WHERE ${sql.where} ORDER BY ${sql.order}`);
-  for (const row of statement.iterate({ ...sql.parameters, ':calendarStart': path(config.startField.id),
-    ...(config.endField ? { ':calendarEnd': path(config.endField.id) } : {}) })) {
+    FROM ${sql.computed.length ? 'input' : sql.source} r WHERE ${sql.where} ORDER BY ${sql.order}`);
+  for (const row of statement.iterate({ ...sql.parameters, ':calendarStart': fieldPath(config.startField.id),
+    ...(config.endField ? { ':calendarEnd': fieldPath(config.endField.id) } : {}) })) {
     const startValue = row['start_value'] === null ? null : Date.parse(row['start_value'] as string);
     const endValue = row['end_value'] === null ? null : Date.parse(row['end_value'] as string);
     yield { id: row['id'] as string, start: startValue, end: endValue,

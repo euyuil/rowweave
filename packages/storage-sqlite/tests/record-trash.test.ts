@@ -1,9 +1,9 @@
+import { workspaceFormat } from '../src/migrations.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
 import { randomBytes } from 'node:crypto';
 import { dirname, join } from 'node:path';
-import { fixture, removeWorkspaceState } from './helpers.js';
+import { fixture } from './helpers.js';
 import { RecordService } from '../../core/src/record-service.js';
 import { SqliteRecordStore } from '../src/record-store.js';
 import { backupWorkspace, restoreWorkspace } from '../src/backup.js';
@@ -143,26 +143,24 @@ test('closed self-linked sets restore together with original UUIDs and current c
   assert.deepEqual(service.queryRecords(table.id, {}).records.map(row => row.id), restored.map(row => row.id));
 });
 
-test('trash survives restart, workspace backup and migration from format 16', async t => {
+test('Trash survives restart and workspace backup', async t => {
   const { data, store, service, table } = setup(t);
   const row = service.createRecords(table.id, [{ values: { [table.primaryFieldId]: 'Keep me' } }]).records[0]!;
   service.deleteRecords(table.id, [{ id: row.id, expectedVersion: 1 }]);
   const expected = service.recordTrash(table.id, {});
   store.close();
-  const db = new DatabaseSync(data.path);
-  removeWorkspaceState(db); db.exec('DROP TABLE attachments; DROP TABLE field_sequences; DROP TABLE record_batch_tables; DROP TABLE record_batches; DROP INDEX changes_deleted; PRAGMA user_version = 16;'); db.close();
-  const migrated = new RecordService(data.open());
-  assert.deepEqual(migrated.recordTrash(table.id, {}), expected);
+  const reopened = new RecordService(data.open());
+  assert.deepEqual(reopened.recordTrash(table.id, {}), expected);
   const backup = join(dirname(data.path), 'backup.sqlite'), restoredPath = join(dirname(data.path), 'restored.sqlite');
   await backupWorkspace(data.path, backup);
-  assert.equal((await restoreWorkspace(backup, restoredPath)).version, 38);
+  assert.equal((await restoreWorkspace(backup, restoredPath)).version, workspaceFormat);
   const restoredStore = new SqliteRecordStore(restoredPath);
   try {
     const restored = new RecordService(restoredStore);
     assert.deepEqual(restored.recordTrash(table.id, {}), expected);
     assert.equal(restored.restoreDeletedRecords(table.id, expected.records).records[0]!.id, row.id);
   } finally { restoredStore.close(); }
-  assert.deepEqual(migrated.recordTrash(table.id, {}), expected);
+  assert.deepEqual(reopened.recordTrash(table.id, {}), expected);
 });
 
 test('HTTP and SDK share bounded trash and atomic current-version recovery', async t => {

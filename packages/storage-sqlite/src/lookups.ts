@@ -1,9 +1,8 @@
+import { cellJson, fieldColumn, fieldPath, literal, recordTable, scalarColumn } from './record-tables.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { isLookupSummary, valueField, lookupElementField, maxLinkedRecords, type CellValue, type Field, type RowRecord, type Table } from '../../contracts/src/index.js';
 import { ServiceError } from '../../core/src/errors.js';
 import { maxFormulaArrayItems } from '../../core/src/array-formulas.js';
-
-const literal = (text: string) => `'${text.replaceAll("'", "''")}'`;
 
 function isTwoHopSummary(field: Field): boolean {
   const target = field.lookupResult!;
@@ -19,7 +18,7 @@ function chainedLookupSql(field: Field, alias = 'r', depth = 0): string {
   const item = array ? `CASE ${choice}.type WHEN 'true' THEN 'true' WHEN 'false' THEN 'false' ELSE json_quote(${choice}.value) END` : value;
   // Read each linked result once before expanding its members; reparsing its error per member is quadratic.
   const inputs = `${input} AS MATERIALIZED (SELECT ${edge}.position, ${result}.value -> '$.value' AS value, json_extract(${result}.value, '$.error') AS error
-    FROM relation_edges ${edge} JOIN records ${target} ON ${target}.id = ${edge}.target_record_id
+    FROM relation_edges ${edge} JOIN ${recordTable(field.lookupResultTableId!)} ${target} ON ${target}.id = ${edge}.target_record_id
     JOIN json_each(json_array(${chainedLookupSql(targetField, target, depth + 1)})) ${result}
     WHERE ${edge}.source_record_id = ${alias}.id AND ${edge}.field_id = ${literal(field.lookup!.relationFieldId)})`;
   const rows = `SELECT ${item} AS item, ${input}.error, ${array ? `${choice}.key IS NOT NULL` : '1'} AS present FROM ${input}
@@ -41,23 +40,21 @@ export function lookupSql(field: Field, alias = 'r'): string {
   if (isTwoHopSummary(field)) return aggregateSql(field, alias);
   if (field.lookupResult!.type === 'lookup') return `json_extract(${chainedLookupSql(field, alias)}, '$.value')`;
   if (isLookupSummary(field)) return aggregateSql(field, alias);
-  const literal = (text: string) => `'${text.replaceAll("'", "''")}'`;
-  const path = literal(`$.${JSON.stringify(field.lookup!.fieldId)}`);
+  const column = fieldColumn(field.lookup!.fieldId, 'target');
   const multi = ['multiSelect', 'attachment'].includes(field.lookupResult!.type);
   return `(SELECT json_group_array(${multi ? 'item' : 'json(item)'}) FROM (
-    SELECT ${multi ? 'choice.value' : `target.values_json -> ${path}`} AS item
-    FROM relation_edges edge JOIN records target ON target.id = edge.target_record_id
-    ${multi ? `JOIN json_each(json_extract(target.values_json, ${path})) choice` : ''}
+    SELECT ${multi ? 'choice.value' : cellJson(column)} AS item
+    FROM relation_edges edge JOIN ${recordTable(field.lookupResultTableId!)} target ON target.id = edge.target_record_id
+    ${multi ? `JOIN json_each(CAST(${column} AS TEXT)) choice` : ''}
     WHERE edge.source_record_id = ${alias}.id AND edge.field_id = ${literal(field.lookup!.relationFieldId)}
     ORDER BY edge.position${multi ? ', CAST(choice.key AS INTEGER)' : ''}))`;
 }
 
 function aggregateValueSql(field: Field, error: boolean, source = field): string {
-  const literal = (text: string) => `'${text.replaceAll("'", "''")}'`;
-  const path = literal(`$.${JSON.stringify(source.lookup!.fieldId)}`);
+  const path = literal(fieldPath(source.lookup!.fieldId));
   const functions = { count: 'COUNT', sum: 'SUM', average: 'AVG', min: 'MIN', max: 'MAX' };
   const operation = field.lookup!.operation as keyof typeof functions;
-  const result = `${functions[operation]}(CAST(json_extract(target.values_json, ${path}) AS REAL))`;
+  const result = `${functions[operation]}(CAST(${scalarColumn(source.lookupResult!, 'target')} AS REAL))`;
   const invalid = source.lookupResult!.type === 'formula' ? `MAX(json_extract(target.formula_errors_json, ${path}) IS NOT NULL)` : '0';
   return `CASE WHEN ${invalid} THEN ${error ? "'A linked formula has an error.'" : 'NULL'}
     WHEN abs(${result}) > 1.7976931348623157e308 THEN ${error ? "'The linked summary exceeds the numeric range.'" : 'NULL'}
@@ -65,21 +62,20 @@ function aggregateValueSql(field: Field, error: boolean, source = field): string
 }
 
 function aggregateSql(field: Field, alias: string, error = false): string {
-  const literal = (text: string) => `'${text.replaceAll("'", "''")}'`;
   const source = isTwoHopSummary(field) ? field.lookupResult! : field;
   // A direct numeric lookup has at most 200 scalar members; aggregate its edges without building JSON arrays.
   const route = source === field ? `WHERE edge.source_record_id = ${alias}.id`
     : `JOIN relation_edges outer_edge ON edge.source_record_id = outer_edge.target_record_id
       WHERE outer_edge.source_record_id = ${alias}.id AND outer_edge.field_id = ${literal(field.lookup!.relationFieldId)}`;
-  return `(SELECT ${aggregateValueSql(field, error, source)} FROM relation_edges edge JOIN records target ON target.id = edge.target_record_id
+  return `(SELECT ${aggregateValueSql(field, error, source)} FROM relation_edges edge JOIN ${recordTable(source.lookupResultTableId!)} target ON target.id = edge.target_record_id
     ${route} AND edge.field_id = ${literal(source.lookup!.relationFieldId)})`;
 }
 
-export function lookupSummaryRowsSql(field: Field): string {
-  if (field.lookupResult!.type === 'lookup') return `SELECT r.id AS record_id, ${lookupSql(field)} AS value FROM records r
+export function lookupSummaryRowsSql(field: Field, tableId: string): string {
+  if (field.lookupResult!.type === 'lookup') return `SELECT r.id AS record_id, ${lookupSql(field)} AS value FROM ${recordTable(tableId)} r
     WHERE r.id IN (SELECT source_record_id FROM relation_edges WHERE field_id = ${literal(field.lookup!.relationFieldId)})`;
   return `SELECT edge.source_record_id AS record_id, ${aggregateValueSql(field, false)} AS value
-    FROM relation_edges edge JOIN records target ON target.id = edge.target_record_id
+    FROM relation_edges edge JOIN ${recordTable(field.lookupResultTableId!)} target ON target.id = edge.target_record_id
     WHERE edge.field_id = '${field.lookup!.relationFieldId.replaceAll("'", "''")}' GROUP BY edge.source_record_id`;
 }
 
@@ -88,8 +84,7 @@ function lookupErrorSql(field: Field, alias = 'r'): string {
   if (field.lookupResult!.type === 'lookup') return `json_extract(${chainedLookupSql(field, alias)}, '$.error')`;
   if (isLookupSummary(field)) return aggregateSql(field, alias, true);
   if (field.lookupResult!.type !== 'formula') return 'NULL';
-  const literal = (text: string) => `'${text.replaceAll("'", "''")}'`;
-  return `(CASE WHEN EXISTS (SELECT 1 FROM relation_edges edge JOIN records target ON target.id = edge.target_record_id
+  return `(CASE WHEN EXISTS (SELECT 1 FROM relation_edges edge JOIN ${recordTable(field.lookupResultTableId!)} target ON target.id = edge.target_record_id
     WHERE edge.source_record_id = ${alias}.id AND edge.field_id = ${literal(field.lookup!.relationFieldId)}
     AND json_extract(target.formula_errors_json, ${literal(`$.${JSON.stringify(field.lookup!.fieldId)}`)}) IS NOT NULL)
     THEN 'A linked formula has an error.' END)`;
@@ -191,7 +186,7 @@ export class Lookups {
     const fields = table.fields.filter(field => field.type === 'lookup' && (!output || output.includes(field.id)));
     if (!fields.length || !records.length) return records;
     const rows = this.db.prepare(`SELECT r.id, ${fields.map((field, index) => `${lookupSql(field)} AS value_${index}, ${lookupErrorSql(field)} AS error_${index}`).join(', ')}
-      FROM records r WHERE r.id IN (SELECT value FROM json_each(?))`).all(JSON.stringify(records.map(record => record.id)));
+      FROM ${recordTable(table.id)} r WHERE r.id IN (SELECT value FROM json_each(?))`).all(JSON.stringify(records.map(record => record.id)));
     const byId = new Map(records.map(record => [record.id, record]));
     for (const row of rows) {
       const record = byId.get(row['id'] as string)!;

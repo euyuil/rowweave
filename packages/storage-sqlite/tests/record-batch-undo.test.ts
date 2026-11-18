@@ -1,8 +1,8 @@
+import { workspaceFormat } from '../src/migrations.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
 import { dirname, join } from 'node:path';
-import { fixture, removeWorkspaceState } from './helpers.js';
+import { fixture } from './helpers.js';
 import { RecordService } from '../../core/src/record-service.js';
 import { SqliteRecordStore } from '../src/record-store.js';
 import { backupWorkspace, restoreWorkspace } from '../src/backup.js';
@@ -152,17 +152,16 @@ test('current constraints and schema batches reject undo without partial changes
   assert.throws(() => service.undoRecordBatch(table.id, schema.id), { code: 'INVALID_HISTORY' });
 });
 
-test('complete saved undo and its receipt survive restart, backup and format-18 migration', async t => {
+test('Complete saved undo and its receipt survive restart and backup', async t => {
   const { data, store, service, table, amount } = setup(t);
   const row = service.createRecords(table.id, [{ values: { [amount]: 1 } }]).records[0]!;
   service.updateBatch([{ id: row.id, expectedVersion: 1, values: { [amount]: 2 } }], table.id);
   const batch = service.recordBatches(table.id, {}).batches[0]!;
   store.close();
-  const db = new DatabaseSync(data.path); removeWorkspaceState(db); db.exec('DROP TABLE attachments; DROP TABLE field_sequences; ALTER TABLE record_batches DROP COLUMN undo_of; PRAGMA user_version = 18;'); db.close();
   const restarted = new RecordService(data.open()), result = restarted.undoRecordBatch(table.id, batch.id);
   assert.equal(restarted.getRecord(table.id, row.id).values[amount], 1);
   const backup = join(dirname(data.path), 'backup.sqlite'), restoredPath = join(dirname(data.path), 'restored.sqlite');
-  await backupWorkspace(data.path, backup); assert.equal((await restoreWorkspace(backup, restoredPath)).version, 38);
+  await backupWorkspace(data.path, backup); assert.equal((await restoreWorkspace(backup, restoredPath)).version, workspaceFormat);
   const restoredStore = new SqliteRecordStore(restoredPath);
   try {
     const restored = new RecordService(restoredStore);

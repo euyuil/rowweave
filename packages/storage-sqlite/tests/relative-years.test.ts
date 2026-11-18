@@ -1,6 +1,6 @@
+import { workspaceFormat } from '../src/migrations.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
 import { fixture } from './helpers.js';
 import { RecordService } from '../../core/src/record-service.js';
 import { parseCsv } from '../../core/src/csv.js';
@@ -88,7 +88,7 @@ test('saved year filters share context across views, grouping, CSV and year-boun
   assert.equal([...parseCsv(service.exportCsv(table.id, { viewId: view.id }))].length, 2);
 });
 
-test('format 32 preserves prior views and year rules survive restart, backup and schema changes', async t => {
+test('Year rules survive restart, backup and schema changes', async t => {
   const now = new Date('2024-07-01T00:00:00Z'), data = fixture(t, null, () => now), store = data.open(), service = new RecordService(store);
   let table = service.createTable({ name: 'Annual persistence' });
   table = service.createField(table.id, { expectedVersion: table.version, name: 'Due', type: 'date' });
@@ -96,16 +96,15 @@ test('format 32 preserves prior views and year rules survive restart, backup and
   const old = service.createView(table.id, { name: 'Existing month', query: { filter: relative(due, 'thisMonth') } });
   const before = service.workspaceState({ tableId: table.id, viewId: old.id }), history = service.recordHistory(table.id, row.id, {});
   store.close();
-  const legacy = new DatabaseSync(data.path); legacy.exec('PRAGMA user_version = 31'); legacy.close();
-  const upgraded = new RecordService(data.open());
-  assert.deepEqual(upgraded.getView(table.id, old.id), old);
-  assert.deepEqual(upgraded.getRecord(table.id, row.id), row);
-  assert.deepEqual(upgraded.workspaceState({ tableId: table.id, viewId: old.id }), before);
-  assert.deepEqual(upgraded.recordHistory(table.id, row.id, {}), history);
-  const view = upgraded.createView(table.id, { name: 'This year', query: { filter: relative(due, 'thisYear') } });
+  const reopened = new RecordService(data.open());
+  assert.deepEqual(reopened.getView(table.id, old.id), old);
+  assert.deepEqual(reopened.getRecord(table.id, row.id), row);
+  assert.deepEqual(reopened.workspaceState({ tableId: table.id, viewId: old.id }), before);
+  assert.deepEqual(reopened.recordHistory(table.id, row.id, {}), history);
+  const view = reopened.createView(table.id, { name: 'This year', query: { filter: relative(due, 'thisYear') } });
   assert.deepEqual(new RecordService(data.open()).getView(table.id, view.id), view);
   const backup = join(dirname(data.path), 'years.sqlite'), restoredPath = join(dirname(data.path), 'years-restored.sqlite');
-  assert.equal((await backupWorkspace(data.path, backup)).version, 38);
+  assert.equal((await backupWorkspace(data.path, backup)).version, workspaceFormat);
   await restoreWorkspace(backup, restoredPath);
   const restoredStore = new SqliteRecordStore(restoredPath, null, () => now);
   try {
@@ -113,7 +112,7 @@ test('format 32 preserves prior views and year rules survive restart, backup and
     assert.deepEqual(restored.getView(table.id, view.id), view);
     assert.equal(restored.queryView(table.id, view.id, {}).records[0]!.id, row.id);
   } finally { restoredStore.close(); }
-  table = upgraded.updateField(table.id, due, { expectedVersion: table.version, name: 'Renamed date' });
-  assert.deepEqual(upgraded.getView(table.id, view.id), view);
-  assert.throws(() => upgraded.previewConversion(table.id, due, { expectedVersion: table.version, field: { name: 'Text', type: 'text' } }), /Update view/);
+  table = reopened.updateField(table.id, due, { expectedVersion: table.version, name: 'Renamed date' });
+  assert.deepEqual(reopened.getView(table.id, view.id), view);
+  assert.throws(() => reopened.previewConversion(table.id, due, { expectedVersion: table.version, field: { name: 'Text', type: 'text' } }), /Update view/);
 });

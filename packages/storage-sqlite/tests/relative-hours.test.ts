@@ -1,6 +1,6 @@
+import { workspaceFormat } from '../src/migrations.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
 import { dirname, join } from 'node:path';
 import { fixture } from './helpers.js';
 import { RecordService } from '../../core/src/record-service.js';
@@ -132,22 +132,21 @@ test('rolling timestamp lookups require one matching linked value and include se
   assert.equal(service.queryRecords(table.id, { filter: relative(created, 'pastHours', 1) }).total, 3);
 });
 
-test('format 33 preserves prior data and rolling filters survive restart, backup and schema checks', async t => {
+test('Rolling filters survive restart, backup and schema checks', async t => {
   const now = new Date('2026-03-08T07:30:42.123Z'), data = fixture(t, null, () => now), store = data.open(), service = new RecordService(store);
   let table = service.createTable({ name: 'Hourly persistence' });
   table = service.createField(table.id, { expectedVersion: table.version, name: 'At', type: 'datetime' });
   const at = table.fields[1]!.id, row = service.createRecords(table.id, [{ values: { [at]: now.toISOString() } }]).records[0]!;
   const old = service.listViews(table.id)[0]!, history = service.recordHistory(table.id, row.id, {});
   store.close();
-  const legacy = new DatabaseSync(data.path); legacy.exec('PRAGMA user_version = 32'); legacy.close();
-  const upgraded = new RecordService(data.open());
-  assert.deepEqual(upgraded.getView(table.id, old.id), old);
-  assert.deepEqual(upgraded.getRecord(table.id, row.id), row);
-  assert.deepEqual(upgraded.recordHistory(table.id, row.id, {}), history);
-  const view = upgraded.createView(table.id, { name: 'Recent', query: { filter: relative(at, 'pastHours') } });
+  const reopened = new RecordService(data.open());
+  assert.deepEqual(reopened.getView(table.id, old.id), old);
+  assert.deepEqual(reopened.getRecord(table.id, row.id), row);
+  assert.deepEqual(reopened.recordHistory(table.id, row.id, {}), history);
+  const view = reopened.createView(table.id, { name: 'Recent', query: { filter: relative(at, 'pastHours') } });
   assert.deepEqual(new RecordService(data.open()).getView(table.id, view.id), view);
   const backup = join(dirname(data.path), 'hours.sqlite'), restoredPath = join(dirname(data.path), 'hours-restored.sqlite');
-  assert.equal((await backupWorkspace(data.path, backup)).version, 38);
+  assert.equal((await backupWorkspace(data.path, backup)).version, workspaceFormat);
   await restoreWorkspace(backup, restoredPath);
   const restoredStore = new SqliteRecordStore(restoredPath, null, () => now);
   try {
@@ -155,7 +154,7 @@ test('format 33 preserves prior data and rolling filters survive restart, backup
     assert.deepEqual(restored.getView(table.id, view.id), view);
     assert.equal(restored.queryView(table.id, view.id, {}).records[0]!.id, row.id);
   } finally { restoredStore.close(); }
-  table = upgraded.updateField(table.id, at, { expectedVersion: table.version, name: 'Renamed time' });
-  assert.deepEqual(upgraded.getView(table.id, view.id), view);
-  assert.throws(() => upgraded.previewConversion(table.id, at, { expectedVersion: table.version, field: { name: 'Day', type: 'date' } }), /Update view/);
+  table = reopened.updateField(table.id, at, { expectedVersion: table.version, name: 'Renamed time' });
+  assert.deepEqual(reopened.getView(table.id, view.id), view);
+  assert.throws(() => reopened.previewConversion(table.id, at, { expectedVersion: table.version, field: { name: 'Day', type: 'date' } }), /Update view/);
 });

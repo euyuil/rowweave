@@ -1,3 +1,4 @@
+import { recordPatch, recordSource, recordTable, recordUpdate } from './record-tables.js';
 import type { DatabaseSync } from 'node:sqlite';
 import type { CellValue, Field, Table } from '../../contracts/src/index.js';
 import { compileFormulas } from '../../core/src/formulas.js';
@@ -34,11 +35,11 @@ export class RecordTimes {
     const added = table.fields.filter(field => (field.type === 'createdTime' || field.type === 'updatedTime') && !previous.fields.some(before => before.id === field.id));
     const changed = new Set<string>();
     if (!added.length) return changed;
-    const write = this.db.prepare('UPDATE records SET values_json = ?, version = version + 1 WHERE id = ?');
-    for (const row of this.db.prepare('SELECT id, values_json FROM records WHERE table_id = ? ORDER BY position').iterate(table.id)) {
-      const id = row['id'] as string, values = JSON.parse(row['values_json'] as string) as Record<string, CellValue>;
+    const write = recordPatch(this.db, table.id, added.map(field => field.id));
+    for (const row of this.db.prepare(`SELECT id FROM ${recordTable(table.id)} ORDER BY position`).iterate()) {
+      const id = row['id'] as string, values: Record<string, CellValue> = {};
       for (const field of added) values[field.id] = (field.type === 'createdTime' ? this.createdTime : this.editedTime).get(table.id, id)?.['changed_at'] as string ?? null;
-      write.run(JSON.stringify(values), id); changed.add(id);
+      write(id, values, 1); changed.add(id);
     }
     return changed;
   }
@@ -47,16 +48,16 @@ export class RecordTimes {
     const changed = new Set<string>(), fields = table.fields.filter(field => field.type === 'updatedTime');
     if (!fields.length) return changed;
     const now = this.transactionTime.get()!['changed_at'] as string, calculate = compileFormulas(table, { skipLinked: true, now: new Date(now) });
-    const read = this.db.prepare('SELECT values_json, formula_errors_json FROM records WHERE table_id = ? AND id = ?');
-    const write = this.db.prepare('UPDATE records SET values_json = ?, formula_errors_json = ? WHERE id = ?');
+    const read = this.db.prepare(`SELECT values_json, formula_errors_json FROM ${recordSource(table.id)} WHERE id = ?`);
+    const write = recordUpdate(this.db, table);
     for (const id of ids) {
-      const row = read.get(table.id, id);
+      const row = read.get(id);
       if (!row) continue;
       const values = JSON.parse(row['values_json'] as string) as Record<string, CellValue>;
       if (fields.every(field => values[field.id] === now)) continue;
       for (const field of fields) values[field.id] = now;
       const result = calculate(values, JSON.parse(row['formula_errors_json'] as string) as Record<string, string>);
-      write.run(JSON.stringify(result.values), JSON.stringify(result.formulaErrors ?? {}), id); changed.add(id);
+      write(id, result.values, 0, JSON.stringify(result.formulaErrors ?? {})); changed.add(id);
     }
     return changed;
   }
