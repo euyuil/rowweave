@@ -11,7 +11,12 @@ const ready = page => page.waitForFunction(() => document.querySelector('.grid-h
 const cell = (page, row, text) => page.waitForFunction(({ row, text }) =>
   document.querySelector(`canvas [aria-rowindex="${row + 2}"] [role="gridcell"][aria-colindex="1"]`)?.textContent.includes(text), { row, text });
 const click = async (page, row, column = 0) => {
-  await ready(page); const bounds = await page.locator('canvas').first().boundingBox();
+  await ready(page);
+  await page.locator('.dvn-scroller').evaluate(element => {
+    element.scrollTop = 0;
+    return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  });
+  const bounds = await page.locator('canvas').first().boundingBox();
   await page.mouse.click(bounds.x + 100 + column * 180, bounds.y + 58 + row * 36, { delay: 50 });
   assert.equal((await page.locator('canvas').first().boundingBox()).y, bounds.y, 'Selection wording must not move the grid during a click.');
 };
@@ -84,21 +89,28 @@ export async function verifyNestedGroups(page) {
   await waitForAutosave(page);
   await page.getByRole('button', { name: 'Undo', exact: true }).click(); await page.getByText('All changes saved', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Redo', exact: true }).click(); await waitForAutosave(page);
-  await waitForAutosave(page); await page.getByText('All changes saved', { exact: true }).waitFor(); await ready(page);
+  await waitForLiveSync(page); await cell(page, 5, 'Pasted Delta');
   assert.equal((await call(page, root + '/records/' + records[2].id)).values[title], 'Pasted Delta');
   assert.equal((await call(page, root + '/records/' + records[3].id)).values[title], 'Pasted Echo');
   for (const record of records.slice(0, 2)) assert.deepEqual(await call(page, root + '/records/' + record.id), record);
 
-  await click(page, 5, 2); if (!await page.locator('.rowweave-cell-editor').count()) await page.keyboard.press('Enter');
-  await page.getByLabel('Cell value', { exact: true }).fill('Other'); await page.keyboard.press('Enter');
+  const editor = page.getByLabel('Cell value', { exact: true });
+  const editCell = async (row, column) => {
+    await click(page, row, column);
+    await page.waitForFunction(() => document.querySelector('canvas')?.contains(document.activeElement) ||
+      document.activeElement?.getAttribute('aria-label') === 'Cell value');
+    if (!await editor.count()) await page.keyboard.press('Enter');
+    await editor.waitFor();
+  };
+  await editCell(5, 2);
+  await editor.fill('Other'); await page.keyboard.press('Enter');
   await waitForAutosave(page);
   await page.keyboard.press('Control+s'); await page.getByText('All changes saved', { exact: true }).waitFor(); await ready(page);
   await cell(page, 3, '▾ Other'); await cell(page, 5, 'Pasted Delta');
   assert.equal((await call(page, root + '/records/' + records[2].id)).values[category], 'Other');
   assert.equal((await call(page, root + '/records/' + records[3].id)).values[category], 'Shared');
 
-  await click(page, 5); if (!await page.locator('.rowweave-cell-editor').count()) await page.keyboard.press('Enter');
-  const editor = page.getByLabel('Cell value', { exact: true });
+  await editCell(5);
   await editor.fill('保留输入'); await editor.dispatchEvent('compositionstart');
   const remote = await call(page, root + '/records/' + records[3].id);
   await call(page, root + '/records', 'PATCH', [{ id: remote.id, expectedVersion: remote.version, values: { [title]: 'Remote Echo', [amount]: 15 } }]);

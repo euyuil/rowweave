@@ -39,8 +39,49 @@ try {
     await page.getByRole('textbox', { name: 'Cell value', exact: true }).fill(value);
     await page.keyboard.press('Enter');
   };
+  const workspaceLayout = () => page.locator('.table-workspace').evaluate(workspace => {
+    const selectors = ['.table-heading', '.view-navigation', '.record-toolbar', '.view-toolbar', '.grid-host', '.table-status'];
+    return selectors.map(selector => workspace.querySelector(selector).getBoundingClientRect().toJSON());
+  });
+  const toolbarAppearance = () => page.locator('.table-workspace').evaluate(workspace => {
+    const selectors = ['.table-management button', '.view-tabs button', '.new-view', '.record-toolbar button:not(.saved-action)', '.view-toolbar button', '.view-toolbar input'];
+    return [...workspace.querySelectorAll(selectors.join(','))].map(element => ({
+      label: element.textContent, disabled: element.disabled, opacity: getComputedStyle(element).opacity,
+      bounds: element.getBoundingClientRect().toJSON(),
+    }));
+  });
   assert.equal(await page.getByRole('button', { name: 'Save changes', exact: true }).count(), 0);
-  await select(); await edit('Automatic'); await waitValue('field_1', 'Automatic');
+  await select();
+  const layout = await workspaceLayout(), controls = await toolbarAppearance();
+  const workspace = page.locator('.table-workspace');
+  const saveStatus = workspace.locator('.table-status').getByRole('status').first();
+  const viewSettings = workspace.getByRole('button', { name: 'View settings', exact: true });
+  let releaseGridWrite;
+  const gridWrite = new Promise(resolve => { releaseGridWrite = resolve; });
+  const holdGridWrite = async route => {
+    if (route.request().method() === 'PATCH') await gridWrite;
+    await route.continue();
+  };
+  await page.route('**/tables/prototype/records', holdGridWrite);
+  try {
+    await edit('Automatic');
+    await saveStatus.filter({ hasText: /^Saving…$/ }).waitFor();
+    assert.deepEqual(await workspaceLayout(), layout);
+    assert.deepEqual(await toolbarAppearance(), controls);
+    assert.equal(await viewSettings.isDisabled(), true);
+    await viewSettings.focus();
+    await page.keyboard.press('Enter');
+    assert.equal(await page.getByRole('dialog').count(), 0);
+  } finally {
+    releaseGridWrite();
+    await page.unrouteAll({ behavior: 'wait' });
+  }
+  await waitValue('field_1', 'Automatic');
+  await saveStatus.filter({ hasText: /^All changes saved$/ }).waitFor();
+  assert.deepEqual(await workspaceLayout(), layout);
+  assert.deepEqual(await toolbarAppearance(), controls);
+  assert.equal(await viewSettings.evaluate(element => document.activeElement === element), true);
+  assert.equal(await workspace.locator('.table-notifications').count(), 0);
   await page.getByRole('button', { name: 'Undo', exact: true }).click(); await waitValue('field_1', null);
   await page.getByRole('button', { name: 'Redo', exact: true }).click(); await waitValue('field_1', 'Automatic');
   console.log('Grid autosave, undo and redo passed.');
@@ -63,6 +104,7 @@ try {
   if (!await page.getByRole('textbox', { name: 'Cell value', exact: true }).count()) await page.keyboard.press('Enter');
   await page.getByRole('textbox', { name: 'Cell value', exact: true }).fill('Retry draft'); await page.keyboard.press('Enter');
   await page.getByRole('alert').filter({ hasText: 'Test connection unavailable' }).waitFor();
+  assert.deepEqual(await workspaceLayout(), layout);
   await new Promise(resolve => setTimeout(resolve, 700));
   assert.equal(attempts, 1);
   assert.equal((await read()).values.field_1, 'Automatic');
@@ -85,7 +127,13 @@ try {
   const table = await api.getTable('prototype');
   const first = dialog.getByLabel(table.fields[0].name, { exact: true });
   const second = dialog.getByLabel(table.fields[1].name, { exact: true });
+  const drawerLayout = await workspaceLayout(), drawerControls = await toolbarAppearance();
   await first.fill('Details automatic'); await waitValue('field_1', 'Details automatic');
+  await dialog.getByText('All changes saved', { exact: true }).waitFor();
+  await workspace.locator('.table-status').getByText('Updates are available and will load automatically when editing finishes.', { exact: true }).waitFor();
+  assert.deepEqual(await workspaceLayout(), drawerLayout);
+  assert.deepEqual(await toolbarAppearance(), drawerControls);
+  assert.equal(await workspace.locator('.table-notifications').count(), 0);
   assert.equal(await first.evaluate(element => element === document.activeElement), true);
   const record = await read();
   await api.updateRecords('prototype', [{ id: record.id, expectedVersion: record.version, values: { field_2: 'Other client' } }]);
@@ -106,6 +154,10 @@ try {
   try {
     await first.fill('Submitted first field');
     await Promise.race([arrival, new Promise((_, reject) => { const timer = setTimeout(() => reject(new Error('The first field write did not arrive.')), 10_000); timer.unref(); })]);
+    assert.deepEqual(await toolbarAppearance(), drawerControls);
+    const close = dialog.getByRole('button', { name: 'Close panel', exact: true });
+    assert.equal(await close.isDisabled(), true);
+    assert.equal(await close.evaluate(element => getComputedStyle(element).opacity), '1');
     await second.fill('Concurrent local draft');
     const concurrent = await read();
     await api.updateRecords('prototype', [{ id: concurrent.id, expectedVersion: concurrent.version, values: { field_2: 'Concurrent external winner' } }]);

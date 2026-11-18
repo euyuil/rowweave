@@ -14,8 +14,10 @@ export class LiveHistory {
   constructor(private readonly write: (updates: RecordUpdate[]) => Promise<BatchResult>) {}
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
   getSnapshot = () => this.revision;
-  get canUndo(): boolean { return !this.busy && this.past.length > 0; }
-  get canRedo(): boolean { return !this.busy && this.future.length > 0; }
+  get hasUndo(): boolean { return this.past.length > 0; }
+  get hasRedo(): boolean { return this.future.length > 0; }
+  get canUndo(): boolean { return !this.busy && this.hasUndo; }
+  get canRedo(): boolean { return !this.busy && this.hasRedo; }
   private emit(): void { this.revision++; for (const listener of this.listeners) listener(); }
   private inverse(schemaVersion: number, updates: RecordUpdate[], result: BatchResult): Entry {
     const records = new Map(result.records.map(record => [record.id, record]));

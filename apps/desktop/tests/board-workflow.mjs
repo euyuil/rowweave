@@ -59,8 +59,25 @@ export async function verifyBoardWorkflow(page) {
   assert.ok(await page.locator('.drawer-dialog .dialog-actions').evaluate(element => Math.abs(element.getBoundingClientRect().bottom - innerHeight) <= 2));
   await page.screenshot({ path: '.artifacts/desktop-board-record-panel.png' });
   assert.equal(await page.getByLabel('Notes', { exact: true }).inputValue(), 'Hidden note 0');
-  await page.getByLabel('Name', { exact: true }).fill('Moved task');
-  await closeSavedRecord(page);
+  let releaseWrite;
+  const pendingWrite = new Promise(resolve => { releaseWrite = resolve; });
+  const holdWrite = async route => {
+    if (route.request().method() === 'PATCH') await pendingWrite;
+    await route.continue();
+  };
+  const recordsPath = `**/tables/${fixture.table.id}/records`;
+  await page.route(recordsPath, holdWrite);
+  try {
+    await page.getByLabel('Name', { exact: true }).fill('Moved task');
+    await page.locator('.record-save-status').filter({ hasText: /^Saving…$/ }).waitFor();
+    assert.equal(await page.locator('.board-tools button').evaluate(button => getComputedStyle(button).opacity), '1');
+    assert.equal(await page.locator('.board-move select').first().evaluate(select => select.disabled), false);
+    releaseWrite();
+    await closeSavedRecord(page);
+  } finally {
+    releaseWrite();
+    await page.unroute(recordsPath, holdWrite);
+  }
   await doing.getByRole('button', { name: 'Moved task', exact: true }).waitFor();
   await todo.getByRole('button', { name: '+ New record', exact: true }).click();
   assert.equal(await page.getByLabel('Status', { exact: true }).inputValue(), 'todo');
