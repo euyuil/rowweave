@@ -24,6 +24,7 @@ export async function verifyGridWorkflow(page) {
     await call(`/tables/${table.id}/records`, 'POST', [{ values: {} }, { values: {} }]);
     for (const field of table.fields) await call(`/tables/${table.id}/views`, 'POST', {
       name: field.name, columns: table.fields.map(item => ({ fieldId: item.id, width: 260, hidden: item.id !== field.id })),
+      ...(field.type === 'multiline' ? { rowHeight: 64 } : {}),
     });
     return table;
   });
@@ -57,6 +58,26 @@ export async function verifyGridWorkflow(page) {
     await select();
     await page.keyboard.press('Enter');
     await page.locator('.rowweave-cell-editor').waitFor();
+  };
+  const verifyInlineEditor = async rowHeight => {
+    const layout = await editor().evaluate((element, height) => {
+      const canvas = document.querySelector('.grid-host canvas');
+      const grid = canvas.getBoundingClientRect();
+      const gridStyle = getComputedStyle(canvas);
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      const left = rect.left + parseFloat(style.paddingLeft);
+      const center = rect.top + parseFloat(style.paddingTop) + parseFloat(style.lineHeight) / 2;
+      const expectedLeft = grid.left + 32 + parseFloat(gridStyle.getPropertyValue('--gdg-cell-horizontal-padding')) + 0.5;
+      return { resize: style.resize, font: style.fontSize, gridFont: gridStyle.getPropertyValue('--gdg-base-font-style').trim(),
+        sameFontFamily: style.fontFamily.replaceAll('"', '') === gridStyle.getPropertyValue('--gdg-font-family').trim(),
+        offsetX: left - expectedLeft, offsetY: center - (grid.top + 40 + height / 2) };
+    }, rowHeight);
+    assert.equal(layout.resize, 'none');
+    assert.equal(layout.font, layout.gridFont);
+    assert.ok(layout.sameFontFamily);
+    assert.ok(Math.abs(layout.offsetX) <= 1, `Inline editor text is ${layout.offsetX}px off horizontally`);
+    assert.ok(Math.abs(layout.offsetY) <= 1, `Inline editor text is ${layout.offsetY}px off vertically`);
   };
   const save = async () => {
     await waitForAutosave(page);
@@ -145,7 +166,14 @@ export async function verifyGridWorkflow(page) {
   await page.getByText('All changes saved', { exact: true }).waitFor();
   assert.equal(await value('Name'), 'First key');
 
+  const canvas = await page.locator('canvas').first().boundingBox();
+  await page.mouse.dblclick(canvas.x + 100, canvas.y + 58);
+  assert.equal(await editor().inputValue(), 'First key');
+  await verifyInlineEditor(36);
+  await page.keyboard.press('Escape');
+
   await open('Notes');
+  await verifyInlineEditor(64);
   await editor().fill('First line');
   await page.keyboard.press('End');
   await page.keyboard.press('Shift+Enter');

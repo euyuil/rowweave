@@ -17,7 +17,13 @@ interface EditorBridge {
 }
 export const EditorContext = createContext<EditorBridge | undefined>(undefined);
 
-export const CellEditor: ProvideEditorComponent<GridCell> = ({ value: gridValue, onFinishedEditing, isHighlighted }) => {
+export function isInlineTextField(field: Field): boolean {
+  return field.type === 'text' || field.type === 'multiline' || field.type === 'number';
+}
+
+const textLineHeight = 20;
+
+export const CellEditor: ProvideEditorComponent<GridCell> = ({ value: gridValue, onFinishedEditing, isHighlighted, target }) => {
   const value = gridValue as EditableCell;
   const bridge = useContext(EditorContext)!;
   const attachments = useContext(AttachmentContext);
@@ -27,7 +33,7 @@ export const CellEditor: ProvideEditorComponent<GridCell> = ({ value: gridValue,
   const composing = useRef(false);
   const closed = useRef(false);
   const links = useRef<RecordLink[]>();
-  const text = ['text', 'multiline', 'number'].includes(value.field.type);
+  const text = isInlineTextField(value.field);
   const descriptionId = useId();
   const initial = useRef<FormValue>(text ? value.copyData ?? value.data : toFormValue(value.field, value.rawValue));
   const [draft, setDraft] = useState<FormValue>(text ? value.data : initial.current);
@@ -89,6 +95,7 @@ export const CellEditor: ProvideEditorComponent<GridCell> = ({ value: gridValue,
     }}>
     {text ? <textarea ref={input} aria-label="Cell value" aria-describedby={value.field.description ? descriptionId : undefined} value={draft as string}
       rows={Math.min(6, (draft as string).split('\n').length)} inputMode={value.field.type === 'number' ? 'decimal' : undefined}
+      style={{ lineHeight: `${textLineHeight}px`, paddingTop: (target.height - textLineHeight) / 2 + 1, minHeight: target.height + 2 }}
       onChange={event => change(event.target.value)} />
       : <FieldInput field={{ ...value.field, name: 'Cell value' }} value={draft} onChange={change} />}
     {text && value.field.description && <small id={descriptionId} className="field-description cell-description">{value.field.description}</small>}
