@@ -98,8 +98,9 @@ export function changeRecordColumns(db: DatabaseSync, before: RecordSchema, afte
   const physical = recordTable(before.id);
   // Capture the removal while the old projection and history triggers can still see the column.
   for (const id of removed) {
-    const column = fieldColumn(id);
-    db.prepare(`UPDATE ${physical} SET version = version + 1 WHERE ${column} IS NOT NULL`).run();
+    const column = fieldColumn(id), path = fieldPath(id);
+    db.prepare(`UPDATE ${physical} SET formula_errors_json = json_remove(formula_errors_json, ?), version = version + 1
+      WHERE ${column} IS NOT NULL OR json_type(formula_errors_json, ?) IS NOT NULL`).run(path, path);
   }
   for (const id of removedRelations) {
     db.prepare(`UPDATE ${physical} SET version = version + 1

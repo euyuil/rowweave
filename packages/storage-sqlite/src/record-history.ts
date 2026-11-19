@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { fieldPath } from './record-tables.js';
 import type { DatabaseSync } from 'node:sqlite';
 import type { CellValue, RecordChange, RecordChangeDetail, RecordHistoryPage, RecordHistoryQuery, RecordRestore, RowRecord, RecordTrashPage, Table } from '../../contracts/src/index.js';
 import { ServiceError } from '../../core/src/errors.js';
@@ -30,14 +31,28 @@ function snapshot(row: Record<string, unknown>, side: 'before' | 'after'): RowRe
 }
 
 export class RecordHistory {
+  private readonly addedFields = new Map<string, string[]>();
+
   constructor(private readonly db: DatabaseSync) {}
 
   begin(changedAt: string, context: HistoryContext = {}): void {
+    this.addedFields.clear();
     this.db.prepare('INSERT INTO record_change_context VALUES (?, ?, ?, ?, ?, ?)')
       .run(randomUUID(), changedAt, context.restore?.changeId ?? null, context.restore?.snapshot ?? null, context.recordWrite ? 1 : 0, context.undoOf ?? null);
   }
 
+  noteAddedFields(tableId: string, fieldIds: string[]): void {
+    if (fieldIds.length) this.addedFields.set(tableId, fieldIds);
+  }
+
   end(): void {
+    // Backfills can trigger row history after the table's new projection has been installed.
+    for (const [tableId, fieldIds] of this.addedFields) {
+      const paths = fieldIds.map(fieldPath);
+      this.db.prepare(`UPDATE record_changes SET before_values_json = json_remove(before_values_json, ${paths.map(() => '?').join(', ')})
+        WHERE table_id = ? AND batch_id = (SELECT batch_id FROM record_change_context) AND before_version IS NOT NULL`)
+        .run(...paths, tableId);
+    }
     // The single current context bounds both receipts to this transaction's changes.
     this.db.exec(`INSERT INTO record_batches (id, changed_at, record_count, record_write, undo_of)
       SELECT context.batch_id, context.changed_at, COUNT(c.id), context.record_write, context.undo_of

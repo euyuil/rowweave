@@ -121,6 +121,37 @@ test('defaults and restores distinguish an empty field from a field added after 
   assert.equal(restored.find(record => record.id === emptied.id)!.values[notes], null);
 });
 
+test('schema changes capture fields according to each snapshot boundary', t => {
+  const { service, table: initial, amount } = setup(t);
+  const row = service.createRecords(initial.id, [{ values: { [amount]: 2 } }]).records[0]!;
+  const numbered = service.createField(initial.id, { expectedVersion: initial.version, name: 'Sequence', type: 'autoNumber' });
+  const sequence = numbered.fields.at(-1)!.id;
+  const latest = () => {
+    const [entry] = service.recordHistory(initial.id, row.id, {}).changes;
+    return service.recordChange(initial.id, row.id, entry!.id);
+  };
+  const numbering = latest();
+  assert.deepEqual(numbering.before!.values, row.values);
+  assert.equal(numbering.after!.values[sequence], 1);
+
+  let table = service.createField(numbered.id, { expectedVersion: numbered.version, name: 'Double', type: 'formula',
+    formula: { expression: `[${amount}] * 2`, resultType: 'number' } });
+  const formula = table.fields.at(-1)!.id;
+  const calculation = latest();
+  assert.deepEqual(calculation.before!.values, numbering.after!.values);
+  assert.deepEqual(calculation.after!.values, { ...numbering.after!.values, [formula]: 4 });
+
+  table = service.createField(table.id, { expectedVersion: table.version, name: 'Invalid', type: 'formula',
+    formula: { expression: '1 / 0', resultType: 'number' } });
+  const invalid = table.fields.at(-1)!.id;
+  service.deleteField(table.id, invalid, { expectedVersion: table.version });
+  const removal = latest();
+  assert.equal(removal.before!.values[invalid], null);
+  assert.ok(removal.before!.formulaErrors?.[invalid]);
+  assert.ok(!Object.hasOwn(removal.after!.values, invalid));
+  assert.equal(removal.after!.formulaErrors?.[invalid], undefined);
+});
+
 test('restoration fails atomically for current required fields and missing linked targets', t => {
   const { service, table: initial, amount } = setup(t);
   const row = service.createRecords(initial.id, [{ values: {} }]).records[0]!;

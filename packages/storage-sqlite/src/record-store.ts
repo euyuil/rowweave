@@ -303,6 +303,8 @@ export class SqliteRecordStore implements RecordStore {
     }
     const detached = this.relations.detachFields(table, before);
     const removed = before.fields.filter(field => !table.fields.some(next => next.id === field.id));
+    const added = table.fields.filter(field => field.type !== 'lookup' && !before.fields.some(previous => previous.id === field.id));
+    this.history.noteAddedFields(table.id, added.map(field => field.id));
     if (removed.some(field => field.type !== 'lookup')) syncQueryIndexes(this.db, before, []);
     changeRecordColumns(this.db, before, table);
     for (const field of removed) this.db.prepare('DELETE FROM fields WHERE id = ? AND table_id = ?').run(field.id, table.id);
