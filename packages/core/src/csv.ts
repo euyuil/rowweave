@@ -1,6 +1,6 @@
 import { isReadOnlyField, maxCsvBytes, maxCsvCells, maxCsvRows, maxFields, type CellValue, type Field, type Table } from '../../contracts/src/index.js';
 import { ServiceError } from './errors.js';
-import { parseTextValue, validateValue } from './field-values.js';
+import { emptyRecordValue, parseTextValue, validateValue } from './field-values.js';
 import { fieldText } from './field-display.js';
 import { schemaObject, schemaVersion } from './schema-validation.js';
 
@@ -106,8 +106,8 @@ export function csvRecordValues(table: Table, plan: CheckedCsvImport, row: CsvRo
     if (isReadOnlyField(field)) continue;
     const index = plan.mapping.indexOf(field.id);
     const cell = index === -1 ? undefined : row.cells[index]!;
-    values[field.id] = !cell ? validateValue(field, field.defaultValue ?? null)
-      : cell.text === '' && !cell.quoted ? validateValue(field, null) : parseTextValue(field, cell.text);
+    values[field.id] = !cell ? validateValue(field, field.defaultValue ?? emptyRecordValue(field))
+      : cell.text === '' && !cell.quoted ? validateValue(field, emptyRecordValue(field)) : parseTextValue(field, cell.text);
   }
   return values;
 }

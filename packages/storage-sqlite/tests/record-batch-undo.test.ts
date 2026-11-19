@@ -102,8 +102,8 @@ test('undo restores absent optional values and newly assigned reciprocal links t
   const saved = service.recordBatches(table.id, {}).batches[0]!;
   const undone = service.undoRecordBatch(table.id, saved.id);
   assert.equal(service.getRecord(table.id, row.id).values[text], null);
-  assert.equal(service.getRecord(table.id, row.id).values[link.id], null);
-  assert.equal(service.getRecord(target.id, linked.id).values[link.relation!.inverseFieldId!], null);
+  assert.deepEqual(service.getRecord(table.id, row.id).values[link.id], []);
+  assert.deepEqual(service.getRecord(target.id, linked.id).values[link.relation!.inverseFieldId!], []);
   service.undoRecordBatch(table.id, undone.batchId);
   assert.equal(service.getRecord(table.id, row.id).values[text], 'First value');
   assert.deepEqual(service.getRecord(table.id, row.id).values[link.id], [linked.id]);

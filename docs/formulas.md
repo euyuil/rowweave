@@ -9,7 +9,7 @@ CONCAT(UPPER(["Name"]), " — ", ["Quantity"])
 COALESCE(["Quantity"], 0)
 ```
 
-The editor displays names; the service stores field UUID references. Renaming or moving a field keeps its formulas connected. Duplicate names are disambiguated in the field picker. Formula results are read-only and recalculate after saving a record or formula. Unsaved input drafts do not change the displayed result. A formula may be the primary display field.
+The editor displays names. The service stores references by field ID, which keeps formulas connected when you rename or move a field. The field picker distinguishes duplicate names. Formula results are read-only and recalculate after saving a record or formula. Unsaved input drafts do not change the displayed result. A formula may be the primary display field.
 
 ## Preview before saving
 
@@ -17,7 +17,7 @@ Select **Preview formula** in field configuration to validate a draft and calcul
 
 Preview uses the same expression parser, result validation and dependency checks as saving, including cross-table cycles, linked summary types and saved-view constraints. It does not save fields, values, history or versions. An empty table can validate syntax and dependencies, but shows no fabricated sample. A successful preview is a snapshot of one record, not a guarantee that every record will calculate successfully or that later inputs are unchanged. Saving still validates the current schema and recalculates the complete table.
 
-The shared read-only operation is `POST /tables/:table/formulas/preview`, SDK `previewFormula(tableId, input)`, CLI `rowweave formulas preview <table-id> --input request.json`, or MCP `formulas_preview` with `{ tableId, input }`. The input contains the current table `expectedVersion`, `formula: { expression, resultType }`, optional `fieldId` when editing an existing formula, and optional `recordId`. Use UUID references in API expressions. Supplying `fieldId` is necessary to check dependencies of that existing field; omit it to preview a new field.
+The shared read-only operation is `POST /tables/:table/formulas/preview`, SDK `previewFormula(tableId, input)`, CLI `rowweave formulas preview <table-id> --input request.json`, or MCP `formulas_preview` with `{ tableId, input }`. The input contains the current table `expectedVersion`, `formula: { expression, resultType }`, optional `fieldId` when editing an existing formula, and optional `recordId`. Use field IDs in API expressions. Supply `fieldId` to check the dependencies of an existing field. Omit it to preview a new field.
 
 The response is `{ tableId, schemaVersion, formula, sample }`. A sample contains its saved record `id`, `version`, primary display `label`, calculated `value` and optional `error`; `sample` is null for an empty table. Syntax/schema failures return ordinary API errors. A calculation failure returns a sample with a null value and an explicit error. A missing/deleted requested record returns `RECORD_NOT_FOUND`; a stale schema returns `SCHEMA_CONFLICT`. Preview never reserves a record or retries a write.
 
@@ -57,7 +57,7 @@ Linked-record and attachment fields provide ordered arrays of stable record/file
 | `ARRAYJOIN(values, separator?)` | Join scalar text representations; the default separator is ", ". Null contributes empty text, retaining its position. Use ARRAYCOMPACT first to omit null positions. |
 | `ARRAYSUM(values)`, `ARRAYAVERAGE(values)`, `ARRAYMIN(values)`, `ARRAYMAX(values)` | Numeric summaries skip nulls. Any other nonnumeric item is an error. Empty/all-null arrays return null; use COALESCE when zero is intended. |
 
-A null source array produces null. An empty array has length/count zero, joins to empty text, and does not contain any value. ARRAYGET with a null position and ARRAYJOIN with a null separator also return null; ARRAYCONTAINS can explicitly test for a null member. Arrays are limited to 40,000 items and joined text to 10,000 characters. Oversized results fail explicitly, with no silent truncation. Numeric summaries reject non-finite results.
+A null source array produces null. An empty array has length/count zero, joins to empty text, and does not contain any value. A linked-record field with no links supplies an empty array. ARRAYGET with a null position and ARRAYJOIN with a null separator also return null. ARRAYCONTAINS can explicitly test for a null member. Arrays are limited to 40,000 items and joined text to 10,000 characters. Oversized results fail explicitly, with no silent truncation. Numeric summaries reject non-finite results.
 
 Examples in the editor:
 
@@ -86,7 +86,7 @@ Date inputs are strings in the same formats as date/time fields: a valid Gregori
 
 Units are case-insensitive "year", "month", "week", "day", "hour", "minute" or "second". A timestamp day is 24 hours in UTC; these functions do not interpret regional daylight-saving calendars. For example, DATEADD("2024-01-31", 1, "month") is 2024-02-29, while DATEADD("2024-02-29", 1, "year") is 2025-02-28. DATEDIFF("2024-02-29", "2024-01-31", "month") is -1.
 
-Use DATEADD(["Start"], 7, "day") with a Date result for a due date, or DATEADD(DATETIMEVALUE(["Start"]), 9, "hour") with a Date and time result for 09:00 UTC. Use field UUIDs instead of names through API/CLI/MCP. Null inputs stay null. Invalid arguments, arithmetic overflow and a result that does not match the chosen type produce visible calculation errors.
+Use DATEADD(["Start"], 7, "day") with a Date result for a due date, or DATEADD(DATETIMEVALUE(["Start"]), 9, "hour") with a Date and time result for 09:00 UTC. Use field IDs through API/CLI/MCP. Null inputs stay null. Invalid arguments, arithmetic overflow and a result that does not match the chosen type produce visible calculation errors.
 
 These date functions are deterministic from their inputs. Format 25 gates date formula semantics so an older service cannot reopen the workspace and calculate them incorrectly; upgrading preserves existing values and versions.
 
@@ -134,4 +134,4 @@ Use the existing field-create/update and record operations through every interfa
 }
 ```
 
-API references use field IDs, not display names. `[field-id]` and `["field-id"]` are equivalent for ordinary UUIDs. Responses include scalar results in `record.values` and optional `record.formulaErrors: { "<field-id>": "reason" }`; projected queries include errors only for requested fields. The same error map can identify a lookup whose linked formula failed. Formula fields cannot set a default, require a value, receive direct writes, or convert to/from another field type. Read the current schema and record versions before changing data; do not retry uncertain writes automatically.
+API references use field IDs. `[field-id]` and `["field-id"]` are equivalent. Responses include scalar results in `record.values` and optional `record.formulaErrors: { "<field-id>": "reason" }`. Projected queries include errors only for requested fields. The same error map can identify a lookup whose linked formula failed. Formula fields cannot set a default, require a value, receive direct writes, or convert to/from another field type. Read the current schema and record versions before changing data. Check the outcome of an uncertain write before submitting it again.

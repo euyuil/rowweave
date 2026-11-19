@@ -60,7 +60,6 @@ export function querySql(table: Pick<Table, 'id' | 'fields'>, query: CheckedQuer
     return value;
   }
   function display(field: Field, alias = forIndex ? '' : 'r', sorting = false): string {
-    const value = raw(field, alias);
     if (field.type === 'relation') {
       const target = targets.get(field.relation!.tableId)!;
       const primary = target.fields.find(item => item.id === target.primaryFieldId)!;
@@ -68,6 +67,7 @@ export function querySql(table: Pick<Table, 'id' | 'fields'>, query: CheckedQuer
         FROM relation_edges edge JOIN ${recordTable(target.id)} linked ON linked.id = edge.target_record_id
         WHERE edge.source_record_id = ${alias}.id AND edge.field_id = ${bind(field.id)} ORDER BY edge.position))`;
     }
+    const value = raw(field, alias);
     if (field.type === 'lookup' && !isLookupSummary(field)) {
       const target = lookupElementField(field);
       if (target.type === 'attachment') return formatted(target, sorting ? `json_array(json_extract(${value}, '$[0]'))` : value);
@@ -83,6 +83,13 @@ export function querySql(table: Pick<Table, 'id' | 'fields'>, query: CheckedQuer
       return `(${filter.conditions.map(condition).join(filter.conjunction === 'and' ? ' AND ' : ' OR ')})`;
     }
     const field = fields.get(filter.fieldId)!;
+    if (field.type === 'relation') {
+      const ids = filter.operator === 'hasAny' ? filter.value as string[] : undefined;
+      if (ids?.length === 0) return '0';
+      const membership = ids ? ` AND edge.target_record_id IN (${ids.map(bind).join(', ')})` : '';
+      const exists = `EXISTS (SELECT 1 FROM relation_edges edge WHERE edge.source_record_id = r.id AND edge.field_id = ${bind(field.id)}${membership})`;
+      return filter.operator === 'isEmpty' || filter.operator === 'eq' ? `NOT ${exists}` : exists;
+    }
     const value = raw(field);
     if (filter.operator === 'relativeDate') {
       const [start, end, weekdays] = dateRanges.get(filter)!;
@@ -116,7 +123,7 @@ export function querySql(table: Pick<Table, 'id' | 'fields'>, query: CheckedQuer
       return filter.operator === 'neq' ? `NOT ${any}` : any;
     }
     if (filter.operator === 'isEmpty' || filter.operator === 'isNotEmpty') {
-      const empty = `(${value} IS NULL OR ${value} = ''${['multiSelect', 'relation', 'attachment'].includes(field.type) ? ` OR json_array_length(${value}) = 0` : ''})`;
+      const empty = `(${value} IS NULL OR ${value} = ''${['multiSelect', 'attachment'].includes(field.type) ? ` OR json_array_length(${value}) = 0` : ''})`;
       return filter.operator === 'isEmpty' ? empty : `NOT ${empty}`;
     }
     if (filter.operator === 'contains') return `instr(lower(${value}), lower(${bind(filter.value!)})) > 0`;

@@ -95,6 +95,20 @@ export async function verifyRelationWorkflow(page) {
   await page.getByRole('dialog').waitFor({ state: 'detached' });
   assert.deepEqual((await call(`/tables/${tasks.id}/records/${record.id}`)).values[link.id], [targets[2].id]);
 
+  const recordPath = `/tables/${tasks.id}/records/${record.id}`;
+  await select();
+  await page.getByRole('button', { name: 'Open record', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Clear Project', exact: true }).click();
+  await closeSavedRecord(page);
+  const cleared = await call(recordPath);
+  assert.deepEqual(cleared.values[link.id], []);
+  await call(`/tables/${tasks.id}/records`, 'PATCH', [{ id: record.id, expectedVersion: cleared.version, values: { [link.id]: [targets[2].id] } }]);
+  await waitForLiveSync(page);
+  await select(1);
+  await page.keyboard.press('Delete');
+  await waitForAutosave(page);
+  assert.deepEqual((await call(recordPath)).values[link.id], []);
+
   const choose = name => page.getByRole('navigation', { name: 'Tables', exact: true }).getByRole('button', { name, exact: true }).click();
   await choose('Linked projects');
   await ready();

@@ -50,7 +50,7 @@ export function FieldsDialog({ initial, api, setDirty, onClose, onSaved }: {
   </Dialog>;
   return <><Dialog title="Manage fields" onClose={close} busy={busy || !!pairing} wide>
     <p className="form-note">The primary display field labels records in linked tables. It is not a unique key; values may repeat or be empty unless the field requires a value.</p>
-    <p className="form-note">Each record has an immutable record ID (UUID), its primary key. Each column has a separate field ID that stays the same when you rename or move it.</p>
+    <p className="form-note">The immutable record ID is its primary key. Each column has a separate field ID that follows it when you rename or move it.</p>
     <div ref={fields} className="schema-fields">{table.fields.map((field, index) => <div className="schema-field" role="group" aria-label={field.name} data-field-id={field.id} key={field.id}>
       <div className="schema-field-name"><strong>{field.name}</strong><small>{fieldTypeNames[field.type]}{field.required ? ' · Required' : ''}{field.id === table.primaryFieldId ? ' · Primary display field' : ''}{field.relation?.inverseFieldId ? ' · Two-way' : ''}</small></div>
       {field.description && <p className="form-note field-description">{field.description}</p>}

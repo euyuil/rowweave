@@ -53,7 +53,7 @@ export function RecordDialog({ action, table, api, setDirty, onClose, onSaved }:
     </section>}
     {action.kind === 'edit' && !historyOpen && <details className="form-note"><summary>Record identity</summary>
       <p>Record ID (primary key): <code>{original!.id}</code></p>
-      <p>This UUID stays the same when values or display names change. Linked records refer to this ID.</p>
+      <p>Linked records use this ID to find the record after values or display names change.</p>
     </details>}
     {historyOpen && <RecordHistoryPanel table={table} record={original!} api={api} hasDraft={changed} busy={busy} onRestore={async input => {
       setBusy(true); setDirty(true);

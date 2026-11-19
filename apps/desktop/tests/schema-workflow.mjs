@@ -28,7 +28,7 @@ export async function verifySchemaWorkflow(page) {
   };
   const configure = name => group(name).getByRole('button', { name: 'Configure', exact: true }).click();
   await manage();
-  await page.getByText('Each record has an immutable record ID (UUID), its primary key.', { exact: false }).waitFor();
+  await page.getByText('The immutable record ID is its primary key.', { exact: false }).waitFor();
   await add('Budget', 'number');
   await page.getByLabel('Number format', { exact: true }).selectOption('currency');
   await page.getByLabel('Currency code', { exact: true }).fill('CNY');

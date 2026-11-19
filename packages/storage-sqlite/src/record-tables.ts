@@ -6,12 +6,12 @@ type RecordValues = Record<string, CellValue>;
 
 export const identifier = (name: string) => `"${name.replaceAll('"', '""')}"`;
 export const literal = (value: string) => `'${value.replaceAll("'", "''")}'`;
-export const recordTable = (id: string) => identifier(`rowweave_data_${id}`);
+export const recordTable = identifier;
 export const recordSource = (id: string) => identifier(`rowweave_rows_${id}`);
-export const fieldColumn = (id: string, alias = '') => `${alias ? `${alias}.` : ''}${identifier(`field_${id}`)}`;
+export const fieldColumn = (id: string, alias = '') => `${alias ? `${alias}.` : ''}${identifier(id)}`;
 export const fieldPath = (id: string) => '$.' + JSON.stringify(id);
 
-const stored = (fields: Field[]) => fields.filter(field => field.type !== 'lookup');
+const stored = (fields: Field[]) => fields.filter(field => field.type !== 'lookup' && field.type !== 'relation');
 
 export function cellBinding(value: CellValue | undefined): SQLInputValue {
   // JSON strings preserve lone UTF-16 surrogates that SQLite's UTF-8 binding replaces.
@@ -32,7 +32,7 @@ export function cellJson(column: string): string {
 export function scalarColumn(field: Field, alias = ''): string {
   const column = fieldColumn(field.id, alias);
   const type = valueField(field).type;
-  if (['multiSelect', 'relation', 'attachment'].includes(type)) return `CAST(${column} AS TEXT)`;
+  if (['multiSelect', 'attachment'].includes(type)) return `CAST(${column} AS TEXT)`;
   if (['text', 'multiline', 'singleSelect', 'url'].includes(type)) {
     return `(CASE WHEN typeof(${column}) = 'blob' THEN json_extract(CAST(${column} AS TEXT), '$') ELSE ${column} END)`;
   }
@@ -40,9 +40,13 @@ export function scalarColumn(field: Field, alias = ''): string {
 }
 
 function valuesJson(fields: Field[], alias: string): string {
-  const entries = stored(fields).map(field => {
-    const column = fieldColumn(field.id, alias);
+  const entries = fields.filter(field => field.type !== 'lookup').map(field => {
     const key = literal(',' + JSON.stringify(field.id) + ':');
+    if (field.type === 'relation') {
+      return `${key} || (SELECT json_group_array(edge.target_record_id ORDER BY edge.position)
+        FROM relation_edges edge WHERE edge.source_record_id = ${alias}.id AND edge.field_id = ${literal(field.id)})`;
+    }
+    const column = fieldColumn(field.id, alias);
     return `CASE WHEN ${column} IS NOT NULL THEN ${key} || (${cellJson(column)})
       WHEN json_type(${alias}.null_fields, ${literal(fieldPath(field.id))}) IS NOT NULL THEN ${key} || 'null' ELSE '' END`;
   });
@@ -90,7 +94,10 @@ export function changeRecordColumns(db: DatabaseSync, before: RecordSchema, afte
   const newIds = stored(after.fields).map(field => field.id);
   const removed = oldIds.filter(id => !newIds.includes(id));
   const added = newIds.filter(id => !oldIds.includes(id));
-  if (!removed.length && !added.length) return;
+  const oldRelations = before.fields.filter(field => field.type === 'relation').map(field => field.id);
+  const newRelations = after.fields.filter(field => field.type === 'relation').map(field => field.id);
+  const removedRelations = oldRelations.filter(id => !newRelations.includes(id));
+  if (!removed.length && !added.length && !removedRelations.length && newRelations.every(id => oldRelations.includes(id))) return;
   const physical = recordTable(before.id);
   // Capture the removal while the old projection and history triggers can still see the column.
   for (const id of removed) {
@@ -98,15 +105,38 @@ export function changeRecordColumns(db: DatabaseSync, before: RecordSchema, afte
     db.prepare(`UPDATE ${physical} SET ${column} = NULL, null_fields = json_remove(null_fields, ?), version = version + 1
       WHERE ${column} IS NOT NULL OR json_type(null_fields, ?) IS NOT NULL`).run(path, path);
   }
+  for (const id of removedRelations) {
+    db.prepare(`UPDATE ${physical} SET version = version + 1
+      WHERE id IN (SELECT source_record_id FROM relation_edges WHERE field_id = ?)`).run(id);
+    db.prepare('DELETE FROM relation_edges WHERE field_id = ?').run(id);
+  }
   db.exec(`DROP VIEW ${recordSource(before.id)}`);
   for (const event of historyEvents) db.exec(`DROP TRIGGER ${historyTrigger(before.id, event)}`);
   for (const id of removed) db.exec(`ALTER TABLE ${physical} DROP COLUMN ${fieldColumn(id)}`);
   for (const id of added) db.exec(`ALTER TABLE ${physical} ADD COLUMN ${fieldColumn(id)} ANY`);
   writeProjection(db, after);
+  if (removedRelations.length) refreshRelationHistory(db, before.id);
 }
 
 export function dropRecordTable(db: DatabaseSync, id: string): void {
   db.exec(`DROP VIEW ${recordSource(id)}; DROP TABLE ${recordTable(id)}`);
+}
+
+// Touch the business row before replacing edges so the history trigger sees the original links.
+export function touchRelationRecords(db: DatabaseSync, tableId: string, ids: readonly string[], increment: 0 | 1): void {
+  if (!ids.length) return;
+  db.prepare(`UPDATE ${recordTable(tableId)} SET version = version + ?
+    WHERE id IN (SELECT value FROM json_each(?))`).run(increment, JSON.stringify(ids));
+}
+
+// The first row trigger preserves the before snapshot. Refresh the after snapshot once the edges are final.
+export function refreshRelationHistory(db: DatabaseSync, tableId: string, ids?: readonly string[]): void {
+  if (ids?.length === 0) return;
+  const selected = ids ? ' AND record_id IN (SELECT value FROM json_each(?))' : '';
+  db.prepare(`UPDATE record_changes AS change SET after_values_json = (
+      SELECT values_json FROM ${recordSource(tableId)} WHERE id = change.record_id
+    ) WHERE table_id = ? AND batch_id = (SELECT batch_id FROM record_change_context)
+      AND after_version IS NOT NULL${selected}`).run(tableId, ...(ids ? [JSON.stringify(ids)] : []));
 }
 
 function bindValues(fields: Field[], values: RecordValues): SQLInputValue[] {

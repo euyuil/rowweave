@@ -28,14 +28,22 @@ test('each table stores its own records and column changes are visible in SQLite
   const db = new DatabaseSync(data.path, { readOnly: true });
   try {
     const columns = () => db.prepare(`PRAGMA table_info(${recordTable(first.id)})`).all().map(column => column['name']);
-    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM sqlite_schema WHERE type = 'table' AND name GLOB 'rowweave_data_*'").get()!['n'], 2);
+    const alphabet = '0123456789bcdfghjkmnpqrstvwxz';
+    for (const [id, prefix] of [[first.id, 'tbl'], [first.primaryFieldId, 'fld'], [row.id, 'rec']]) {
+      assert.match(id!, new RegExp(`^${prefix}_[${alphabet}]{27}$`));
+      const uuid = Array.from(id!.slice(4)).reduce((value, digit) => value * 29n + BigInt(alphabet.indexOf(digit)), 0n);
+      assert.equal(uuid >> 76n & 15n, 7n);
+      assert.equal(uuid >> 62n & 3n, 2n);
+    }
+    assert.deepEqual(db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table' AND name GLOB 'tbl_*'").all()
+      .map(item => item['name']), [first.id, second.id]);
     assert.equal(db.prepare("SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'records'").get(), undefined);
     assert.equal(db.prepare(`SELECT id FROM ${recordTable(first.id)}`).get()!['id'], row.id);
     assert.equal(db.prepare(`SELECT id FROM ${recordTable(second.id)}`).get()!['id'], other.id);
 
     first = service.createField(first.id, { expectedVersion: first.version, name: 'Amount', type: 'number' });
     const amount = first.fields.at(-1)!.id;
-    assert.ok(columns().includes(`field_${amount}`));
+    assert.ok(columns().includes(amount));
     assert.equal(Object.hasOwn(service.getRecord(first.id, row.id).values, amount), false);
     const saved = service.updateBatch([{ id: row.id, expectedVersion: row.version, values: { [amount]: Number.MAX_VALUE } }], first.id).records[0]!;
     const raw = db.prepare(`SELECT ${fieldColumn(amount)} AS amount, typeof(${fieldColumn(amount)}) AS type FROM ${recordTable(first.id)}`).get()!;
@@ -43,13 +51,13 @@ test('each table stores its own records and column changes are visible in SQLite
     assert.deepEqual(service.getRecord(first.id, row.id), saved);
     service.createView(first.id, { name: 'Amounts', query: { sort: [{ fieldId: amount, direction: 'asc' }] } });
     first = service.deleteField(first.id, amount, { expectedVersion: first.version });
-    assert.ok(!columns().includes(`field_${amount}`));
+    assert.ok(!columns().includes(amount));
     const [last] = service.recordHistory(first.id, row.id, {}).changes;
     const history = service.recordChange(first.id, row.id, last!.id);
     assert.equal(history.before!.values[amount], Number.MAX_VALUE);
     assert.equal(Object.hasOwn(history.after!.values, amount), false);
     service.deleteTable(first.id, { expectedVersion: first.version });
-    assert.equal(db.prepare("SELECT 1 FROM sqlite_schema WHERE name = ?").get(`rowweave_data_${first.id}`), undefined);
+    assert.equal(db.prepare("SELECT 1 FROM sqlite_schema WHERE name = ?").get(first.id), undefined);
     assert.deepEqual(service.getRecord(second.id, other.id), other);
     assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
   } finally { db.close(); }
@@ -72,11 +80,11 @@ test('the full field limit retains scalar types, arrays and explicit nulls in re
 
 test('opening an earlier workspace rejects its format and leaves the file intact', t => {
   const data = fixture(t, null), old = new DatabaseSync(data.path);
-  old.exec(`CREATE TABLE records (id TEXT PRIMARY KEY, values_json TEXT);
-    INSERT INTO records VALUES ('original', '{}'); PRAGMA user_version = 38`);
+  old.exec(`CREATE TABLE record_ids (id TEXT PRIMARY KEY, table_id TEXT);
+    INSERT INTO record_ids VALUES ('original', 'example'); PRAGMA user_version = 39`);
   old.close();
   const before = readFileSync(data.path);
-  assert.throws(() => data.open(), /Unsupported database version: 38.*Create a new RowWeave workspace/);
+  assert.throws(() => data.open(), /Unsupported database version: 39.*Create a new RowWeave workspace/);
   assert.deepEqual(readFileSync(data.path), before);
 });
 

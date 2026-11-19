@@ -49,7 +49,7 @@ In the paths below, `:table` and `:field` are stable IDs. Names are trimmed, non
 
 A new table contains an optional text field named `Name` and an `All records` view. `fieldOrder`, when supplied, contains every field ID exactly once. Choose another primary display field before deleting it. Relation, lookup and attachment fields cannot be primary display fields. Deleting a table deletes its records/views/fields/files; external relations and lookups must be removed first.
 
-`primaryFieldId` selects the **primary display field**, not a database primary key. Its values label linked records and may repeat or be empty unless the field is required. Each record's immutable `id` UUID is its primary key; each column has a separate field UUID. Renaming a field, editing display values, or selecting another display field preserves record IDs and links.
+`primaryFieldId` selects the **primary display field**, which labels linked records. Its values may repeat or be empty unless the field is required. Each record's immutable `id` is its primary key. Tables, fields, and records have type-prefixed IDs (`tbl_…`, `fld_…`, and `rec_…`), with a 27-character encoding of a UUIDv7 value after the prefix. Clients use the complete ID as an opaque string. Renaming a field, editing display values, or selecting another display field preserves record IDs and links.
 
 Tables support up to 200 fields. Field definitions use `{ name, type, description?, required?, defaultValue? }` and these type-specific properties:
 
@@ -66,11 +66,13 @@ Tables support up to 200 fields. Field definitions use `{ name, type, descriptio
 | `datetime` | ISO timestamp with explicit zone | Normalized to UTC, retaining milliseconds. |
 | `singleSelect` | Option ID string | Up to 200 `options: [{ id?, name, color? }]`; names and IDs must each be unique; colors use `#RRGGBB`. |
 | `multiSelect` | Array of unique option IDs | Same options configuration; required values need at least one option. |
-| `relation` | Array of unique record IDs | `relation: { tableId, multiple }`; one target if false, up to 200 if true. Targets must exist in that table. |
+| `relation` | Ordered array of unique record IDs, including `[]` | `relation: { tableId, multiple }`; one target if false, up to 200 if true. Targets must exist in that table. |
 | `formula` | Read-only number, text, boolean, date or timestamp (or null) | `formula: { expression, resultType }`; result types are number/text/checkbox/date/datetime, and references use field UUIDs. See [formulas](formulas.md) for syntax, errors and transactional recalculation. |
 | `lookup` | Read-only array, or number/null for numeric summaries | `lookup: { relationFieldId, fieldId, operation? }`; omitted/`values` returns array values. Numeric targets support `count`, `sum`, `average`, `min`, `max`. Targets may be other lookups; see [chained lookups](chained-lookups.md). No defaults, required constraint or direct writes. |
 
-Optional writable fields allow null. New-record defaults apply only to omitted fields; explicit null does not use a default. Existing records do not receive a newly added default. Add a required field to a non-empty table as optional, fill it, then enable its constraint. Tightening constraints validates existing values atomically. A field's ID and option IDs survive rename and reorder. Returned lookup fields include current nested `lookupResult` metadata and each target's `lookupResultTableId`; these properties are not writable configuration.
+New-record defaults apply only to omitted fields. Existing records do not receive a newly added default. Optional writable fields other than relations accept null. Add a required field to a non-empty table as optional, fill it, then enable its constraint. Tightening constraints validates existing values atomically. A field's ID and option IDs survive rename and reorder. Returned lookup fields include current nested `lookupResult` metadata and each target's `lookupResultTableId`; these properties are not writable configuration.
+
+Omit an optional relation field to use its default on creation or keep its existing links on update. Use `[]` to save an optional relation with no links. An explicit `null` in a record write returns `INVALID_VALUE` with guidance. Required relations need at least one link. Record reads return `[]` for empty relations.
 
 `description` is optional plain text up to 2,000 UTF-16 code units. Leading/trailing whitespace is trimmed; line breaks inside the text are retained. Omit it to preserve existing guidance on updates or conversion; send empty/whitespace-only text to clear it. Description changes use the table's `expectedVersion`, preserve field/record identities and do not rewrite record values or history. Descriptions are part of stored schema and backups; desktop configuration, column actions, typed record forms and cell editors show them as text, never HTML. SDK, CLI and MCP field operations use the same property.
 
@@ -189,7 +191,7 @@ Optional scalar or ordered-array `groupBy` uses the same group order as layout w
 
 Filters combine `and`/`or` groups with at most 100 conditions and four nested levels below the root. An empty AND matches all records; an empty OR matches none. Predicates use:
 
-- `eq`, `neq`: scalar equality/inequality, including null. For multiple-select/relation fields, use these only with null; use `hasAny` to match IDs.
+- `eq`, `neq`: scalar equality/inequality, including null. For multiple-select and relation fields, use these only with null. For relations, comparisons to null check for zero links or at least one link. Use `hasAny` to match specific IDs.
 - `contains`: literal, case-insensitive substring matching for text, multiline and URL fields.
 - `gt`, `gte`, `lt`, `lte`: typed number/date/timestamp comparisons.
 - `relativeDate`: date/timestamp period with `relative: { period, timeZone, days?, hours? }` instead of `value`. Use `days` only for past/next calendar or business days and `hours` only for past/next elapsed hours on timestamps; see the [periods and time-zone contract](relative-date-filters.md).

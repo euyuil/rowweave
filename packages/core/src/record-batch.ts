@@ -1,5 +1,5 @@
 import { isReadOnlyField, type CellValue, type Table } from '../../contracts/src/index.js';
-import { validateValue } from './field-values.js';
+import { emptyRecordValue, validateValue } from './field-values.js';
 
 export function restoredBatchValues(table: Table, before: Record<string, CellValue>, current?: Record<string, CellValue>): Record<string, CellValue> {
   const values: Record<string, CellValue> = {};
@@ -11,7 +11,7 @@ export function restoredBatchValues(table: Table, before: Record<string, CellVal
     }
     if (isReadOnlyField(field)) continue;
     const value = Object.hasOwn(before, field.id) ? before[field.id]
-      : current ? current[field.id] ?? null : field.defaultValue ?? null;
+      : (current ? current[field.id] : field.defaultValue) ?? emptyRecordValue(field);
     values[field.id] = validateValue(field, value);
   }
   return values;

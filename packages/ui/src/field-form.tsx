@@ -100,7 +100,7 @@ export function FieldForm({ table, field, api, setDirty, onClose, onSaved, ancho
   return <Dialog title={field ? 'Configure field' : 'Add field'} onClose={onClose} busy={busy} wide={!anchor} anchor={anchor} restoreFocus={restoreFocus}>
     {field && <details className="form-note"><summary>Field identity</summary>
       <p>Field ID: <code>{field.id}</code></p>
-      <p>This UUID identifies the column, not a record. Renaming or reordering keeps this ID.</p>
+      <p>This ID identifies the column and follows it when you rename or move it.</p>
     </details>}
     <form onChange={changed} onKeyDown={event => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's' && !event.nativeEvent.isComposing) {

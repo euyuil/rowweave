@@ -1,5 +1,6 @@
 import React, { useContext, useId } from 'react';
 import { isReadOnlyField, isLookupSummary, maxUrlLength, valueField, lookupElementField, type Field, type RecordLink } from '../../contracts/src/index.js';
+import { emptyRecordValue } from '../../core/src/field-values.js';
 import type { FormValue } from './field-input-values.js';
 import { RelationInput } from './relation-input.js';
 import { cellDisplay } from '../../client/src/cell-values.js';
@@ -65,8 +66,9 @@ export function FieldInput({ field, value, onChange, disabled: disabledProp = fa
   }
   return <div className="form-field">
     <div className="field-label"><label id={`${id}-label`} htmlFor={id}>{field.name}{field.required ? ' *' : ''}{valueField(field).type === 'datetime' ? ' (UTC)' : ''}</label>
-      {!field.required && !isReadOnlyField(field) && <button type="button" className="clear-value" disabled={disabled || value === null}
-        aria-label={`Clear ${field.name}`} onClick={() => { onChange(null); document.getElementById(id)!.focus(); }}>Clear</button>}</div>
+      {!field.required && !isReadOnlyField(field) && <button type="button" className="clear-value"
+        disabled={disabled || value === null || (field.type === 'relation' && Array.isArray(value) && !value.length)}
+        aria-label={`Clear ${field.name}`} onClick={() => { onChange(emptyRecordValue(field)); document.getElementById(id)!.focus(); }}>Clear</button>}</div>
     {input}
     {field.type === 'multiSelect' && <SelectValues options={selectedOptions(field, value)!} />}
     {field.type === 'url' && <ExternalLink value={value} />}

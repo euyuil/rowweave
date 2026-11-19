@@ -49,7 +49,7 @@ Files use UTF-8, comma separators, double-quoted cells, and doubled double quote
 | Timestamp | An ISO timestamp with an explicit time zone, normalized to UTC. |
 | Single select | An existing option name (or ID on import). Names take precedence if a name equals another option's ID. |
 | Multiple select | A JSON array of existing option names (or IDs on import), inside a CSV cell. |
-| Linked records | A JSON array of existing record IDs in the configured target table. Export preserves link order. |
+| Linked records | A JSON array of existing record IDs in the configured target table. Export preserves link order and writes `[]` for no links. A blank mapped cell also imports as no links. An unmapped field uses the new-record default, or no links if none is configured. |
 | Attachments | A JSON array of uploaded file IDs owned by the destination table. Import validates ownership; export and clipboard preserve order and IDs, without embedding file bytes. Use a workspace backup to include file content. |
 | Lookup | A read-only JSON array of computed values; select results use option names. Skip this column when importing. |
 
