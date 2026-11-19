@@ -80,7 +80,7 @@ export function createRecordTable(db: DatabaseSync, table: RecordSchema): void {
   const id = literal(table.id);
   const columns = stored(table.fields).map(field => `${fieldColumn(field.id)} ANY`);
   db.exec(`CREATE TABLE ${recordTable(table.id)} (
-    id TEXT PRIMARY KEY, table_id TEXT GENERATED ALWAYS AS (${id}) STORED NOT NULL,
+    id TEXT PRIMARY KEY, table_id TEXT GENERATED ALWAYS AS (${id}) VIRTUAL NOT NULL,
     position INTEGER NOT NULL UNIQUE, version INTEGER NOT NULL DEFAULT 1,
     null_fields TEXT NOT NULL DEFAULT '{}', formula_errors_json TEXT NOT NULL DEFAULT '{}',
     ${columns.length ? columns.join(', ') + ',' : ''}
