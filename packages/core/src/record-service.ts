@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { newId } from './identifiers.js';
 import { dateContextPattern, groupFieldIds, isReadOnlyField, maxPageSize, maxBatchRecords, maxBatchCells, maxFields, tableId,
   type BatchResult, type CellValue, type ConversionPreview, type DeleteResult, type Field, type GridView, type QueryPage, type RecordDelete, type RecordPage, type RecordUpdate, type RowRecord, type Table, type ViewPage } from '../../contracts/src/index.js';
 import { schemaName, schemaObject, schemaVersion } from './schema-validation.js';
@@ -6,7 +6,7 @@ import { parseField } from './field-schema.js';
 import type { CalculationRefresh, FormulaPreview } from '../../contracts/src/index.js';
 import type { Attachment, AttachmentPage } from '../../contracts/src/index.js';
 import { parseAttachmentUpload, parseAttachmentQuery, type CheckedAttachmentUpload, type AttachmentFile } from './attachments.js';
-import { validateValue } from './field-values.js';
+import { emptyRecordValue, validateRecordValue, validateValue } from './field-values.js';
 import { convertValue } from './field-conversion.js';
 import { parseQuery, type CheckedQuery } from './record-query.js';
 import { parseView } from './grid-views.js';
@@ -113,8 +113,8 @@ export class RecordService {
 
   createTable(input: unknown): Table {
     const item = schemaObject(input);
-    const fieldId = randomUUID();
-    return this.store.createTable({ id: randomUUID(), name: schemaName(item['name']), version: 1, revision: 1,
+    const fieldId = newId('fld');
+    return this.store.createTable({ id: newId('tbl'), name: schemaName(item['name']), version: 1, revision: 1,
       primaryFieldId: fieldId, fields: [{ id: fieldId, name: 'Name', type: 'text' }], total: 0 });
   }
 
@@ -488,7 +488,7 @@ export class RecordService {
       const checked = Object.fromEntries(entries.map(([id, value]) => {
         const field = fields.get(id);
         if (!field) return invalid(`Unknown field: ${id}.`);
-        return [id, validateValue(field, value)];
+        return [id, validateRecordValue(field, value)];
       }));
       let expectedValues: Record<string, CellValue> | undefined;
       let expectedFieldVersions: Record<string, number> | undefined;
@@ -585,8 +585,8 @@ export class RecordService {
       }
       const values = Object.fromEntries(table.fields.filter(field => !isReadOnlyField(field)).map(field => {
         const value = Object.hasOwn(overrides, field.id) ? overrides[field.id]
-          : Object.hasOwn(change.before!.values, field.id) ? change.before!.values[field.id] : field.defaultValue ?? null;
-        return [field.id, validateValue(field, value)];
+          : Object.hasOwn(change.before!.values, field.id) ? change.before!.values[field.id] : field.defaultValue ?? emptyRecordValue(field);
+        return [field.id, validateRecordValue(field, value)];
       }));
       cells += Object.keys(values).length;
       if (cells > maxBatchCells) throw new ServiceError('INVALID_BATCH', `A restoration batch may contain at most ${maxBatchCells} cells.`);
@@ -614,8 +614,8 @@ export class RecordService {
           continue;
         }
         const provided = (values as Record<string, unknown>)[field.id];
-        const value = provided === undefined ? field.defaultValue ?? null : provided;
-        try { result[field.id] = validateValue(field, value); }
+        const value = provided === undefined ? field.defaultValue ?? emptyRecordValue(field) : provided;
+        try { result[field.id] = validateRecordValue(field, value); }
         catch (error) {
           if (error instanceof ServiceError) throw new ServiceError(error.code, `Row ${index + 1}: ${error.message}`);
           throw error;

@@ -1,4 +1,4 @@
-import { cellJson, fieldColumn, fieldPath, recordPatch, recordSource, recordTable } from './record-tables.js';
+import { cellJson, fieldColumn, fieldPath, recordSource, recordTable, refreshRelationHistory, touchRelationRecords } from './record-tables.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { maxLinkedRecords, type CellValue, type Field, type RowRecord, type Table } from '../../contracts/src/index.js';
 import { ServiceError } from '../../core/src/errors.js';
@@ -44,7 +44,22 @@ export class Relations {
     if (missing) throw new ServiceError('INVALID_LINK', `${field.name}: record ${missing} does not exist in the target table.`);
   }
 
+  private byTable(ids: Iterable<string>): Map<string, Set<string>> {
+    const grouped = new Map<string, Set<string>>();
+    const records = [...ids];
+    if (!records.length) return grouped;
+    const rows = this.db.prepare('SELECT id, table_id FROM record_ids WHERE id IN (SELECT value FROM json_each(?))');
+    for (const row of rows.iterate(JSON.stringify(records))) {
+      const tableId = row['table_id'] as string;
+      let group = grouped.get(tableId);
+      if (!group) { group = new Set(); grouped.set(tableId, group); }
+      group.add(row['id'] as string);
+    }
+    return grouped;
+  }
+
   write(inputFields: Field[], changes: Array<{ id: string; values: Record<string, CellValue> }>, deleting = new Set<string>()) {
+    for (const [tableId, ids] of this.byTable(deleting)) touchRelationRecords(this.db, tableId, [...ids], 0);
     const key = (recordId: string, fieldId: string) => JSON.stringify([recordId, fieldId]);
     const fields = new Map(inputFields.map(field => [field.id, field]));
     const direct = new Map<string, { recordId: string; field: Field; ids: string[] }>();
@@ -85,56 +100,55 @@ export class Relations {
         state.ids = linked ? [...state.ids, entry.recordId] : state.ids.filter(id => id !== entry.recordId);
       }
     }
-    const affected = new Map<string, Record<string, CellValue>>();
+    const affected = new Set<string>();
     for (const [stateKey, state] of states) {
       if (direct.has(stateKey)) continue;
       if (!deleting.has(state.recordId)) validateValue(state.field, state.ids);
-      const values = affected.get(state.recordId) ?? {};
-      values[state.field.id] = state.ids;
-      affected.set(state.recordId, values);
+      affected.add(state.recordId);
     }
     const alreadyWritten = new Set(changes.map(change => change.id));
-    const records = new Map<string, Set<string>>();
-    const updatedValues = new Map<string, Record<string, CellValue>>();
-    const owner = this.db.prepare('SELECT table_id FROM record_ids WHERE id = ?');
-    const patches = new Map<string, ReturnType<typeof recordPatch>>();
-    for (const [id, changed] of affected) {
-      const tableId = owner.get(id)!['table_id'] as string;
-      const fields = Object.keys(changed);
-      const key = JSON.stringify([tableId, fields]);
-      let patch = patches.get(key);
-      if (!patch) { patch = recordPatch(this.db, tableId, fields); patches.set(key, patch); }
-      patch(id, changed, alreadyWritten.has(id) ? 0 : 1);
-      const ids = records.get(tableId) ?? new Set<string>();
-      ids.add(id);
-      records.set(tableId, ids);
-      if (alreadyWritten.has(id)) {
-        const row = this.db.prepare(`SELECT values_json FROM ${recordSource(tableId)} WHERE id = ?`).get(id)!;
-        updatedValues.set(id, JSON.parse(row['values_json'] as string) as Record<string, CellValue>);
-      }
+    const records = this.byTable(affected);
+    for (const [tableId, ids] of records) {
+      touchRelationRecords(this.db, tableId, [...ids].filter(id => !alreadyWritten.has(id)), 1);
     }
     const remove = this.db.prepare('DELETE FROM relation_edges WHERE source_record_id = ? AND field_id = ?');
     const insert = this.db.prepare('INSERT INTO relation_edges VALUES (?, ?, ?, ?)');
+    const changed = new Set<string>();
     for (const state of states.values()) {
-      remove.run(state.recordId, state.field.id);
+      const removed = remove.run(state.recordId, state.field.id);
       for (const [position, id] of state.ids.entries()) insert.run(state.recordId, state.field.id, id, position);
+      if (removed.changes || state.ids.length) changed.add(state.recordId);
+    }
+    for (const [tableId, ids] of this.byTable(changed)) refreshRelationHistory(this.db, tableId, [...ids]);
+    const updatedValues = new Map<string, Record<string, CellValue>>();
+    for (const [tableId, ids] of records) {
+      const selected = [...ids].filter(id => alreadyWritten.has(id) && !deleting.has(id));
+      if (!selected.length) continue;
+      const read = this.db.prepare(`SELECT id, values_json FROM ${recordSource(tableId)} WHERE id IN (SELECT value FROM json_each(?))`);
+      for (const row of read.iterate(JSON.stringify(selected))) {
+        updatedValues.set(row['id'] as string, JSON.parse(row['values_json'] as string) as Record<string, CellValue>);
+      }
     }
     return { records, values: updatedValues };
   }
 
   pairFields(field: Field, inverse: Field): Map<string, Set<string>> {
+    const missing = `edge.field_id = ? AND NOT EXISTS (SELECT 1 FROM relation_edges existing
+      WHERE existing.source_record_id = edge.target_record_id AND existing.field_id = ? AND existing.target_record_id = edge.source_record_id)`;
     const copy = (sourceId: string) => this.db.prepare(`INSERT INTO relation_edges (source_record_id, field_id, target_record_id, position)
       SELECT edge.target_record_id, ?, edge.source_record_id,
         COALESCE((SELECT MAX(existing.position) FROM relation_edges existing
           WHERE existing.source_record_id = edge.target_record_id AND existing.field_id = ?), -1)
         + ROW_NUMBER() OVER (PARTITION BY edge.target_record_id ORDER BY source.position, source.id)
       FROM relation_edges edge JOIN ${recordTable(sourceId)} source ON source.id = edge.source_record_id
-      WHERE edge.field_id = ? AND NOT EXISTS (SELECT 1 FROM relation_edges existing
-        WHERE existing.source_record_id = edge.target_record_id AND existing.field_id = ? AND existing.target_record_id = edge.source_record_id)
+      WHERE ${missing}
       RETURNING source_record_id`);
+    const candidates = this.db.prepare(`SELECT DISTINCT edge.target_record_id FROM relation_edges edge WHERE ${missing}`);
     const changed = new Map<string, Set<Field>>();
     const writeField = this.db.prepare('UPDATE fields SET definition_json = ? WHERE id = ?');
     for (const [current, reverse] of [[field, inverse], [inverse, field]] as const) {
+      const ids = candidates.all(reverse.id, current.id).map(row => row['target_record_id'] as string);
+      touchRelationRecords(this.db, reverse.relation!.tableId, ids.filter(id => !changed.has(id)), 1);
       for (const row of copy(current.relation!.tableId).iterate(current.id, current.id, reverse.id, current.id)) {
         const id = row['source_record_id'] as string;
         const fields = changed.get(id) ?? new Set<Field>();
@@ -144,25 +158,19 @@ export class Relations {
       current.relation!.inverseFieldId = reverse.id;
       writeField.run(JSON.stringify(current), current.id);
     }
-    const owner = this.db.prepare('SELECT table_id FROM record_ids WHERE id = ?');
     const readIds = this.db.prepare('SELECT target_record_id FROM relation_edges WHERE source_record_id = ? AND field_id = ? ORDER BY position LIMIT ?');
-    const records = new Map<string, Set<string>>();
     for (const [id, fields] of changed) {
-      const tableId = owner.get(id)!['table_id'] as string;
-      const values: Record<string, CellValue> = {};
       for (const current of fields) {
         const ids = readIds.all(id, current.id, (current.relation!.multiple ? maxLinkedRecords : 1) + 1).map(edge => edge['target_record_id'] as string);
-        try { values[current.id] = validateValue(current, ids); }
+        try { validateValue(current, ids); }
         catch (error) {
           if (error instanceof ServiceError) throw new ServiceError(error.code, `Record ${id}: ${error.message}`);
           throw error;
         }
       }
-      recordPatch(this.db, tableId, Object.keys(values))(id, values, 1);
-      const ids = records.get(tableId) ?? new Set<string>();
-      ids.add(id);
-      records.set(tableId, ids);
     }
+    const records = this.byTable(changed.keys());
+    for (const [tableId, ids] of records) refreshRelationHistory(this.db, tableId, [...ids]);
     return records;
   }
 
@@ -233,7 +241,7 @@ export class Relations {
 
   deleteRecords(table: Table, ids: string[]) {
     const paired = table.fields.filter(field => field.relation?.inverseFieldId);
-    const affected = this.write(table.fields, ids.map(id => ({ id, values: Object.fromEntries(paired.map(field => [field.id, null])) })), new Set(ids));
+    const affected = this.write(table.fields, ids.map(id => ({ id, values: Object.fromEntries(paired.map(field => [field.id, []])) })), new Set(ids));
     this.removeRecords(ids);
     return affected;
   }

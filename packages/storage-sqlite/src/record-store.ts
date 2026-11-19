@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { newId } from '../../core/src/identifiers.js';
 import { summarize } from './record-summary.js';
 import { groupLayout } from './group-layout.js';
 import { nestedGroupLayout } from './nested-group-layout.js';
@@ -668,7 +668,7 @@ export class SqliteRecordStore implements RecordStore {
           const values = csvRecordValues(table, plan, row);
           this.attachments.validateValues(table, values, apply);
           if (apply) {
-            const id = randomUUID();
+            const id = newId('rec');
             this.automaticNumbers.assign(table.fields, values);
             this.recordTimes.create(table, id, 1, values);
             const result = calculate(values);
@@ -738,7 +738,7 @@ export class SqliteRecordStore implements RecordStore {
   createRecords(table: Table, values: Array<Record<string, CellValue>>): BatchResult {
     return this.transaction(() => {
       this.checkSchema(table.id, table.version);
-      return this.insertRecords(table, values.map(values => ({ id: randomUUID(), version: 1, values })));
+      return this.insertRecords(table, values.map(values => ({ id: newId('rec'), version: 1, values })));
     }, 'IMMEDIATE', { recordWrite: true });
   }
 

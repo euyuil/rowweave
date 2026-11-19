@@ -1,6 +1,6 @@
 import React, { useContext, useEffect, useRef, useState } from 'react';
 import { isReadOnlyField, maxBatchCells, maxBatchRecords, type DeletedRecord, type RecordTrashPage, type RowRecord, type Table } from '../../contracts/src/index.js';
-import { validateValue } from '../../core/src/field-values.js';
+import { emptyRecordValue, validateValue } from '../../core/src/field-values.js';
 import type { WorkspaceApi } from '../../client/src/http-client.js';
 import { sameValue } from '../../client/src/cell-values.js';
 import { Dialog } from './dialog.js';
@@ -111,7 +111,7 @@ export function TrashDialog({ table: initialTable, api, setDirty, onClose, onRes
       </tbody></table></div>
       <details><summary>Adjust values for restoration</summary><p className="form-note">Adjust only the fields you need to repair. New fields use current defaults; removed fields stay removed. Select this record above to include it in restoration.</p>
         {fields.map(field => {
-          const stored = Object.hasOwn(snapshot.values, field.id) ? snapshot.values[field.id] : field.defaultValue ?? null;
+          const stored = Object.hasOwn(snapshot.values, field.id) ? snapshot.values[field.id] : field.defaultValue ?? emptyRecordValue(field);
           let initial: FormValue = null, incompatible = false;
           try { initial = toFormValue(field, validateValue(field, stored)); } catch { incompatible = true; }
           const edits = repairs[snapshot.id] ?? {};
@@ -121,7 +121,7 @@ export function TrashDialog({ table: initialTable, api, setDirty, onClose, onRes
             }); setConfirm(false); };
           return <div key={field.id}><FieldInput field={field} value={Object.hasOwn(edits, field.id) ? edits[field.id]! : initial} disabled={busy} onChange={change} />
             {incompatible && !Object.hasOwn(edits, field.id) && <p className="form-note">The saved value is incompatible with {field.name}. Enter a replacement to restore it.
-              {!field.required && <button type="button" disabled={busy} onClick={() => change(null)}>Restore {field.name} empty</button>}</p>}</div>;
+              {!field.required && <button type="button" disabled={busy} onClick={() => change(emptyRecordValue(field))}>Restore {field.name} empty</button>}</p>}</div>;
         })}
       </details>
     </section>}

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
+import { DatabaseSync } from 'node:sqlite';
 import { fixture } from './helpers.js';
 import { RecordService, ServiceError } from '../../core/src/record-service.js';
 import { startServer } from '../../../apps/server/src/http-server.js';
@@ -52,7 +53,45 @@ test('invalid links and late batch conflicts roll back values, edges and revisio
     { id: records[1]!.id, expectedVersion: 99, values: { [link.id]: [targets[1]!.id] } },
   ], tasks.id), code('VERSION_CONFLICT'));
   service.deleteRecords(projects.id, [{ id: targets[0]!.id, expectedVersion: 1 }]);
-  assert.equal(service.getRecord(tasks.id, records[0]!.id).values[link.id], null);
+  assert.deepEqual(service.getRecord(tasks.id, records[0]!.id).values[link.id], []);
+});
+
+test('linked values come only from edges and clear explicitly with ordered history and undo', t => {
+  const { data, service, tasks, targets, link } = setup(t);
+  const ids = [targets[2]!.id, targets[0]!.id];
+  const schema = service.updateField(tasks.id, link.id, { expectedVersion: tasks.version, defaultValue: ids });
+  assert.throws(() => service.createRecords(tasks.id, [{ values: { [link.id]: null } }]), code('INVALID_VALUE'));
+  const [row, empty] = service.createRecords(tasks.id, [{ values: {} }, { values: { [link.id]: [] } }]).records;
+  assert.deepEqual(row!.values[link.id], ids);
+  assert.deepEqual(empty!.values[link.id], []);
+  using db = new DatabaseSync(data.path, { readOnly: true });
+  assert.ok(!db.prepare('SELECT name FROM pragma_table_xinfo(?)').all(tasks.id).some(column => column['name'] === link.id));
+  const edges = () => db.prepare('SELECT target_record_id FROM relation_edges WHERE source_record_id = ? AND field_id = ? ORDER BY position')
+    .all(row!.id, link.id).map(edge => edge['target_record_id']);
+  assert.deepEqual(edges(), ids);
+  const update = (expectedVersion: number, values: Record<string, unknown>) =>
+    service.updateBatch([{ id: row!.id, expectedVersion, values }], tasks.id);
+  assert.throws(() => update(1, { [link.id]: null }), /Omit the field to keep existing links, or pass \[\] to clear all links/);
+  assert.deepEqual(service.getRecord(tasks.id, row!.id), row);
+  assert.deepEqual(update(1, { [tasks.primaryFieldId]: 'Renamed' }).records[0]!.values[link.id], ids);
+  const cleared = update(2, { [link.id]: [] });
+  assert.deepEqual(cleared.records[0]!.values[link.id], []);
+  assert.deepEqual(edges(), []);
+  const [last] = service.recordHistory(tasks.id, row!.id, {}).changes;
+  const change = service.recordChange(tasks.id, row!.id, last!.id);
+  assert.deepEqual(change.before!.values[link.id], ids);
+  assert.deepEqual(change.after!.values[link.id], []);
+  assert.ok(cleared.batchId);
+  service.undoRecordBatch(tasks.id, cleared.batchId);
+  assert.deepEqual(edges(), ids);
+
+  service.deleteField(tasks.id, link.id, { expectedVersion: schema.version });
+  const [removed] = service.recordHistory(tasks.id, row!.id, {}).changes;
+  const removal = service.recordChange(tasks.id, row!.id, removed!.id);
+  assert.deepEqual(removal.before!.values[link.id], ids);
+  assert.ok(!Object.hasOwn(removal.after!.values, link.id));
+  assert.deepEqual(edges(), []);
+  assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
 });
 
 test('relationship schema constraints prevent retargeting live links and invalid cardinality', t => {
@@ -107,11 +146,16 @@ test('relation queries match IDs, search primary labels and sort deterministical
   assert.deepEqual((await api.queryRecords(tasks.id, { search: '中文' })).records.map(record => record.id), [records[1]!.id]);
   assert.deepEqual((await api.queryRecords(tasks.id, { sort: [{ fieldId: link.id, direction: 'asc' }] })).records.map(record => record.id), [records[2], records[0], records[1], records[3]].map(record => record!.id));
   assert.equal((await api.queryRecords(tasks.id, { filter: { conjunction: 'and', conditions: [{ fieldId: link.id, operator: 'isEmpty' }] } })).total, 1);
+  assert.equal((await api.queryRecords(tasks.id, { filter: { conjunction: 'and', conditions: [{ fieldId: link.id, operator: 'eq', value: null }] } })).total, 1);
   assert.equal((await api.queryRecords(tasks.id, { filter: { conjunction: 'and', conditions: [{ fieldId: link.id, operator: 'hasAny', value: [targets[1]!.id, targets[2]!.id] }] } })).total, 2);
   const projected = await api.queryRecords(tasks.id, { recordIds: [records[0]!.id], fields: [tasks.primaryFieldId] });
   assert.equal(projected.records[0]!.links, undefined);
   assert.equal((await api.queryRecords(projects.id, { recordIds: [targets[1]!.id] })).records[0]!.id, targets[1]!.id);
   await assert.rejects(api.queryRecords(projects.id, { recordIds: ['duplicate', 'duplicate'] }), /unique record IDs/);
+  await assert.rejects(api.updateRecords(tasks.id, [
+    { id: records[0]!.id, expectedVersion: 1, values: { [link.id]: null } },
+  ]), /pass \[\] to clear all links/);
+  assert.deepEqual((await api.getRecord(tasks.id, records[0]!.id)).values[link.id], [targets[0]!.id]);
 });
 
 test('Schemas, records and saved views survive reopening', t => {

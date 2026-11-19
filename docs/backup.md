@@ -28,7 +28,7 @@ Choose your own retention schedule and storage location; RowWeave does not delet
 npm run workspace:file -- restore /path/to/backups/workspace-2026-11-12.sqlite /path/to/restored/workspace.sqlite
 ```
 
-The destination must be a new path in an existing directory. Restore checks a format 39 snapshot before publishing a copy. Table and record identities, versions, field values, saved views and history are preserved.
+The destination must be a new path in an existing directory. Restore checks a format 40 snapshot before publishing a copy. Table and record identities, versions, field values, saved views and history are preserved.
 
 After a successful restore:
 
@@ -48,7 +48,7 @@ Use your actual paths. Do not rename or overwrite a live database, and do not mi
 
 ## Changing versions
 
-Format 39 gives each RowWeave table its own physical SQLite data table. Start a fresh workspace in a separate location by setting `ROWWEAVE_DB` for the service or `ROWWEAVE_DATA_DIR` for the desktop. Earlier file formats require a compatible earlier release. Keep that release and its workspace together if you need to reopen or back up the earlier data.
+Format 40 names physical tables with their `tbl_…` IDs and stores linked-record values in the ordered edge table. Start a fresh workspace in a separate location by setting `ROWWEAVE_DB` for the service or `ROWWEAVE_DATA_DIR` for the desktop. Earlier file formats require a compatible earlier release. Keep that release and its workspace together if you need to reopen or back up the earlier data.
 
 ## Verification
 

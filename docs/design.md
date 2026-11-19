@@ -120,7 +120,7 @@ The service core will progressively provide:
 
 The prototype starts with a fixed schema and text fields. Basic field types and dynamic schema management come later.
 
-Workspace format 39 uses one physical SQLite data table per RowWeave table. Stable table and field IDs identify physical tables and columns. Scalar values use native SQLite storage classes, and ordered collections use JSON in their individual columns. Shared metadata stores field definitions, saved views, and normalized relation edges. A record identity registry gives cross-table links a single foreign-key target. Field type changes preview conversion failures and apply atomically. New workspaces start empty in the current format.
+Workspace format 40 uses the stable table ID (`tbl_…`) as the physical SQLite table name and the stable field ID (`fld_…`) as each stored business column name. Scalar values use native SQLite storage classes. Multiple-select choices and attachments keep their ordered JSON values in their columns. Relations use ordered rows in `relation_edges`, and the shared `record_ids` registry gives both endpoints a foreign-key target. Reads assemble relation arrays, including `[]` for cells with no edges. Field type changes preview conversion failures and apply atomically. New workspaces start empty in the current format.
 
 ## First prototype
 

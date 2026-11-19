@@ -125,8 +125,8 @@ export async function verifyBatchHistoryWorkflow(page, application) {
   await dialog.getByRole('button', { name: 'Undo operation', exact: true }).click();
   await dialog.getByRole('button', { name: 'Undo all changes', exact: true }).click();
   await dialog.waitFor({ state: 'detached' });
-  assert.equal((await read(rows[0].id)).values[relation.id], null);
-  assert.equal((await call(`/tables/${target.id}/records/${linked.id}`)).values[relation.relation.inverseFieldId], null);
+  assert.deepEqual((await read(rows[0].id)).values[relation.id], []);
+  assert.deepEqual((await call(`/tables/${target.id}/records/${linked.id}`)).values[relation.relation.inverseFieldId], []);
   await call(`${root}/fields/${relation.id}`, 'DELETE', { expectedVersion: (await call(root)).version });
   await call(`/tables/${target.id}`, 'DELETE', { expectedVersion: (await call(`/tables/${target.id}`)).version });
   await reload();

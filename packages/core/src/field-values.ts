@@ -63,9 +63,21 @@ export function validateValue(field: Field, input: unknown): CellValue {
   }
 }
 
+export function validateRecordValue(field: Field, value: unknown): CellValue {
+  if (field.type === 'relation' && value === null) {
+    const action = field.required ? 'pass a non-empty array to replace them' : 'pass [] to clear all links';
+    throw new ServiceError('INVALID_VALUE', `${field.name}: linked records do not accept null. Omit the field to keep existing links, or ${action}.`);
+  }
+  return validateValue(field, value);
+}
+
+export function emptyRecordValue(field: Field): string[] | null {
+  return field.type === 'relation' ? [] : null;
+}
+
 export function parseTextValue(field: Field, text: string): CellValue {
   if (field.type === 'text' || field.type === 'multiline') return validateValue(field, text);
-  if (!text.trim()) return validateValue(field, null);
+  if (!text.trim()) return validateValue(field, emptyRecordValue(field));
   let value: unknown = text;
   if (field.type === 'number') {
     if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(text.trim())) {
@@ -90,5 +102,5 @@ export function parseTextValue(field: Field, text: string): CellValue {
     if (!Array.isArray(items)) throw new ServiceError('INVALID_VALUE', `${field.name}: use a JSON array of option names or IDs.`);
     value = items.map(item => (field.options!.find(option => option.name === item) ?? field.options!.find(option => option.id === item))?.id);
   }
-  return validateValue(field, value);
+  return validateRecordValue(field, value);
 }

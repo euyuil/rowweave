@@ -71,7 +71,7 @@ test('one-to-one batch swaps use final cardinality and failures roll back both s
   const before = service.listTables();
   assert.throws(() => service.createRecords(tasks.id, [0, 1].map(() => ({ values: { [link.id]: [rows[0]!.id] } }))), code('INVALID_VALUE'));
   assert.deepEqual(service.listTables(), before);
-  assert.equal(service.getRecord(projects.id, rows[0]!.id).values[inverse.id], undefined);
+  assert.deepEqual(service.getRecord(projects.id, rows[0]!.id).values[inverse.id], []);
   const records = service.createRecords(tasks.id, rows.map(row => ({ values: { [link.id]: [row.id] } }))).records;
   const swap = records.map((record, index) => ({ id: record.id, expectedVersion: record.version, values: { [link.id]: [rows[1 - index]!.id] } }));
   assert.throws(() => service.updateBatch([swap[0], { ...swap[1], expectedVersion: 99 }], tasks.id), code('VERSION_CONFLICT'));

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { newId } from './identifiers.js';
 import type { Field, FieldType, SelectOption } from '../../contracts/src/index.js';
 import { ServiceError } from './errors.js';
 import { schemaName, schemaObject } from './schema-validation.js';
@@ -9,7 +10,7 @@ const fieldTypes: FieldType[] = ['text', 'multiline', 'url', 'attachment', 'numb
 export function parseField(input: Record<string, unknown>, previous?: Field): Field {
   const config = { ...previous, ...input };
   if (!fieldTypes.includes(config['type'] as FieldType)) throw new ServiceError('INVALID_SCHEMA', 'This field type is not supported.');
-  const field: Field = { id: previous?.id ?? randomUUID(), name: schemaName(config['name']), type: config['type'] as FieldType };
+  const field: Field = { id: previous?.id ?? newId('fld'), name: schemaName(config['name']), type: config['type'] as FieldType };
   if (config['description'] !== undefined) {
     if (typeof config['description'] !== 'string' || config['description'].length > 2000) {
       throw new ServiceError('INVALID_SCHEMA', 'Field descriptions must be text up to 2,000 characters.');

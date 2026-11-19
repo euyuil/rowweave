@@ -117,7 +117,7 @@ test('pairing enforces the multiple-link capacity without discarding incoming li
   const before = service.listTables();
   assert.throws(() => service.pairRelationFields(source.id, link.id, input()), { code: 'INVALID_VALUE' });
   assert.deepEqual(service.listTables(), before);
-  assert.equal(service.getRecord(target.id, b[0]!.id).values[inverse.id], null);
+  assert.deepEqual(service.getRecord(target.id, b[0]!.id).values[inverse.id], []);
   assert.deepEqual(service.getRecord(source.id, incoming.at(-1)!.id).values[link.id], [b[0]!.id]);
 });
 
