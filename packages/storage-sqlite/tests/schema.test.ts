@@ -78,13 +78,35 @@ test('the full field limit retains scalar types, arrays and explicit nulls in re
   assert.deepEqual(store.recordChange(table.id, row.id, change.id).after, row);
 });
 
+test('virtual table IDs enforce record ownership and cascade registry deletions', t => {
+  const data = fixture(t, null), service = new RecordService(data.open());
+  const first = service.createTable({ name: 'Invoices' });
+  const second = service.createTable({ name: 'Suppliers' });
+  const [invoice] = service.createRecords(first.id, [{ values: {} }]).records;
+  const [supplier] = service.createRecords(second.id, [{ values: {} }]).records;
+  using db = new DatabaseSync(data.path);
+  db.exec('PRAGMA foreign_keys = ON');
+  const ddl = db.prepare("SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = ?").get(first.id);
+  assert.match(ddl!['sql'] as string, /table_id TEXT GENERATED ALWAYS AS \('[^']+'\) VIRTUAL NOT NULL/);
+
+  const readInvoice = db.prepare(`SELECT table_id FROM ${recordTable(first.id)} WHERE id = ?`);
+  assert.equal(readInvoice.get(invoice!.id)!['table_id'], first.id);
+  const insertInvoice = db.prepare(`INSERT INTO ${recordTable(first.id)} (id, position) VALUES (?, 1)`);
+  assert.throws(() => insertInvoice.run(supplier!.id), /FOREIGN KEY constraint failed/);
+
+  db.prepare('DELETE FROM record_ids WHERE id = ?').run(invoice!.id);
+  assert.equal(readInvoice.get(invoice!.id), undefined);
+  assert.equal(service.getRecord(second.id, supplier!.id).id, supplier!.id);
+  assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
+});
+
 test('opening an earlier workspace rejects its format and leaves the file intact', t => {
   const data = fixture(t, null), old = new DatabaseSync(data.path);
   old.exec(`CREATE TABLE record_ids (id TEXT PRIMARY KEY, table_id TEXT);
-    INSERT INTO record_ids VALUES ('original', 'example'); PRAGMA user_version = 39`);
+    INSERT INTO record_ids VALUES ('original', 'example'); PRAGMA user_version = 40`);
   old.close();
   const before = readFileSync(data.path);
-  assert.throws(() => data.open(), /Unsupported database version: 39.*Create a new RowWeave workspace/);
+  assert.throws(() => data.open(), /Unsupported database version: 40.*Create a new RowWeave workspace/);
   assert.deepEqual(readFileSync(data.path), before);
 });
 
