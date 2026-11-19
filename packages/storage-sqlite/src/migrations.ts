@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 
-export const workspaceFormat = 41;
+export const workspaceFormat = 42;
 
 export function initializeWorkspace(db: DatabaseSync): boolean {
   db.exec('BEGIN IMMEDIATE');

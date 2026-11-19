@@ -88,7 +88,7 @@ test('cross-table reciprocal swaps undo atomically against the final graph and r
   assert.equal(service.recordBatchChanges(tasks.id, undo.batchId, {}).batch.recordCount, 4);
 });
 
-test('undo restores absent optional values and newly assigned reciprocal links to empty', t => {
+test('undo restores empty optional values and newly assigned reciprocal links', t => {
   const { service, table: source } = setup(t);
   const row = service.createRecords(source.id, [{ values: {} }]).records[0]!;
   const target = service.createTable({ name: 'Targets' });

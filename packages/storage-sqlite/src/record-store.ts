@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { newId } from '../../core/src/identifiers.js';
+import { emptyRecordValue } from '../../core/src/field-values.js';
 import { summarize } from './record-summary.js';
 import { groupLayout } from './group-layout.js';
 import { nestedGroupLayout } from './nested-group-layout.js';
@@ -302,6 +303,8 @@ export class SqliteRecordStore implements RecordStore {
     }
     const detached = this.relations.detachFields(table, before);
     const removed = before.fields.filter(field => !table.fields.some(next => next.id === field.id));
+    const added = table.fields.filter(field => field.type !== 'lookup' && !before.fields.some(previous => previous.id === field.id));
+    this.history.noteAddedFields(table.id, added.map(field => field.id));
     if (removed.some(field => field.type !== 'lookup')) syncQueryIndexes(this.db, before, []);
     changeRecordColumns(this.db, before, table);
     for (const field of removed) this.db.prepare('DELETE FROM fields WHERE id = ? AND table_id = ?').run(field.id, table.id);
@@ -746,11 +749,15 @@ export class SqliteRecordStore implements RecordStore {
     let position = (this.db.prepare(`SELECT COALESCE(MAX(position), -1) AS last FROM ${recordTable(table.id)}`).get()!['last'] as number) + 1;
     const calculate = compileFormulas(table, { skipLinked: true, now: this.transactionTime! });
     const insert = recordInsert(this.db, table);
+    const fields = table.fields.filter(field => field.type !== 'lookup');
     const records = input.map(({ id, version, values }) => {
       this.attachments.validateValues(table, values, true);
       this.automaticNumbers.assign(table.fields, values);
       this.recordTimes.create(table, id, version, values);
       const result = calculate(values);
+      for (const field of fields) {
+        if (result.values[field.id] === undefined) result.values[field.id] = emptyRecordValue(field);
+      }
       insert(id, position++, result.values, version, JSON.stringify(result.formulaErrors ?? {}));
       return { id, version, ...result };
     });

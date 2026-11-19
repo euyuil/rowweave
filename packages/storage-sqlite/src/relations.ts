@@ -1,4 +1,4 @@
-import { cellJson, fieldColumn, fieldPath, recordSource, recordTable, refreshRelationHistory, touchRelationRecords } from './record-tables.js';
+import { cellJson, fieldColumn, fieldPath, recordSource, recordTable, refreshHistoryValues, touchRelationRecords } from './record-tables.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { maxLinkedRecords, type CellValue, type Field, type RowRecord, type Table } from '../../contracts/src/index.js';
 import { ServiceError } from '../../core/src/errors.js';
@@ -119,7 +119,7 @@ export class Relations {
       for (const [position, id] of state.ids.entries()) insert.run(state.recordId, state.field.id, id, position);
       if (removed.changes || state.ids.length) changed.add(state.recordId);
     }
-    for (const [tableId, ids] of this.byTable(changed)) refreshRelationHistory(this.db, tableId, [...ids]);
+    for (const [tableId, ids] of this.byTable(changed)) refreshHistoryValues(this.db, tableId, [...ids]);
     const updatedValues = new Map<string, Record<string, CellValue>>();
     for (const [tableId, ids] of records) {
       const selected = [...ids].filter(id => alreadyWritten.has(id) && !deleting.has(id));
@@ -170,7 +170,7 @@ export class Relations {
       }
     }
     const records = this.byTable(changed.keys());
-    for (const [tableId, ids] of records) refreshRelationHistory(this.db, tableId, [...ids]);
+    for (const [tableId, ids] of records) refreshHistoryValues(this.db, tableId, [...ids]);
     return records;
   }
 

@@ -1,6 +1,6 @@
 # Record history and snapshot restoration
 
-The service retains committed record changes in the workspace database. Desktop, SDK, CLI, MCP and CSV writes use the same transaction journal. A change contains the record's stored values, version and formula errors before and after the transaction, a batch ID and a service timestamp. Creates have no before snapshot; deletes have no after snapshot.
+The service retains committed record changes in the workspace database. Desktop, SDK, CLI, MCP and CSV writes use the same transaction journal. A change contains the record's stored values, version and formula errors before and after the transaction, a batch ID and a service timestamp. Creates have no before snapshot; deletes have no after snapshot. Each snapshot includes the stored fields from its schema at capture time. An empty column is captured as JSON `null`, including a field that existed at capture time and had yet to be filled.
 
 Each record has at most one history entry per transaction. Reciprocal relationship updates and stored formula recalculations share the initiating batch and coalesce intermediate values into the final snapshot. Failed writes roll back their journal entries too. Lookup values and display labels are resolved on read and are not historical snapshots; inspect the target record's changes for its stored values. History does not invent actor names or reconstruct changes made before the upgrade.
 
@@ -63,7 +63,7 @@ Clock-formula refreshes advance changed record versions without creating user-hi
 
 After inspecting a complete transaction, call `undoRecordBatch(tableId, batchId)`. The service reverses the complete record operation, including changes to other tables through reciprocal links and stored calculations. Created records are deleted, edited records receive their prior writable values, and deleted records are recreated with their original UUIDs. Recreated records append to their tables. Existing later-added fields keep their current values; recreated rows use current defaults/null for later fields. Removed fields and schemas are not recreated, and formulas recalculate with current definitions and targets.
 
-An optional field may have no stored key before its first assignment. If it appears in the operation's after snapshot, undo restores that prior emptiness to null, including both sides of newly assigned reciprocal links. This differs from fields absent on both sides of the historical operation, whose later values are retained.
+Undo restores an empty optional cell as `null` or an empty relation as `[]` from its before snapshot. A field added after the original operation has no key in that snapshot. Undo retains its current value on existing records and applies its current default when recreating deleted records.
 
 Every record must still match the original transaction's final version. A deleted record must still have the same latest deletion entry and remain absent. One stale or missing record rejects the entire operation with `VERSION_CONFLICT`. Updates to unrelated records are preserved. Current field, relationship, required-value and deletion-dependency rules apply. Relationship assignments are validated as a single final graph, allowing complete reciprocal swaps and closed self-linked batches. A late failure rolls back every record, edge, revision and journal entry.
 

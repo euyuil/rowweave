@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
+import type { CellValue, RowRecord } from '../../contracts/src/index.js';
 import { dirname, join } from 'node:path';
 import { fixture } from './helpers.js';
 import { RecordService } from '../../core/src/record-service.js';
@@ -76,6 +77,79 @@ test('restoring a snapshot preserves identity and later fields, validates curren
   table = service.deleteField(table.id, amount, { expectedVersion: table.version });
   const current = service.getRecord(table.id, first.id);
   assert.equal(Object.hasOwn(service.restoreRecord(table.id, first.id, { changeId: original.id, snapshot: 'after', expectedVersion: current.version }).values, amount), false);
+});
+
+test('defaults and restores distinguish an empty field from a field added after a snapshot', t => {
+  const { service, table: initial } = setup(t);
+  const name = initial.primaryFieldId;
+  const [original, olderDeleted] = service.createRecords(initial.id, [{ values: { [name]: 'Original' } }, { values: {} }]).records;
+  const beforeField = service.recordHistory(initial.id, original!.id, {}).changes[0]!.id;
+  service.deleteRecords(initial.id, [{ id: olderDeleted!.id, expectedVersion: olderDeleted!.version }]);
+  const table = service.createField(initial.id, {
+    expectedVersion: initial.version, name: 'Notes', type: 'text', defaultValue: 'Pending',
+  });
+  const notes = table.fields.at(-1)!.id;
+  assert.ok(!Object.hasOwn(service.recordChange(table.id, original!.id, beforeField).after!.values, notes));
+  assert.equal(service.getRecord(table.id, original!.id).values[notes], null);
+  const [defaulted, cleared] = service.createRecords(table.id, [{ values: {} }, { values: { [notes]: null } }]).records;
+  assert.equal(defaulted!.values[notes], 'Pending');
+  assert.equal(cleared!.values[notes], null);
+
+  const update = (record: RowRecord, values: Record<string, CellValue>) =>
+    service.updateBatch([{ id: record.id, expectedVersion: record.version, values }], table.id).records[0]!;
+  const withDefault = update(defaulted!, { [name]: 'Rename' });
+  assert.equal(withDefault.values[notes], 'Pending');
+  assert.equal(update(withDefault, { [notes]: null }).values[notes], null);
+  const renamed = update(original!, { [name]: 'Changed without notes' });
+  const afterField = service.recordHistory(table.id, renamed.id, {}).changes[0]!.id;
+  const snapshot = service.recordChange(table.id, renamed.id, afterField);
+  assert.equal(snapshot.before!.values[notes], null);
+  assert.equal(snapshot.after!.values[notes], null);
+
+  const filled = update(renamed, { [notes]: 'Keep later work' });
+  const restore = (changeId: number, expectedVersion: number) =>
+    service.restoreRecord(table.id, filled.id, { changeId, snapshot: 'after', expectedVersion });
+  const kept = restore(beforeField, filled.version);
+  assert.equal(kept.values[notes], 'Keep later work');
+  const emptied = restore(afterField, kept.version);
+  assert.equal(emptied.values[notes], null);
+
+  service.deleteRecords(table.id, [{ id: emptied.id, expectedVersion: emptied.version }]);
+  const deleted = service.recordTrash(table.id, {}).records;
+  const restored = service.restoreDeletedRecords(table.id, deleted).records;
+  assert.equal(restored.find(record => record.id === olderDeleted!.id)!.values[notes], 'Pending');
+  assert.equal(restored.find(record => record.id === emptied.id)!.values[notes], null);
+});
+
+test('schema changes capture fields according to each snapshot boundary', t => {
+  const { service, table: initial, amount } = setup(t);
+  const row = service.createRecords(initial.id, [{ values: { [amount]: 2 } }]).records[0]!;
+  const numbered = service.createField(initial.id, { expectedVersion: initial.version, name: 'Sequence', type: 'autoNumber' });
+  const sequence = numbered.fields.at(-1)!.id;
+  const latest = () => {
+    const [entry] = service.recordHistory(initial.id, row.id, {}).changes;
+    return service.recordChange(initial.id, row.id, entry!.id);
+  };
+  const numbering = latest();
+  assert.deepEqual(numbering.before!.values, row.values);
+  assert.equal(numbering.after!.values[sequence], 1);
+
+  let table = service.createField(numbered.id, { expectedVersion: numbered.version, name: 'Double', type: 'formula',
+    formula: { expression: `[${amount}] * 2`, resultType: 'number' } });
+  const formula = table.fields.at(-1)!.id;
+  const calculation = latest();
+  assert.deepEqual(calculation.before!.values, numbering.after!.values);
+  assert.deepEqual(calculation.after!.values, { ...numbering.after!.values, [formula]: 4 });
+
+  table = service.createField(table.id, { expectedVersion: table.version, name: 'Invalid', type: 'formula',
+    formula: { expression: '1 / 0', resultType: 'number' } });
+  const invalid = table.fields.at(-1)!.id;
+  service.deleteField(table.id, invalid, { expectedVersion: table.version });
+  const removal = latest();
+  assert.equal(removal.before!.values[invalid], null);
+  assert.ok(removal.before!.formulaErrors?.[invalid]);
+  assert.ok(!Object.hasOwn(removal.after!.values, invalid));
+  assert.equal(removal.after!.formulaErrors?.[invalid], undefined);
 });
 
 test('restoration fails atomically for current required fields and missing linked targets', t => {

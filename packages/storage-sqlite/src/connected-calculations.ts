@@ -81,15 +81,13 @@ export class ConnectedCalculations {
           const physical = recordTable(node.tableId), column = fieldColumn(field.id);
           this.db.prepare(`INSERT OR IGNORE INTO clock_formula_dirty SELECT ?, r.id FROM ${physical} r
             WHERE (? = 1 OR EXISTS (SELECT 1 FROM clock_formula_dirty d WHERE d.record_id = r.id AND d.field_id IN (SELECT value FROM json_each(?))))
-            AND (r.${column} IS NOT ? OR (? IS NULL AND json_type(r.null_fields, ?) IS NULL)
-              OR json_extract(r.formula_errors_json, ?) IS NOT ?)`)
-            .run(field.id, node.formula!.clockDependent ? 1 : 0, JSON.stringify(node.dependencies), value, value, path, path, error);
+            AND (r.${column} IS NOT ? OR json_extract(r.formula_errors_json, ?) IS NOT ?)`)
+            .run(field.id, node.formula!.clockDependent ? 1 : 0, JSON.stringify(node.dependencies), value, path, error);
           const updated = this.db.prepare(`UPDATE ${physical} AS r SET ${column} = ?,
-            null_fields = CASE WHEN ? IS NULL THEN json_set(null_fields, ?, 1) ELSE json_remove(null_fields, ?) END,
             formula_errors_json = CASE WHEN ? IS NULL THEN json_remove(formula_errors_json, ?) ELSE json_set(formula_errors_json, ?, ?) END,
             version = version + CASE WHEN EXISTS (SELECT 1 FROM clock_formula_changed WHERE record_id = r.id) THEN 0 ELSE 1 END
             WHERE id IN (SELECT record_id FROM clock_formula_dirty WHERE field_id = ?)`)
-            .run(value, value, path, path, error, path, path, error, field.id);
+            .run(value, error, path, path, error, field.id);
           if (updated.changes) tables.add(node.tableId);
           changedConstant.run(node.tableId, field.id);
           continue;
@@ -114,7 +112,7 @@ export class ConnectedCalculations {
           for (const [index, record] of records.entries()) {
             const input = inputs[index]!;
             const result = node.formula!.calculate(input.values, input.formulaErrors ?? {}, now);
-            if (Object.hasOwn(record.values, field.id) && record.values[field.id] === result.value && record.formulaErrors[field.id] === result.error) continue;
+            if (record.values[field.id] === result.value && record.formulaErrors[field.id] === result.error) continue;
             record.values[field.id] = result.value;
             if (result.error) record.formulaErrors[field.id] = result.error;
             else delete record.formulaErrors[field.id];
@@ -169,7 +167,7 @@ export class ConnectedCalculations {
         for (const [index, record] of records.entries()) {
           const input = inputs[index]!;
           const result = node.formula!.calculate(input.values, input.formulaErrors ?? {}, now);
-          if (Object.hasOwn(record.values, field.id) && record.values[field.id] === result.value && record.formulaErrors[field.id] === result.error) continue;
+          if (record.values[field.id] === result.value && record.formulaErrors[field.id] === result.error) continue;
           record.values[field.id] = result.value;
           if (result.error) record.formulaErrors[field.id] = result.error;
           else delete record.formulaErrors[field.id];
