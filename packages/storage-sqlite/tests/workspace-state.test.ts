@@ -51,7 +51,9 @@ test('workspace state separates catalog, schema, data and saved-view changes', t
   assert.equal(service.workspaceState({ tableId: table.id, viewId: extra.id }).table!.view, null);
   const other = service.createTable({ name: 'Other' });
   assert.equal(service.workspaceState({ tableId: other.id, viewId: view.id }).table!.view, null);
-  assert.deepEqual(service.getRecord(table.id, record.id), record);
+  assert.deepEqual(service.getRecord(table.id, record.id), {
+    ...record, values: { ...record.values, [table.fields.at(-1)!.id]: null },
+  });
   const beforeDelete = service.workspaceState(request);
   service.deleteTable(table.id, { expectedVersion: table.version });
   assert.deepEqual(service.workspaceState(request), { catalogRevision: beforeDelete.catalogRevision + 1, table: null });

@@ -40,11 +40,12 @@ test('each table stores its own records and column changes are visible in SQLite
     assert.equal(db.prepare("SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'records'").get(), undefined);
     assert.equal(db.prepare(`SELECT id FROM ${recordTable(first.id)}`).get()!['id'], row.id);
     assert.equal(db.prepare(`SELECT id FROM ${recordTable(second.id)}`).get()!['id'], other.id);
+    assert.ok(!columns().includes('null_fields'));
 
     first = service.createField(first.id, { expectedVersion: first.version, name: 'Amount', type: 'number' });
     const amount = first.fields.at(-1)!.id;
     assert.ok(columns().includes(amount));
-    assert.equal(Object.hasOwn(service.getRecord(first.id, row.id).values, amount), false);
+    assert.equal(service.getRecord(first.id, row.id).values[amount], null);
     const saved = service.updateBatch([{ id: row.id, expectedVersion: row.version, values: { [amount]: Number.MAX_VALUE } }], first.id).records[0]!;
     const raw = db.prepare(`SELECT ${fieldColumn(amount)} AS amount, typeof(${fieldColumn(amount)}) AS type FROM ${recordTable(first.id)}`).get()!;
     assert.deepEqual({ ...raw }, { amount: Number.MAX_VALUE, type: 'real' });
@@ -103,10 +104,10 @@ test('virtual table IDs enforce record ownership and cascade registry deletions'
 test('opening an earlier workspace rejects its format and leaves the file intact', t => {
   const data = fixture(t, null), old = new DatabaseSync(data.path);
   old.exec(`CREATE TABLE record_ids (id TEXT PRIMARY KEY, table_id TEXT);
-    INSERT INTO record_ids VALUES ('original', 'example'); PRAGMA user_version = 40`);
+    INSERT INTO record_ids VALUES ('original', 'example'); PRAGMA user_version = 41`);
   old.close();
   const before = readFileSync(data.path);
-  assert.throws(() => data.open(), /Unsupported database version: 40.*Create a new RowWeave workspace/);
+  assert.throws(() => data.open(), /Unsupported database version: 41.*Create a new RowWeave workspace/);
   assert.deepEqual(readFileSync(data.path), before);
 });
 

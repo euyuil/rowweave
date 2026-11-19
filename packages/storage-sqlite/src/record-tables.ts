@@ -23,7 +23,6 @@ export function cellBinding(value: CellValue | undefined): SQLInputValue {
 }
 
 // A STRICT ANY column preserves REAL for numbers, INTEGER for booleans and BLOB for arrays.
-// SQL NULL represents either a missing cell or an explicit null, distinguished by null_fields.
 export function cellJson(column: string): string {
   return `CASE typeof(${column}) WHEN 'integer' THEN CASE ${column} WHEN 0 THEN 'false' ELSE 'true' END
     WHEN 'blob' THEN CAST(${column} AS TEXT) ELSE json_quote(${column}) END`;
@@ -40,17 +39,15 @@ export function scalarColumn(field: Field, alias = ''): string {
 }
 
 function valuesJson(fields: Field[], alias: string): string {
-  const entries = fields.filter(field => field.type !== 'lookup').map(field => {
-    const key = literal(',' + JSON.stringify(field.id) + ':');
+  const entries = fields.filter(field => field.type !== 'lookup').map((field, index) => {
+    const key = literal((index === 0 ? '' : ',') + JSON.stringify(field.id) + ':');
     if (field.type === 'relation') {
       return `${key} || (SELECT json_group_array(edge.target_record_id ORDER BY edge.position)
         FROM relation_edges edge WHERE edge.source_record_id = ${alias}.id AND edge.field_id = ${literal(field.id)})`;
     }
-    const column = fieldColumn(field.id, alias);
-    return `CASE WHEN ${column} IS NOT NULL THEN ${key} || (${cellJson(column)})
-      WHEN json_type(${alias}.null_fields, ${literal(fieldPath(field.id))}) IS NOT NULL THEN ${key} || 'null' ELSE '' END`;
+    return `${key} || (${cellJson(fieldColumn(field.id, alias))})`;
   });
-  return entries.length ? `'{' || ltrim(${entries.join(' || ')}, ',') || '}'` : "'{}'";
+  return entries.length ? `'{' || ${entries.join(' || ')} || '}'` : "'{}'";
 }
 
 const historyTrigger = (id: string, event: string) => identifier(`rowweave_history_${event.toLowerCase()}_${id}`);
@@ -82,7 +79,7 @@ export function createRecordTable(db: DatabaseSync, table: RecordSchema): void {
   db.exec(`CREATE TABLE ${recordTable(table.id)} (
     id TEXT PRIMARY KEY, table_id TEXT GENERATED ALWAYS AS (${id}) VIRTUAL NOT NULL,
     position INTEGER NOT NULL UNIQUE, version INTEGER NOT NULL DEFAULT 1,
-    null_fields TEXT NOT NULL DEFAULT '{}', formula_errors_json TEXT NOT NULL DEFAULT '{}',
+    formula_errors_json TEXT NOT NULL DEFAULT '{}',
     ${columns.length ? columns.join(', ') + ',' : ''}
     FOREIGN KEY(id, table_id) REFERENCES record_ids(id, table_id) ON DELETE CASCADE
   ) STRICT`);
@@ -101,9 +98,8 @@ export function changeRecordColumns(db: DatabaseSync, before: RecordSchema, afte
   const physical = recordTable(before.id);
   // Capture the removal while the old projection and history triggers can still see the column.
   for (const id of removed) {
-    const column = fieldColumn(id), path = fieldPath(id);
-    db.prepare(`UPDATE ${physical} SET ${column} = NULL, null_fields = json_remove(null_fields, ?), version = version + 1
-      WHERE ${column} IS NOT NULL OR json_type(null_fields, ?) IS NOT NULL`).run(path, path);
+    const column = fieldColumn(id);
+    db.prepare(`UPDATE ${physical} SET version = version + 1 WHERE ${column} IS NOT NULL`).run();
   }
   for (const id of removedRelations) {
     db.prepare(`UPDATE ${physical} SET version = version + 1
@@ -115,7 +111,7 @@ export function changeRecordColumns(db: DatabaseSync, before: RecordSchema, afte
   for (const id of removed) db.exec(`ALTER TABLE ${physical} DROP COLUMN ${fieldColumn(id)}`);
   for (const id of added) db.exec(`ALTER TABLE ${physical} ADD COLUMN ${fieldColumn(id)} ANY`);
   writeProjection(db, after);
-  if (removedRelations.length) refreshRelationHistory(db, before.id);
+  if (removed.length || removedRelations.length) refreshHistoryValues(db, before.id);
 }
 
 export function dropRecordTable(db: DatabaseSync, id: string): void {
@@ -129,8 +125,8 @@ export function touchRelationRecords(db: DatabaseSync, tableId: string, ids: rea
     WHERE id IN (SELECT value FROM json_each(?))`).run(increment, JSON.stringify(ids));
 }
 
-// The first row trigger preserves the before snapshot. Refresh the after snapshot once the edges are final.
-export function refreshRelationHistory(db: DatabaseSync, tableId: string, ids?: readonly string[]): void {
+// The first row trigger preserves the before snapshot. Refresh the after snapshot after changing fields or edges.
+export function refreshHistoryValues(db: DatabaseSync, tableId: string, ids?: readonly string[]): void {
   if (ids?.length === 0) return;
   const selected = ids ? ' AND record_id IN (SELECT value FROM json_each(?))' : '';
   db.prepare(`UPDATE record_changes AS change SET after_values_json = (
@@ -139,37 +135,29 @@ export function refreshRelationHistory(db: DatabaseSync, tableId: string, ids?: 
       AND after_version IS NOT NULL${selected}`).run(tableId, ...(ids ? [JSON.stringify(ids)] : []));
 }
 
-function bindValues(fields: Field[], values: RecordValues): SQLInputValue[] {
-  const nulls = Object.fromEntries(fields.filter(field => values[field.id] === null).map(field => [field.id, 1]));
-  return [JSON.stringify(nulls), ...fields.map(field => cellBinding(values[field.id]))];
-}
-
 export function recordInsert(db: DatabaseSync, table: RecordSchema) {
   const fields = stored(table.fields);
   const identify = db.prepare('INSERT INTO record_ids (id, table_id) VALUES (?, ?)');
-  const columns = ['id', 'position', 'version', 'formula_errors_json', 'null_fields', ...fields.map(field => fieldColumn(field.id))];
+  const columns = ['id', 'position', 'version', 'formula_errors_json', ...fields.map(field => fieldColumn(field.id))];
   const insert = db.prepare(`INSERT INTO ${recordTable(table.id)} (${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`);
   return (id: string, position: number, values: RecordValues, version = 1, errors = '{}') => {
     identify.run(id, table.id);
-    insert.run(id, position, version, errors, ...bindValues(fields, values));
+    insert.run(id, position, version, errors, ...fields.map(field => cellBinding(values[field.id])));
   };
 }
 
 export function recordUpdate(db: DatabaseSync, table: RecordSchema) {
   const fields = stored(table.fields);
-  const assignments = ['null_fields = ?', ...fields.map(field => `${fieldColumn(field.id)} = ?`)];
-  const update = db.prepare(`UPDATE ${recordTable(table.id)} SET version = version + ?,
-    formula_errors_json = COALESCE(?, formula_errors_json), ${assignments.join(', ')} WHERE id = ?`);
+  const assignments = ['version = version + ?', 'formula_errors_json = COALESCE(?, formula_errors_json)',
+    ...fields.map(field => `${fieldColumn(field.id)} = ?`)];
+  const update = db.prepare(`UPDATE ${recordTable(table.id)} SET ${assignments.join(', ')} WHERE id = ?`);
   return (id: string, values: RecordValues, increment = 1, errors: string | null = null) =>
-    update.run(increment, errors, ...bindValues(fields, values), id);
+    update.run(increment, errors, ...fields.map(field => cellBinding(values[field.id])), id);
 }
 
 export function recordPatch(db: DatabaseSync, tableId: string, fields: string[]) {
-  const changes = fields.map(id => `${fieldColumn(id)} = ?`).join(', ');
-  const update = db.prepare(`UPDATE ${recordTable(tableId)} SET version = version + ?, ${changes},
-    null_fields = json_patch(null_fields, ?) WHERE id = ?`);
-  return (id: string, values: RecordValues, increment: number) => {
-    const nulls = Object.fromEntries(fields.map(field => [field, values[field] === null ? 1 : null]));
-    update.run(increment, ...fields.map(field => cellBinding(values[field])), JSON.stringify(nulls), id);
-  };
+  const assignments = ['version = version + ?', ...fields.map(id => `${fieldColumn(id)} = ?`)];
+  const update = db.prepare(`UPDATE ${recordTable(tableId)} SET ${assignments.join(', ')} WHERE id = ?`);
+  return (id: string, values: RecordValues, increment: number) =>
+    update.run(increment, ...fields.map(field => cellBinding(values[field])), id);
 }
