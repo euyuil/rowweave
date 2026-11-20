@@ -23,7 +23,7 @@
     "package:harness": "npm run build:harness && node scripts/package-harness.mjs",
     "test:harness": "npm run build && npm run setup:desktop && node integrations/harness/tests/browser.mjs",
     "test:interfaces": "node integrations/harness/tests/browser.mjs --packaged",
-    "test": "npm run build && node --test \"dist/**/tests/*.test.js\"",
+    "test": "npm run build && node --test \"dist/**/tests/*.test.js\" tests/openapi.test.mjs",
     "start:server": "node dist/apps/server/src/cli.js",
     "workspace:file": "node dist/apps/server/src/workspace-file.js",
     "setup:desktop": "install-electron",
@@ -41,6 +41,7 @@
     "glob": "14.0.2"
   },
   "devDependencies": {
+    "@apidevtools/swagger-parser": "13.1.0",
     "@deepseek-ai/cordis": "4.1.0",
     "@deepseek-ai/dsh-client-modules": "0.2.2-rc.2",
     "@deepseek-ai/dsh-client-store": "0.2.2-rc.2",
@@ -55,6 +56,7 @@
     "@types/node": "24.10.0",
     "@types/react": "18.3.27",
     "@types/react-dom": "18.3.7",
+    "ajv": "8.20.0",
     "electron": "45.3.0",
     "esbuild": "0.28.2",
     "immer": "10.1.1",

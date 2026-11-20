@@ -25,7 +25,7 @@ Windows 评估版本可从成功的 [CI 运行记录](https://github.com/euyuil/
 
 ## 连接你的软件
 
-[部署服务（英文）](docs/service.md) · [TypeScript SDK（英文）](packages/client/README.md) · [CLI（英文）](apps/cli/README.md) · [MCP（英文）](docs/mcp.md) · [Agent Skills（英文）](docs/agent-skills.md) · [Harness（英文）](docs/harness.md)
+[部署服务（英文）](docs/service.md) · [HTTP API 参考（英文）](docs/http-api.md) · [OpenAPI 规范文件](docs/openapi.yaml) · [TypeScript SDK（英文）](packages/client/README.md) · [CLI（英文）](apps/cli/README.md) · [MCP（英文）](docs/mcp.md) · [Agent Skills（英文）](docs/agent-skills.md) · [Harness（英文）](docs/harness.md)
 
 本版专注灵活的结构化表格和可靠的数据操作。自定义表单、透视表、仪表盘、地图视图和自动化尚未实现，不在本轮范围内。内置 AI 聊天、企业级权限和实时协同编辑也不在本轮范围内。
 

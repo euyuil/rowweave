@@ -13,6 +13,8 @@ npm test
 
 On Windows, use `npm.cmd` if PowerShell execution policy prevents `npm` from running.
 
+When changing a public HTTP operation, update the [OpenAPI contract](openapi.yaml) and [HTTP reference](http-api.md) in the same PR. Keep the contract's `info.version` aligned with the root package version. After building, run `node --test tests/openapi.test.mjs` to validate the specification and exercise it against an isolated SQLite workspace. The same suite runs in `npm test`. Successful Linux CI runs publish the tested file as `rowweave-openapi`.
+
 Build the stdio MCP adapter with `npm run build:mcp` and its independently installable archive with `npm run package:mcp`. Run the built entry directly from an MCP host as described in the [MCP guide](mcp.md); `npm run start:mcp` is available for development. Protocol and offline installation tests run in `npm test`.
 
 Build the thin Harness Web adapter with `npm run build:harness`, package it with `npm run package:harness`, and run its isolated browser integration check with `npm run test:harness`. The test uses the pinned official module loader, layout, slots, and renderer against a temporary RowWeave service; it does not start an AI session. The host packages, Zustand, and Immer are development-only dependencies for that fixture and type checking. See [Harness setup](harness.md) for installation, allowed origins, browser downloads, and credential lifetime.
