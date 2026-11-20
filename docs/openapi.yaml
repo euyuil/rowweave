@@ -1,0 +1,2257 @@
+openapi: '3.1.1'
+info:
+  title: RowWeave HTTP API
+  version: '0.1.0'
+  description: 'Connect to the service that owns the workspace. A bearer token grants access to the whole workspace. JSON writes require Content-Type: application/json, including DELETE bodies. A lost write response can follow a committed transaction. Read current state before resubmitting.'
+servers:
+  - url: 'http://127.0.0.1:4317'
+    description: Default standalone service. Replace with your configured service address.
+security:
+  - workspaceToken: []
+tags:
+  - name: Workspace
+  - name: Calculations
+  - name: Tables
+  - name: Fields
+  - name: Records
+  - name: Queries
+  - name: Views
+  - name: History
+  - name: Attachments
+  - name: CSV
+paths:
+
+  /workspace/events:
+    get:
+      tags: [Workspace]
+      operationId: watchWorkspace
+      summary: Stream workspace invalidations and heartbeats
+      description: 'Each newline-delimited JSON frame is an empty object. Frames are sent on connection, on changes and as 15-second heartbeats. Re-read workspace state after invalidation or reconnect.'
+      responses:
+        '200':
+          description: Continuous stream of newline-delimited empty JSON objects.
+          content:
+            application/x-ndjson:
+              schema: { type: string }
+              example: "{}\n"
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '503': { $ref: '#/components/responses/SubscriberLimit' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /workspace/state:
+    post:
+      tags: [Workspace]
+      operationId: workspaceState
+      summary: Read catalog and selected table or view revisions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WorkspaceStateRequest' }
+            example: {}
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkspaceState' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /calculations/status:
+    get:
+      tags: [Calculations]
+      operationId: calculationStatus
+      summary: Read automatic calculation status
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CalculationStatus' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /calculations/refresh:
+    post:
+      tags: [Calculations]
+      operationId: refreshCalculations
+      summary: Refresh clock-dependent calculations atomically
+      description: 'Joins an active refresh. On an uncertain response, inspect calculation status before resubmitting.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Empty' }
+            example: {}
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CalculationRefresh' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables:
+    get:
+      tags: [Tables]
+      operationId: listTables
+      summary: List tables and field definitions
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Table' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        default: { $ref: '#/components/responses/ServiceError' }
+    post:
+      tags: [Tables]
+      operationId: createTable
+      summary: Create a table with a primary display field
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TableCreate' }
+            example: { name: Projects }
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Table' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables/{table}:
+    parameters:
+      - { $ref: '#/components/parameters/Table' }
+    get:
+      tags: [Tables]
+      operationId: getTable
+      summary: Read a table and its current schema version
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Table' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        default: { $ref: '#/components/responses/ServiceError' }
+    patch:
+      tags: [Tables]
+      operationId: updateTable
+      summary: Rename a table or change its primary display field or field order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TableUpdate' }
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Table' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/ServiceError' }
+    delete:
+      tags: [Tables]
+      operationId: deleteTable
+      summary: Delete a table and its contents
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SchemaWrite' }
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeletedId' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables/{table}/fields:
+    parameters:
+      - { $ref: '#/components/parameters/Table' }
+    post:
+      tags: [Fields]
+      operationId: createField
+      summary: Add a field
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FieldCreate' }
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Table' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables/{table}/fields/{field}:
+    parameters:
+      - { $ref: '#/components/parameters/Table' }
+      - { $ref: '#/components/parameters/Field' }
+    patch:
+      tags: [Fields]
+      operationId: updateField
+      summary: Update field settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FieldUpdate' }
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Table' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/ServiceError' }
+    delete:
+      tags: [Fields]
+      operationId: deleteField
+      summary: Remove a field
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SchemaWrite' }
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Table' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables/{table}/fields/{field}/pair:
+    parameters:
+      - { $ref: '#/components/parameters/Table' }
+      - { $ref: '#/components/parameters/Field' }
+    post:
+      tags: [Fields]
+      operationId: pairRelationFields
+      summary: Pair two existing relation fields
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RelationPair' }
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Table' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables/{table}/fields/{field}/conversion/preview:
+    parameters:
+      - { $ref: '#/components/parameters/Table' }
+      - { $ref: '#/components/parameters/Field' }
+    post:
+      tags: [Fields]
+      operationId: previewConversion
+      summary: Preview a field conversion against current values
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FieldConversion' }
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConversionPreview' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables/{table}/fields/{field}/conversion/apply:
+    parameters:
+      - { $ref: '#/components/parameters/Table' }
+      - { $ref: '#/components/parameters/Field' }
+    post:
+      tags: [Fields]
+      operationId: applyConversion
+      summary: Validate and apply a field conversion atomically
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FieldConversion' }
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Table' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables/{table}/formulas/preview:
+    parameters:
+      - { $ref: '#/components/parameters/Table' }
+    post:
+      tags: [Fields]
+      operationId: previewFormula
+      summary: Evaluate a draft formula on a sample record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FormulaPreviewRequest' }
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FormulaPreview' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables/{table}/records:
+    parameters:
+      - { $ref: '#/components/parameters/Table' }
+    get:
+      tags: [Records]
+      operationId: readRecordPage
+      summary: Read a page of records in insertion order
+      description: Use queryRecords when paging through a changing table with revision guards.
+      parameters:
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecordPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        default: { $ref: '#/components/responses/ServiceError' }
+    post:
+      tags: [Records]
+      operationId: createRecords
+      summary: Create records atomically
+      description: 'Use stable field IDs as keys in values. An omitted field uses its default on creation. Each batch supports up to 2,000 records and 20,000 cells.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: '#/components/schemas/RecordCreate' }
+              minItems: 1
+              maxItems: 2000
+            example:
+              - values: {}
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BatchResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        default: { $ref: '#/components/responses/ServiceError' }
+    patch:
+      tags: [Records]
+      operationId: updateRecords
+      summary: Update selected fields with version checks
+      description: The batch commits atomically. A stale version returns 409 VERSION_CONFLICT. Read the current record and compare its values before deciding whether to submit a new write.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: '#/components/schemas/RecordUpdate' }
+              minItems: 1
+              maxItems: 2000
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BatchResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/ServiceError' }
+    delete:
+      tags: [Records]
+      operationId: deleteRecords
+      summary: Delete a batch of versioned records
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: '#/components/schemas/RecordDelete' }
+              minItems: 1
+              maxItems: 2000
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeleteResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables/{table}/records/{record}:
+    parameters:
+      - { $ref: '#/components/parameters/Table' }
+      - { $ref: '#/components/parameters/Record' }
+    get:
+      tags: [Records]
+      operationId: getRecord
+      summary: Read a record by its stable ID
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RowRecord' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables/{table}/query:
+    parameters:
+      - { $ref: '#/components/parameters/Table' }
+    post:
+      tags: [Queries]
+      operationId: queryRecords
+      summary: 'Filter, sort and page records'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RecordQuery' }
+            example: { offset: 0, limit: 25 }
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QueryPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables/{table}/summary:
+    parameters:
+      - { $ref: '#/components/parameters/Table' }
+    post:
+      tags: [Queries]
+      operationId: summarizeRecords
+      summary: Count and aggregate matching records
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SummaryRequest' }
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecordSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables/{table}/groups/query:
+    parameters:
+      - { $ref: '#/components/parameters/Table' }
+    post:
+      tags: [Queries]
+      operationId: queryGroups
+      summary: Read a window of grouped rows
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GroupQuery' }
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GroupLayout' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables/{table}/calendar/query:
+    parameters:
+      - { $ref: '#/components/parameters/Table' }
+    post:
+      tags: [Queries]
+      operationId: queryCalendar
+      summary: Read calendar buckets and preview records
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CalendarLayoutRequest' }
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CalendarLayout' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables/{table}/calendar/records:
+    parameters:
+      - { $ref: '#/components/parameters/Table' }
+    post:
+      tags: [Queries]
+      operationId: queryCalendarRecords
+      summary: Page records in a calendar bucket
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CalendarRecordsRequest' }
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CalendarPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables/{table}/views:
+    parameters:
+      - { $ref: '#/components/parameters/Table' }
+    get:
+      tags: [Views]
+      operationId: listViews
+      summary: List saved views
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/GridView' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        default: { $ref: '#/components/responses/ServiceError' }
+    post:
+      tags: [Views]
+      operationId: createView
+      summary: Create a saved view
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ViewCreate' }
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GridView' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables/{table}/views/{view}:
+    parameters:
+      - { $ref: '#/components/parameters/Table' }
+      - { $ref: '#/components/parameters/View' }
+    get:
+      tags: [Views]
+      operationId: getView
+      summary: Read a saved view
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GridView' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        default: { $ref: '#/components/responses/ServiceError' }
+    patch:
+      tags: [Views]
+      operationId: updateView
+      summary: Update a saved view
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ViewUpdate' }
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GridView' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/ServiceError' }
+    delete:
+      tags: [Views]
+      operationId: deleteView
+      summary: Delete a saved view
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SchemaWrite' }
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeletedId' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables/{table}/views/{view}/query:
+    parameters:
+      - { $ref: '#/components/parameters/Table' }
+      - { $ref: '#/components/parameters/View' }
+    post:
+      tags: [Views]
+      operationId: queryView
+      summary: Page records with saved view settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ViewPageRequest' }
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ViewPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables/{table}/views/{view}/records/{record}/schedule:
+    parameters:
+      - { $ref: '#/components/parameters/Table' }
+      - { $ref: '#/components/parameters/View' }
+      - { $ref: '#/components/parameters/Record' }
+    post:
+      tags: [Views]
+      operationId: rescheduleRecord
+      summary: Move or resize a record in a scheduling view
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RecordSchedule' }
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BatchResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables/{table}/records/{record}/history:
+    parameters:
+      - { $ref: '#/components/parameters/Table' }
+      - { $ref: '#/components/parameters/Record' }
+    post:
+      tags: [History]
+      operationId: recordHistory
+      summary: Page changes to one record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HistoryQuery' }
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecordHistoryPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables/{table}/records/{record}/history/{change}:
+    parameters:
+      - { $ref: '#/components/parameters/Table' }
+      - { $ref: '#/components/parameters/Record' }
+      - { $ref: '#/components/parameters/Change' }
+    get:
+      tags: [History]
+      operationId: recordChange
+      summary: Read a change and its snapshots
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecordChangeDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables/{table}/records/{record}/restore:
+    parameters:
+      - { $ref: '#/components/parameters/Table' }
+      - { $ref: '#/components/parameters/Record' }
+    post:
+      tags: [History]
+      operationId: restoreRecord
+      summary: Restore a saved record snapshot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RecordRestore' }
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RowRecord' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables/{table}/trash/query:
+    parameters:
+      - { $ref: '#/components/parameters/Table' }
+    post:
+      tags: [History]
+      operationId: recordTrash
+      summary: Page deleted records
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HistoryQuery' }
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecordTrashPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables/{table}/trash/restore:
+    parameters:
+      - { $ref: '#/components/parameters/Table' }
+    post:
+      tags: [History]
+      operationId: restoreDeletedRecords
+      summary: Restore a batch of deleted records
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: '#/components/schemas/DeletedRecordRestore' }
+              minItems: 1
+              maxItems: 2000
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BatchResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables/{table}/batches/query:
+    parameters:
+      - { $ref: '#/components/parameters/Table' }
+    post:
+      tags: [History]
+      operationId: recordBatches
+      summary: Page transaction receipts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HistoryQuery' }
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecordBatchPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables/{table}/batches/{batch}:
+    parameters:
+      - { $ref: '#/components/parameters/Table' }
+      - { $ref: '#/components/parameters/Batch' }
+    post:
+      tags: [History]
+      operationId: recordBatchChanges
+      summary: Inspect changes in a transaction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HistoryQuery' }
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecordBatchChanges' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables/{table}/batches/{batch}/undo:
+    parameters:
+      - { $ref: '#/components/parameters/Table' }
+      - { $ref: '#/components/parameters/Batch' }
+    post:
+      tags: [History]
+      operationId: undoRecordBatch
+      summary: Undo a saved transaction atomically
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Empty' }
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecordBatchUndoResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables/{table}/attachments:
+    parameters:
+      - { $ref: '#/components/parameters/Table' }
+    post:
+      tags: [Attachments]
+      operationId: uploadAttachment
+      summary: Upload immutable file bytes
+      description: Send up to 8 MiB of original bytes as canonical base64. Use the returned ID in an attachment field.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AttachmentUpload' }
+            example: { filename: hello.txt, mediaType: text/plain, data: SGVsbG8= }
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Attachment' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables/{table}/attachments/query:
+    parameters:
+      - { $ref: '#/components/parameters/Table' }
+    post:
+      tags: [Attachments]
+      operationId: listAttachments
+      summary: Page uploaded files
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AttachmentQuery' }
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AttachmentPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables/{table}/attachments/{attachment}:
+    parameters:
+      - { $ref: '#/components/parameters/Table' }
+      - { $ref: '#/components/parameters/Attachment' }
+    get:
+      tags: [Attachments]
+      operationId: getAttachment
+      summary: Read file metadata
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Attachment' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        default: { $ref: '#/components/responses/ServiceError' }
+    delete:
+      tags: [Attachments]
+      operationId: deleteAttachment
+      summary: Delete a never-attached upload
+      description: Only uploads that have never been attached can be deleted individually.
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeletedId' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables/{table}/attachments/{attachment}/content:
+    parameters:
+      - { $ref: '#/components/parameters/Table' }
+      - { $ref: '#/components/parameters/Attachment' }
+    get:
+      tags: [Attachments]
+      operationId: downloadAttachment
+      summary: Download original file bytes
+      responses:
+        '200':
+          description: Original bytes from the upload.
+          content:
+            application/octet-stream: {}
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables/{table}/import/preview:
+    parameters:
+      - { $ref: '#/components/parameters/Table' }
+    post:
+      tags: [CSV]
+      operationId: previewCsv
+      summary: Preview CSV rows and column mapping
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CsvImportRequest' }
+            example: { csv: "Name\nLaunch", hasHeader: true, expectedVersion: 1 }
+      responses:
+        '200':
+          description: Successful operation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CsvPreview' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables/{table}/import:
+    parameters:
+      - { $ref: '#/components/parameters/Table' }
+    post:
+      tags: [CSV]
+      operationId: importCsv
+      summary: Append CSV rows atomically
+      description: The JSON request accepts up to 64 MiB. An uncertain response may follow a committed import. Inspect the workspace before retrying.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CsvImportRequest' }
+            example: { csv: "Name\nLaunch", hasHeader: true, expectedVersion: 1 }
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CsvImportResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/ServiceError' }
+
+  /tables/{table}/export:
+    parameters:
+      - { $ref: '#/components/parameters/Table' }
+    post:
+      tags: [CSV]
+      operationId: exportCsv
+      summary: Export matching records as UTF-8 CSV
+      description: Returns UTF-8 CSV with a byte-order mark in a download attachment.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CsvExportRequest' }
+            example: {}
+      responses:
+        '200':
+          description: UTF-8 CSV with BOM.
+          content:
+            text/csv:
+              schema: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/ServiceError' }
+components:
+  securitySchemes:
+    workspaceToken:
+      type: http
+      scheme: bearer
+      description: A workspace token supplied by the service operator.
+  parameters:
+
+    Table:
+      name: table
+      in: path
+      required: true
+      description: Stable table ID returned by the service.
+      schema: { $ref: '#/components/schemas/Id' }
+
+    Field:
+      name: field
+      in: path
+      required: true
+      description: Stable field ID returned by the service.
+      schema: { $ref: '#/components/schemas/Id' }
+    Record:
+      name: record
+      in: path
+      required: true
+      description: Stable record ID returned by the service.
+      schema: { $ref: '#/components/schemas/Id' }
+    View:
+      name: view
+      in: path
+      required: true
+      description: Stable view ID returned by the service.
+      schema: { $ref: '#/components/schemas/Id' }
+    Change:
+      name: change
+      in: path
+      required: true
+      description: Positive history change ID.
+      schema: { $ref: '#/components/schemas/Version' }
+    Batch:
+      name: batch
+      in: path
+      required: true
+      description: Stable batch ID returned by the service.
+      schema: { $ref: '#/components/schemas/Id' }
+
+    Attachment:
+      name: attachment
+      in: path
+      required: true
+      description: Stable attachment ID returned by the service.
+      schema: { $ref: '#/components/schemas/Id' }
+  responses:
+    Unauthorized:
+      description: Missing or invalid bearer token.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+          example:
+            error: { code: UNAUTHORIZED, message: A valid access token is required. }
+    Conflict:
+      description: 'A version, query revision or dependency conflicts with the requested operation. Read current state before resolving the conflict.'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+    SubscriberLimit:
+      description: The workspace event stream has reached its connection limit.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+    ServiceError:
+      description: 'The error code identifies invalid input (400), disallowed host or origin (403), missing resource (404), conflict (409), size limit (413), unsupported content type (415), or a service failure.'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+  schemas:
+
+    Id:
+      type: string
+      minLength: 1
+      description: Opaque identifier returned by the service. Keep it across renames and reordering.
+
+    Version:
+      type: integer
+      minimum: 1
+
+    Empty:
+      type: object
+      maxProperties: 0
+
+    SchemaWrite:
+      type: object
+      required: [expectedVersion]
+      properties:
+        expectedVersion: { $ref: '#/components/schemas/Version' }
+
+    DeletedId:
+      type: object
+      required: [deleted]
+      properties:
+        deleted: { $ref: '#/components/schemas/Id' }
+
+    DeleteResult:
+      type: object
+      required: [deleted]
+      properties:
+        deleted:
+          type: array
+          items: { $ref: '#/components/schemas/Id' }
+
+    ApiError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+
+    ScalarValue:
+      type: [string, number, boolean, 'null']
+
+    CellValue:
+      oneOf:
+        - { $ref: '#/components/schemas/ScalarValue' }
+        - type: array
+          items: { $ref: '#/components/schemas/ScalarValue' }
+
+    Values:
+      type: object
+      additionalProperties: { $ref: '#/components/schemas/CellValue' }
+      description: 'Keys are field IDs returned by the table schema. Omit a field on update to preserve it. Use [] to clear links.'
+
+    WorkspaceStateRequest:
+      description: Supply tableId to inspect a table and viewId with tableId to inspect a view.
+      type: object
+      properties:
+        tableId: { $ref: '#/components/schemas/Id' }
+        viewId: { $ref: '#/components/schemas/Id' }
+        dateContext: { type: string }
+
+    WorkspaceState:
+      type: object
+      required: [catalogRevision]
+      properties:
+        catalogRevision: { type: integer, minimum: 0 }
+        table:
+          anyOf:
+            - type: object
+              required: [id, schemaVersion, dataRevision, viewsRevision]
+              properties:
+                id: { $ref: '#/components/schemas/Id' }
+                schemaVersion: { $ref: '#/components/schemas/Version' }
+                dataRevision: { type: integer, minimum: 0 }
+                viewsRevision: { type: integer, minimum: 0 }
+                view:
+                  anyOf:
+                    - type: object
+                      required: [id, version]
+                      properties:
+                        id: { $ref: '#/components/schemas/Id' }
+                        version: { $ref: '#/components/schemas/Version' }
+                        dateContext: { type: string }
+                    - { type: 'null' }
+            - { type: 'null' }
+
+    CalculationRefresh:
+      type: object
+      required: [evaluatedAt, changedRecords, changedTableIds]
+      properties:
+        evaluatedAt: { type: string, format: date-time }
+        changedRecords: { type: integer, minimum: 0 }
+        changedTableIds:
+          type: array
+          items: { $ref: '#/components/schemas/Id' }
+
+    CalculationStatus:
+      type: object
+      required: [automatic, running]
+      properties:
+        automatic: { type: boolean }
+        running: { type: boolean }
+        startedAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time }
+        lastResult: { $ref: '#/components/schemas/CalculationRefresh' }
+        lastError: { type: string }
+
+    Table:
+      type: object
+      required: [id, name, version, revision, primaryFieldId, fields, total]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        version: { $ref: '#/components/schemas/Version' }
+        revision: { type: integer, minimum: 0 }
+        primaryFieldId: { $ref: '#/components/schemas/Id' }
+        fields:
+          type: array
+          items: { $ref: '#/components/schemas/Field' }
+          maxItems: 200
+        total: { type: integer, minimum: 0 }
+
+    TableCreate:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+
+    TableUpdate:
+      allOf:
+        - { $ref: '#/components/schemas/SchemaWrite' }
+        - type: object
+          properties:
+            name: { type: string, minLength: 1, maxLength: 200 }
+            primaryFieldId: { $ref: '#/components/schemas/Id' }
+            fieldOrder:
+              type: array
+              items: { $ref: '#/components/schemas/Id' }
+              uniqueItems: true
+
+    FieldType:
+      type: string
+      enum: [text, multiline, url, attachment, number, autoNumber, createdTime, updatedTime, checkbox, date, datetime, singleSelect, multiSelect, relation, lookup, formula]
+
+    SelectOptionInput:
+      type: object
+      required: [name]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        color: { type: string, pattern: '^#[0-9a-fA-F]{6}$' }
+
+    SelectOption:
+      allOf:
+        - { $ref: '#/components/schemas/SelectOptionInput' }
+        - { required: [id] }
+
+    Formula:
+      type: object
+      required: [expression, resultType]
+      properties:
+        expression: { type: string }
+        resultType: { type: string, enum: [number, text, checkbox, date, datetime] }
+
+    Lookup:
+      type: object
+      required: [relationFieldId, fieldId]
+      properties:
+        relationFieldId: { $ref: '#/components/schemas/Id' }
+        fieldId: { $ref: '#/components/schemas/Id' }
+        operation: { type: string, enum: [values, count, sum, average, min, max] }
+
+    Relation:
+      type: object
+      required: [tableId, multiple]
+      properties:
+        tableId: { $ref: '#/components/schemas/Id' }
+        multiple: { type: boolean }
+
+    FieldSettings:
+      type: object
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, maxLength: 2000 }
+        type: { $ref: '#/components/schemas/FieldType' }
+        required: { type: boolean }
+        defaultValue: { $ref: '#/components/schemas/CellValue' }
+        numberFormat: { type: string, enum: [decimal, currency, percent] }
+        currency: { type: string, pattern: '^[A-Z]{3}$' }
+        lookup: { $ref: '#/components/schemas/Lookup' }
+        formula: { $ref: '#/components/schemas/Formula' }
+
+    FieldDefinition:
+      description: 'Use the settings for the selected field type. Relation, lookup and formula fields require their corresponding configuration. Select fields require options.'
+      allOf:
+        - { $ref: '#/components/schemas/FieldSettings' }
+        - if: { properties: { type: { enum: [singleSelect, multiSelect] } } }
+          then: { required: [options] }
+        - if: { properties: { type: { const: relation } } }
+          then: { required: [relation] }
+        - if: { properties: { type: { const: lookup } } }
+          then: { required: [lookup] }
+        - if: { properties: { type: { const: formula } } }
+          then: { required: [formula] }
+        - type: object
+          required: [name, type]
+          properties:
+            precision: { type: integer, minimum: 0, maximum: 10 }
+            options:
+              type: array
+              items: { $ref: '#/components/schemas/SelectOptionInput' }
+              maxItems: 200
+            relation: { $ref: '#/components/schemas/Relation' }
+
+    FieldCreate:
+      allOf:
+        - { $ref: '#/components/schemas/FieldDefinition' }
+        - { $ref: '#/components/schemas/SchemaWrite' }
+        - type: object
+          properties:
+            reverseField:
+              type: object
+              required: [name, multiple, expectedVersion]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 200 }
+                multiple: { type: boolean }
+                expectedVersion: { $ref: '#/components/schemas/Version' }
+
+    FieldUpdate:
+      description: Omitted properties retain their previous values. Changing a field type uses the conversion endpoints.
+      allOf:
+        - { $ref: '#/components/schemas/FieldSettings' }
+        - { $ref: '#/components/schemas/SchemaWrite' }
+        - type: object
+          properties:
+            precision:
+              anyOf:
+                - { type: integer, minimum: 0, maximum: 10 }
+                - { type: 'null' }
+            options:
+              type: array
+              items: { $ref: '#/components/schemas/SelectOptionInput' }
+              maxItems: 200
+            relation: { $ref: '#/components/schemas/Relation' }
+
+    Field:
+      allOf:
+        - { $ref: '#/components/schemas/FieldSettings' }
+        - type: object
+          required: [id, name, type]
+          properties:
+            id: { $ref: '#/components/schemas/Id' }
+            precision: { type: integer, minimum: 0, maximum: 10 }
+            options:
+              type: array
+              items: { $ref: '#/components/schemas/SelectOption' }
+              maxItems: 200
+            relation:
+              allOf:
+                - { $ref: '#/components/schemas/Relation' }
+                - type: object
+                  properties:
+                    inverseFieldId: { $ref: '#/components/schemas/Id' }
+            lookupResult: { $ref: '#/components/schemas/Field' }
+            lookupResultTableId: { $ref: '#/components/schemas/Id' }
+
+    RelationPair:
+      allOf:
+        - { $ref: '#/components/schemas/SchemaWrite' }
+        - type: object
+          required: [targetFieldId, expectedTargetVersion]
+          properties:
+            targetFieldId: { $ref: '#/components/schemas/Id' }
+            expectedTargetVersion: { $ref: '#/components/schemas/Version' }
+
+    FieldConversion:
+      allOf:
+        - { $ref: '#/components/schemas/SchemaWrite' }
+        - type: object
+          required: [field]
+          properties:
+            field: { $ref: '#/components/schemas/FieldDefinition' }
+
+    FormulaPreviewRequest:
+      allOf:
+        - { $ref: '#/components/schemas/SchemaWrite' }
+        - type: object
+          required: [formula]
+          properties:
+            fieldId: { $ref: '#/components/schemas/Id' }
+            recordId: { $ref: '#/components/schemas/Id' }
+            formula: { $ref: '#/components/schemas/Formula' }
+
+    FormulaPreview:
+      type: object
+      required: [tableId, schemaVersion, formula, sample]
+      properties:
+        tableId: { $ref: '#/components/schemas/Id' }
+        schemaVersion: { $ref: '#/components/schemas/Version' }
+        formula: { $ref: '#/components/schemas/Formula' }
+        sample:
+          anyOf:
+            - type: object
+              required: [id, version, label, value]
+              properties:
+                id: { $ref: '#/components/schemas/Id' }
+                version: { $ref: '#/components/schemas/Version' }
+                label: { type: string }
+                value: { $ref: '#/components/schemas/ScalarValue' }
+                error: { type: string }
+            - { type: 'null' }
+
+    ConversionPreview:
+      type: object
+      required: [tableId, fieldId, field, schemaVersion, total, changed, invalid, samples, issues]
+      properties:
+        tableId: { $ref: '#/components/schemas/Id' }
+        fieldId: { $ref: '#/components/schemas/Id' }
+        field: { $ref: '#/components/schemas/Field' }
+        schemaVersion: { $ref: '#/components/schemas/Version' }
+        total: { type: integer, minimum: 0 }
+        changed: { type: integer, minimum: 0 }
+        invalid: { type: integer, minimum: 0 }
+        samples:
+          type: array
+          items:
+            type: object
+            required: [recordId, before, after]
+            properties:
+              recordId: { $ref: '#/components/schemas/Id' }
+              before: { $ref: '#/components/schemas/CellValue' }
+              after: { $ref: '#/components/schemas/CellValue' }
+        issues:
+          type: array
+          items:
+            type: object
+            required: [recordId, message]
+            properties:
+              recordId: { $ref: '#/components/schemas/Id' }
+              message: { type: string }
+
+    AttachmentUpload:
+      type: object
+      required: [filename, mediaType, data]
+      properties:
+        filename: { type: string, minLength: 1, maxLength: 200 }
+        mediaType: { type: string, maxLength: 150 }
+        data: { type: string, contentEncoding: base64, description: Canonical base64 of up to 8 MiB of file bytes. }
+
+    Attachment:
+      type: object
+      required: [id, tableId, filename, mediaType, size, sha256, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        tableId: { $ref: '#/components/schemas/Id' }
+        filename: { type: string, minLength: 1, maxLength: 200 }
+        mediaType: { type: string }
+        size: { type: integer, minimum: 0 }
+        sha256: { type: string, pattern: '^[a-f0-9]{64}$' }
+        createdAt: { type: string, format: date-time }
+
+    AttachmentQuery:
+      type: object
+      properties:
+        before: { $ref: '#/components/schemas/Version' }
+        limit: { type: integer, minimum: 1, maximum: 100, default: 50 }
+
+    AttachmentPage:
+      type: object
+      required: [attachments]
+      properties:
+        attachments:
+          type: array
+          items: { $ref: '#/components/schemas/Attachment' }
+        nextBefore: { $ref: '#/components/schemas/Version' }
+
+    RowRecord:
+      type: object
+      required: [id, version, values]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        version: { $ref: '#/components/schemas/Version' }
+        values: { $ref: '#/components/schemas/Values' }
+        links:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: object
+              required: [id, label]
+              properties:
+                id: { $ref: '#/components/schemas/Id' }
+                label: { type: string }
+        attachments:
+          type: object
+          additionalProperties:
+            type: array
+            items: { $ref: '#/components/schemas/Attachment' }
+        formulaErrors:
+          type: object
+          additionalProperties: { type: string }
+
+    RecordCreate:
+      type: object
+      required: [values]
+      properties:
+        values: { $ref: '#/components/schemas/Values' }
+
+    RecordDelete:
+      type: object
+      required: [id, expectedVersion]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        expectedVersion: { $ref: '#/components/schemas/Version' }
+
+    RecordUpdate:
+      description: Use the version read from the record. Field-protected edits also supply expectedValues for exactly the written fields and expectedSchemaVersion.
+      allOf:
+        - { $ref: '#/components/schemas/RecordDelete' }
+        - type: object
+          required: [values]
+          properties:
+            values: { $ref: '#/components/schemas/Values', minProperties: 1 }
+            expectedValues: { $ref: '#/components/schemas/Values' }
+            expectedFieldVersions:
+              type: object
+              additionalProperties: { $ref: '#/components/schemas/Version' }
+            expectedSchemaVersion: { $ref: '#/components/schemas/Version' }
+          dependentRequired: { expectedValues: [expectedSchemaVersion], expectedFieldVersions: [expectedValues] }
+
+    BatchResult:
+      type: object
+      required: [records]
+      properties:
+        records:
+          type: array
+          items: { $ref: '#/components/schemas/RowRecord' }
+        batchId: { $ref: '#/components/schemas/Id' }
+        previousFieldVersions:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties: { type: integer }
+
+    HistoryQuery:
+      description: Pass nextBefore as before to continue.
+      type: object
+      properties:
+        before: { $ref: '#/components/schemas/Version' }
+        limit: { type: integer, minimum: 1, maximum: 100, default: 20 }
+
+    Snapshot:
+      type: string
+      enum: [before, after]
+
+    SnapshotReference:
+      type: object
+      required: [changeId, snapshot]
+      properties:
+        changeId: { $ref: '#/components/schemas/Version' }
+        snapshot: { $ref: '#/components/schemas/Snapshot' }
+
+    RecordChange:
+      type: object
+      required: [id, batchId, recordId, changedAt, beforeVersion, afterVersion]
+      properties:
+        id: { $ref: '#/components/schemas/Version' }
+        batchId: { $ref: '#/components/schemas/Id' }
+        recordId: { $ref: '#/components/schemas/Id' }
+        changedAt: { type: string, format: date-time }
+        beforeVersion:
+          anyOf:
+            - { $ref: '#/components/schemas/Version' }
+            - { type: 'null' }
+        afterVersion:
+          anyOf:
+            - { $ref: '#/components/schemas/Version' }
+            - { type: 'null' }
+        restoredFrom: { $ref: '#/components/schemas/SnapshotReference' }
+
+    RecordChangeDetail:
+      allOf:
+        - { $ref: '#/components/schemas/RecordChange' }
+        - type: object
+          required: [before, after]
+          properties:
+            before:
+              anyOf:
+                - { $ref: '#/components/schemas/RowRecord' }
+                - { type: 'null' }
+            after:
+              anyOf:
+                - { $ref: '#/components/schemas/RowRecord' }
+                - { type: 'null' }
+
+    RecordHistoryPage:
+      type: object
+      required: [changes]
+      properties:
+        changes:
+          type: array
+          items: { $ref: '#/components/schemas/RecordChange' }
+        nextBefore: { $ref: '#/components/schemas/Version' }
+
+    RecordRestore:
+      allOf:
+        - { $ref: '#/components/schemas/SnapshotReference' }
+        - { $ref: '#/components/schemas/SchemaWrite' }
+
+    DeletedRecord:
+      type: object
+      required: [id, deletionId, batchId, deletedAt, version, displayValue]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        deletionId: { $ref: '#/components/schemas/Version' }
+        batchId: { $ref: '#/components/schemas/Id' }
+        deletedAt: { type: string, format: date-time }
+        version: { $ref: '#/components/schemas/Version' }
+        displayValue: { $ref: '#/components/schemas/CellValue' }
+
+    RecordTrashPage:
+      type: object
+      required: [records]
+      properties:
+        records:
+          type: array
+          items: { $ref: '#/components/schemas/DeletedRecord' }
+        nextBefore: { $ref: '#/components/schemas/Version' }
+
+    DeletedRecordRestore:
+      type: object
+      required: [id, deletionId]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        deletionId: { $ref: '#/components/schemas/Version' }
+        values: { $ref: '#/components/schemas/Values' }
+
+    RecordBatch:
+      type: object
+      required: [sequence, id, changedAt, recordCount, remainingCount, recordWrite]
+      properties:
+        sequence: { $ref: '#/components/schemas/Version' }
+        id: { $ref: '#/components/schemas/Id' }
+        changedAt: { type: string, format: date-time }
+        recordCount: { type: integer, minimum: 0 }
+        remainingCount: { type: integer, minimum: 0 }
+        recordWrite: { type: boolean }
+        undoOf: { $ref: '#/components/schemas/Id' }
+
+    RecordBatchPage:
+      type: object
+      required: [batches]
+      properties:
+        batches:
+          type: array
+          items: { $ref: '#/components/schemas/RecordBatch' }
+        nextBefore: { $ref: '#/components/schemas/Version' }
+
+    RecordBatchChanges:
+      type: object
+      required: [batch, changes]
+      properties:
+        batch: { $ref: '#/components/schemas/RecordBatch' }
+        changes:
+          type: array
+          items:
+            allOf:
+              - { $ref: '#/components/schemas/RecordChange' }
+              - type: object
+                required: [tableId]
+                properties:
+                  tableId: { $ref: '#/components/schemas/Id' }
+        nextBefore: { $ref: '#/components/schemas/Version' }
+
+    RecordBatchUndoResult:
+      type: object
+      required: [batchId, undoneBatchId]
+      properties:
+        batchId: { $ref: '#/components/schemas/Id' }
+        undoneBatchId: { $ref: '#/components/schemas/Id' }
+
+    GroupBy:
+      oneOf:
+        - { $ref: '#/components/schemas/Id' }
+        - type: array
+          items: { $ref: '#/components/schemas/Id' }
+          minItems: 1
+          maxItems: 3
+          uniqueItems: true
+
+    RelativeDateFilter:
+      type: object
+      required: [period, timeZone]
+      properties:
+        period:
+          type: string
+          enum: [today, yesterday, tomorrow, thisWeek, lastWeek, nextWeek, thisMonth, lastMonth, nextMonth, thisYear, lastYear, nextYear, pastDays, nextDays, pastBusinessDays, nextBusinessDays, pastHours, nextHours]
+        timeZone: { type: string }
+        days: { type: integer, minimum: 1, maximum: 3660 }
+        hours: { type: integer, minimum: 1, maximum: 87840 }
+
+    FieldFilter:
+      type: object
+      required: [fieldId, operator]
+      properties:
+        fieldId: { $ref: '#/components/schemas/Id' }
+        operator: { type: string, enum: [eq, neq, contains, gt, gte, lt, lte, isEmpty, isNotEmpty, hasAny, relativeDate] }
+        value: { $ref: '#/components/schemas/CellValue' }
+        relative: { $ref: '#/components/schemas/RelativeDateFilter' }
+
+    FilterGroup:
+      type: object
+      required: [conjunction, conditions]
+      properties:
+        conjunction: { type: string, enum: [and, or] }
+        conditions:
+          type: array
+          items:
+            oneOf:
+              - { $ref: '#/components/schemas/FieldFilter' }
+              - { $ref: '#/components/schemas/FilterGroup' }
+          maxItems: 100
+      description: The service allows up to 100 conditions in total and four nested levels below the root.
+
+    SortRule:
+      type: object
+      required: [fieldId, direction]
+      properties:
+        fieldId: { $ref: '#/components/schemas/Id' }
+        direction: { type: string, enum: [asc, desc] }
+
+    RecordQuery:
+      description: Use the preceding revision as expectedRevision on continuation pages. With relative-date filters also retain dateContext. On DATA_CHANGED restart pagination.
+      type: object
+      properties:
+        offset: { type: integer, minimum: 0 }
+        limit: { type: integer, minimum: 1, maximum: 500 }
+        expectedRevision: { $ref: '#/components/schemas/Version' }
+        expectedDateContext: { type: string }
+        recordIds:
+          type: array
+          items: { $ref: '#/components/schemas/Id' }
+          uniqueItems: true
+          maxItems: 2000
+        groupBy: { $ref: '#/components/schemas/GroupBy' }
+        filter: { $ref: '#/components/schemas/FilterGroup' }
+        sort:
+          type: array
+          items: { $ref: '#/components/schemas/SortRule' }
+        search: { type: string, maxLength: 10000 }
+        fields:
+          type: array
+          items: { $ref: '#/components/schemas/Id' }
+          uniqueItems: true
+
+    RecordPage:
+      type: object
+      required: [offset, records]
+      properties:
+        offset: { type: integer, minimum: 0 }
+        records:
+          type: array
+          items: { $ref: '#/components/schemas/RowRecord' }
+
+    QueryPage:
+      allOf:
+        - { $ref: '#/components/schemas/RecordPage' }
+        - type: object
+          required: [total, revision, schemaVersion]
+          properties:
+            total: { type: integer, minimum: 0 }
+            revision: { type: integer, minimum: 0 }
+            schemaVersion: { $ref: '#/components/schemas/Version' }
+            dateContext: { type: string }
+
+    SummaryMeasure:
+      type: object
+      required: [fieldId, operation]
+      properties:
+        fieldId: { $ref: '#/components/schemas/Id' }
+        operation: { type: string, enum: [sum, average, min, max] }
+
+    SummaryRequest:
+      type: object
+      properties:
+        offset: { type: integer, minimum: 0 }
+        limit: { type: integer, minimum: 1, maximum: 500 }
+        expectedRevision: { $ref: '#/components/schemas/Version' }
+        expectedDateContext: { type: string }
+        viewId: { $ref: '#/components/schemas/Id' }
+        expectedViewVersion: { $ref: '#/components/schemas/Version' }
+        groupBy: { $ref: '#/components/schemas/Id' }
+        filter: { $ref: '#/components/schemas/FilterGroup' }
+        search: { type: string, maxLength: 10000 }
+        measures:
+          type: array
+          items: { $ref: '#/components/schemas/SummaryMeasure' }
+          maxItems: 12
+
+    SummaryValues:
+      type: object
+      required: [count, values]
+      properties:
+        count: { type: integer, minimum: 0 }
+        values:
+          type: array
+          items:
+            anyOf:
+              - { type: number }
+              - { type: 'null' }
+
+    RecordSummary:
+      type: object
+      required: [totals, groups, groupCount, offset, revision, schemaVersion]
+      properties:
+        totals: { $ref: '#/components/schemas/SummaryValues' }
+        groups:
+          type: array
+          items:
+            allOf:
+              - { $ref: '#/components/schemas/SummaryValues' }
+              - type: object
+                required: [key, label]
+                properties:
+                  key: { $ref: '#/components/schemas/CellValue' }
+                  label: { type: string }
+        groupCount: { type: integer, minimum: 0 }
+        offset: { type: integer, minimum: 0 }
+        revision: { type: integer, minimum: 0 }
+        schemaVersion: { $ref: '#/components/schemas/Version' }
+        dateContext: { type: string }
+
+    GroupWindow:
+      type: string
+      enum: [displayRows, expandedRecords]
+
+    GroupCollapse:
+      type: object
+      required: [defaultCollapsed, exceptions]
+      properties:
+        defaultCollapsed: { type: boolean }
+        exceptions:
+          type: array
+          maxItems: 100000
+          uniqueItems: true
+          description: Use scalar keys for one group level or complete key paths for nested grouping.
+          anyOf:
+            - items: { $ref: '#/components/schemas/ScalarValue' }
+            - items:
+                type: array
+                items: { $ref: '#/components/schemas/ScalarValue' }
+                minItems: 1
+                maxItems: 3
+
+    GroupQuery:
+      description: Supply groupBy or a grouped grid viewId. For a saved view, use its grouping order and filter.
+      anyOf:
+        - { required: [groupBy] }
+        - { required: [viewId] }
+      type: object
+      properties:
+        offset: { type: integer, minimum: 0 }
+        limit: { type: integer, minimum: 1, maximum: 500 }
+        expectedRevision: { $ref: '#/components/schemas/Version' }
+        expectedDateContext: { type: string }
+        viewId: { $ref: '#/components/schemas/Id' }
+        expectedViewVersion: { $ref: '#/components/schemas/Version' }
+        groupBy: { $ref: '#/components/schemas/GroupBy' }
+        filter: { $ref: '#/components/schemas/FilterGroup' }
+        search: { type: string, maxLength: 10000 }
+        window: { $ref: '#/components/schemas/GroupWindow' }
+        measures:
+          type: array
+          items: { $ref: '#/components/schemas/SummaryMeasure' }
+          maxItems: 12
+        collapse: { $ref: '#/components/schemas/GroupCollapse' }
+
+    GroupSegment:
+      type: object
+      required: [key, label, count, recordOffset, rowStart, expandedOffset, collapsed]
+      properties:
+        key: { $ref: '#/components/schemas/ScalarValue' }
+        label: { type: string }
+        count: { type: integer, minimum: 0 }
+        recordOffset: { type: integer, minimum: 0 }
+        rowStart: { type: integer, minimum: 0 }
+        expandedOffset: { type: integer, minimum: 0 }
+        collapsed: { type: boolean }
+        values:
+          type: array
+          items:
+            anyOf:
+              - { type: number }
+              - { type: 'null' }
+        path:
+          type: array
+          items: { $ref: '#/components/schemas/ScalarValue' }
+        leaf: { type: boolean }
+
+    GroupLayout:
+      type: object
+      required: [window, groups, totalRecords, totalGroups, totalRows, offset, revision, schemaVersion]
+      properties:
+        window: { $ref: '#/components/schemas/GroupWindow' }
+        groups:
+          type: array
+          items: { $ref: '#/components/schemas/GroupSegment' }
+        totalRecords: { type: integer, minimum: 0 }
+        totalGroups: { type: integer, minimum: 0 }
+        totalRows: { type: integer, minimum: 0 }
+        offset: { type: integer, minimum: 0 }
+        revision: { type: integer, minimum: 0 }
+        schemaVersion: { $ref: '#/components/schemas/Version' }
+        dateContext: { type: string }
+        viewId: { $ref: '#/components/schemas/Id' }
+        viewVersion: { $ref: '#/components/schemas/Version' }
+
+    CalendarConfig:
+      type: object
+      required: [startFieldId, timeZone]
+      properties:
+        startFieldId: { $ref: '#/components/schemas/Id' }
+        endFieldId: { $ref: '#/components/schemas/Id' }
+        timeZone: { type: string }
+
+    GanttConfig:
+      allOf:
+        - { $ref: '#/components/schemas/CalendarConfig' }
+        - type: object
+          required: [scale]
+          properties:
+            scale: { type: string, enum: [day, week] }
+
+    GalleryConfig:
+      type: object
+      required: [cardSize, coverFit]
+      properties:
+        cardSize: { type: string, enum: [small, medium, large] }
+        coverFit: { type: string, enum: [cover, contain] }
+        coverFieldId: { $ref: '#/components/schemas/Id' }
+
+    CalendarQuery:
+      description: Supply calendar settings or a saved calendar or Gantt viewId.
+      anyOf:
+        - { required: [calendar] }
+        - { required: [viewId] }
+      type: object
+      properties:
+        expectedRevision: { $ref: '#/components/schemas/Version' }
+        expectedDateContext: { type: string }
+        viewId: { $ref: '#/components/schemas/Id' }
+        expectedViewVersion: { $ref: '#/components/schemas/Version' }
+        filter: { $ref: '#/components/schemas/FilterGroup' }
+        sort:
+          type: array
+          items: { $ref: '#/components/schemas/SortRule' }
+        search: { type: string, maxLength: 10000 }
+        fields:
+          type: array
+          items: { $ref: '#/components/schemas/Id' }
+          uniqueItems: true
+        calendar: { $ref: '#/components/schemas/CalendarConfig' }
+
+    CalendarLayoutRequest:
+      description: Read one to 62 calendar days. The upper date is exclusive.
+      allOf:
+        - { $ref: '#/components/schemas/CalendarQuery' }
+        - type: object
+          required: [from, toExclusive]
+          properties:
+            from: { type: string, format: date }
+            toExclusive: { type: string, format: date }
+            previewLimit: { type: integer, minimum: 0, maximum: 5, default: 3 }
+
+    CalendarBucket:
+      oneOf:
+        - type: object
+          required: [kind, date]
+          properties:
+            kind: { const: day }
+            date: { type: string, format: date }
+        - type: object
+          required: [kind]
+          properties:
+            kind: { type: string, enum: [unscheduled, invalid] }
+          not: { required: [date] }
+
+    CalendarRecordsRequest:
+      allOf:
+        - { $ref: '#/components/schemas/CalendarQuery' }
+        - type: object
+          required: [bucket]
+          properties:
+            offset: { type: integer, minimum: 0 }
+            limit: { type: integer, minimum: 1, maximum: 500 }
+            bucket: { $ref: '#/components/schemas/CalendarBucket' }
+
+    CalendarBucketRecords:
+      type: object
+      required: [count, records]
+      properties:
+        count: { type: integer, minimum: 0 }
+        records:
+          type: array
+          items: { $ref: '#/components/schemas/RowRecord' }
+
+    CalendarLayout:
+      type: object
+      required: [days, unscheduled, invalid, totalRecords, scheduledRecords, revision, schemaVersion]
+      properties:
+        days:
+          type: array
+          items:
+            allOf:
+              - { $ref: '#/components/schemas/CalendarBucketRecords' }
+              - type: object
+                required: [date]
+                properties:
+                  date: { type: string, format: date }
+        unscheduled: { $ref: '#/components/schemas/CalendarBucketRecords' }
+        invalid: { $ref: '#/components/schemas/CalendarBucketRecords' }
+        totalRecords: { type: integer, minimum: 0 }
+        scheduledRecords: { type: integer, minimum: 0 }
+        revision: { type: integer, minimum: 0 }
+        schemaVersion: { $ref: '#/components/schemas/Version' }
+        dateContext: { type: string }
+        viewId: { $ref: '#/components/schemas/Id' }
+        viewVersion: { $ref: '#/components/schemas/Version' }
+
+    CalendarPage:
+      allOf:
+        - { $ref: '#/components/schemas/QueryPage' }
+        - type: object
+          properties:
+            viewId: { $ref: '#/components/schemas/Id' }
+            viewVersion: { $ref: '#/components/schemas/Version' }
+
+    ViewType:
+      type: string
+      enum: [grid, board, calendar, gantt, gallery]
+
+    ViewColumn:
+      type: object
+      required: [fieldId, width, hidden]
+      properties:
+        fieldId: { $ref: '#/components/schemas/Id' }
+        width: { type: integer, minimum: 50, maximum: 1000 }
+        hidden: { type: boolean }
+
+    ViewQuery:
+      type: object
+      properties:
+        filter: { $ref: '#/components/schemas/FilterGroup' }
+        sort:
+          type: array
+          items: { $ref: '#/components/schemas/SortRule' }
+        search: { type: string, maxLength: 10000 }
+
+    ViewSettings:
+      type: object
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        query: { $ref: '#/components/schemas/ViewQuery' }
+        columns:
+          type: array
+          items: { $ref: '#/components/schemas/ViewColumn' }
+        rowHeight: { type: integer, enum: [36, 48, 64] }
+        frozenColumns: { type: integer, minimum: 0 }
+        groupMeasures:
+          type: array
+          items: { $ref: '#/components/schemas/SummaryMeasure' }
+          maxItems: 12
+
+    GridView:
+      allOf:
+        - { $ref: '#/components/schemas/ViewSettings' }
+        - type: object
+          required: [id, tableId, version, name, query, columns, rowHeight, frozenColumns]
+          properties:
+            id: { $ref: '#/components/schemas/Id' }
+            tableId: { $ref: '#/components/schemas/Id' }
+            version: { $ref: '#/components/schemas/Version' }
+        - oneOf:
+            - type: object
+              required: [type]
+              properties:
+                type: { const: grid }
+                groupBy: { $ref: '#/components/schemas/GroupBy' }
+            - type: object
+              required: [type, groupBy]
+              properties:
+                type: { const: board }
+                groupBy: { $ref: '#/components/schemas/Id' }
+            - type: object
+              required: [type, calendar]
+              properties:
+                type: { const: calendar }
+                calendar: { $ref: '#/components/schemas/CalendarConfig' }
+            - type: object
+              required: [type, gantt]
+              properties:
+                type: { const: gantt }
+                gantt: { $ref: '#/components/schemas/GanttConfig' }
+            - type: object
+              required: [type, gallery]
+              properties:
+                type: { const: gallery }
+                gallery: { $ref: '#/components/schemas/GalleryConfig' }
+
+    ViewInput:
+      description: A board groups by a single-select field. Calendar and Gantt views use date fields with a named time zone.
+      allOf:
+        - { $ref: '#/components/schemas/ViewSettings' }
+        - type: object
+          properties:
+            type: { $ref: '#/components/schemas/ViewType' }
+            groupBy:
+              anyOf:
+                - { $ref: '#/components/schemas/GroupBy' }
+                - { type: 'null' }
+            calendar: { $ref: '#/components/schemas/CalendarConfig' }
+            gantt: { $ref: '#/components/schemas/GanttConfig' }
+            gallery: { $ref: '#/components/schemas/GalleryConfig' }
+
+    ViewCreate:
+      allOf:
+        - { $ref: '#/components/schemas/ViewInput' }
+        - { required: [name] }
+        - if: { required: [type], properties: { type: { const: board } } }
+          then: { required: [groupBy], properties: { groupBy: { $ref: '#/components/schemas/Id' } } }
+        - if: { required: [type], properties: { type: { const: calendar } } }
+          then: { required: [calendar] }
+        - if: { required: [type], properties: { type: { const: gantt } } }
+          then: { required: [gantt] }
+
+    ViewUpdate:
+      allOf:
+        - { $ref: '#/components/schemas/ViewInput' }
+        - { $ref: '#/components/schemas/SchemaWrite' }
+
+    ViewPageRequest:
+      type: object
+      properties:
+        offset: { type: integer, minimum: 0 }
+        limit: { type: integer, minimum: 1, maximum: 500 }
+        expectedRevision: { $ref: '#/components/schemas/Version' }
+        expectedDateContext: { type: string }
+        fields:
+          type: array
+          items: { $ref: '#/components/schemas/Id' }
+          uniqueItems: true
+        expectedViewVersion: { $ref: '#/components/schemas/Version' }
+        search: { type: string, maxLength: 10000 }
+        lane:
+          anyOf:
+            - { $ref: '#/components/schemas/Id' }
+            - { type: 'null' }
+
+    ViewPage:
+      allOf:
+        - { $ref: '#/components/schemas/QueryPage' }
+        - type: object
+          required: [viewId, viewVersion]
+          properties:
+            viewId: { $ref: '#/components/schemas/Id' }
+            viewVersion: { $ref: '#/components/schemas/Version' }
+
+    RecordSchedule:
+      type: object
+      required: [expectedVersion, expectedViewVersion, action, days]
+      properties:
+        expectedVersion: { $ref: '#/components/schemas/Version' }
+        expectedViewVersion: { $ref: '#/components/schemas/Version' }
+        action: { type: string, enum: [move, resizeStart, resizeEnd] }
+        days:
+          type: integer
+          not: { const: 0 }
+
+    CsvImportRequest:
+      description: The mapping contains one field ID or null per source column. Use preview before importing.
+      allOf:
+        - { $ref: '#/components/schemas/SchemaWrite' }
+        - type: object
+          required: [csv, hasHeader]
+          properties:
+            csv: { type: string }
+            hasHeader: { type: boolean }
+            mapping:
+              type: array
+              items:
+                anyOf:
+                  - { $ref: '#/components/schemas/Id' }
+                  - { type: 'null' }
+
+    CsvPreview:
+      type: object
+      required: [tableId, schemaVersion, columns, mapping, validated, total, invalid, samples, issues]
+      properties:
+        tableId: { $ref: '#/components/schemas/Id' }
+        schemaVersion: { $ref: '#/components/schemas/Version' }
+        columns:
+          type: array
+          items: { type: string }
+        mapping:
+          type: array
+          items:
+            anyOf:
+              - { $ref: '#/components/schemas/Id' }
+              - { type: 'null' }
+        validated: { type: boolean }
+        total: { type: integer, minimum: 0 }
+        invalid: { type: integer, minimum: 0 }
+        samples:
+          type: array
+          items:
+            type: object
+            required: [row, cells]
+            properties:
+              row: { type: integer }
+              cells:
+                type: array
+                items:
+                  anyOf:
+                    - { type: string }
+                    - { type: 'null' }
+        issues:
+          type: array
+          items:
+            type: object
+            required: [row, code, message]
+            properties:
+              row: { type: integer }
+              code: { type: string }
+              message: { type: string }
+
+    CsvImportResult:
+      type: object
+      required: [imported]
+      properties:
+        imported: { type: integer, minimum: 0 }
+
+    CsvExportRequest:
+      type: object
+      properties:
+        viewId: { $ref: '#/components/schemas/Id' }
+        expectedViewVersion: { $ref: '#/components/schemas/Version' }
+        search: { type: string, maxLength: 10000 }

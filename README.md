@@ -25,7 +25,7 @@ When coming from an earlier workspace format, use a separate directory for a new
 
 ## Connect your software
 
-[Run a service](docs/service.md) · [TypeScript SDK](packages/client/README.md) · [CLI](apps/cli/README.md) · [MCP](docs/mcp.md) · [Agent Skills](docs/agent-skills.md) · [Harness](docs/harness.md)
+[Run a service](docs/service.md) · [HTTP API reference](docs/http-api.md) · [OpenAPI specification](docs/openapi.yaml) · [TypeScript SDK](packages/client/README.md) · [CLI](apps/cli/README.md) · [MCP](docs/mcp.md) · [Agent Skills](docs/agent-skills.md) · [Harness](docs/harness.md)
 
 This release focuses on flexible structured tables and reliable data operations. Custom forms, pivot tables, dashboards, map views and automation are not implemented in this scope. Built-in AI chat, enterprise permissions and real-time collaborative editing are also outside its scope.
 

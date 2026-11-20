@@ -1,5 +1,7 @@
 # HTTP API
 
+Download the [OpenAPI 3.1 specification](openapi.yaml) from the same tag or commit as your service, or use the `rowweave-openapi` artifact from its CI run. The YAML file includes the schemas it references. Import it into an API client or documentation viewer and set the server URL to your workspace service.
+
 RowWeave exposes one bearer-authenticated HTTP/JSON API. The desktop, [TypeScript SDK](../packages/client/README.md), and other clients share its validation, transactions, and conflict rules. See [development.md](development.md) to start the service. The current default address is `http://127.0.0.1:4317`; the desktop's bundled service uses an ephemeral loopback port and token supplied by its host.
 
 Send `Authorization: Bearer <token>` on every operation, and `Content-Type: application/json` for request bodies, including DELETE bodies. The token has at least 32 printable ASCII characters without spaces. Default loopback settings permit the bundled file renderer (`Origin: null`) and clients without an Origin header. Independent services support explicit IP binding and exact Host/origin allowlists; see [service configuration](service.md). Browser preflights do not require a token, but actual operations always do. Keep credentials outside source and logs.
@@ -7,6 +9,8 @@ Send `Authorization: Bearer <token>` on every operation, and `Content-Type: appl
 Successful JSON responses contain the resource/result directly. Errors use a non-success status and `{ "error": { "code": "VERSION_CONFLICT", "message": "..." } }`. CSV export returns text; attachment downloads return binary bytes. Writes are not idempotent unless the operation itself makes them so; clients must not automatically retry creates/imports/uploads after an uncertain response.
 
 ## Workspace change state
+
+`GET /workspace/events` opens an authenticated `application/x-ndjson` stream. Each frame is `{}` followed by a newline. On a frame or reconnection, fetch the current workspace state. The stream includes 15-second heartbeats and permits up to 64 subscribers per service. See [live editing](live-editing.md) for synchronization behavior.
 
 For lightweight change detection, `POST /workspace/state` accepts `{ tableId?, viewId?, dateContext? }` and returns a catalog revision plus optional selected table/view state. This authenticated read does not load records or initiate calculations. Missing requested objects are null. Relative-date filters include their current date context. Pass the last query context with a selected view to preserve rolling-hour boundaries until expiry. See [workspace state](workspace-state.md) for the response and draft-safe client rules.
 
